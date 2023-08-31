@@ -1,11 +1,8 @@
-<<<<<<< HEAD
-# studio_project_manager
-project scanner and indexer with a search engine gui
-=======
-
 # studio project manager
 
-This application scans specified directories for Ableton ALS files, processes their contents, and adds relevant details to a SQLite database.
+A GUI Application for Ableton Live Set Management
+
+scans specified directories for Ableton ALS files, extracts relevant data from them, adds the data a SQLite database, searchable with a GUI.
 
 ## Usage
 
@@ -35,4 +32,3 @@ dir = '{USER_HOME}\AppData\Local\Ableton\Live Database'
 2. run `pip install -r requirements.txt`
 
 3. run `main.py`
->>>>>>> b867bd6 (gui doesnt work right now)

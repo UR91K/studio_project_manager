@@ -1,3 +1,8 @@
+
+"""
+This file contains helper functions, type decorators for the SQLAlchemy models, and exceptions
+"""
+
 import uuid
 import pathlib
 import datetime
@@ -10,6 +15,23 @@ from typing import List
 
 
 def add_directory(new_directory: str):
+    """
+    Add a new directory path to the 'directories' section in the 'config.toml' file.
+    
+    This function loads the existing 'config.toml' file, checks if the 'directories' section exists,
+    and then checks if the provided new_directory is already listed. If not, it appends the new_directory
+    to the 'paths' list under the 'directories' section. Changes are then written back to the 'config.toml' file.
+    
+    Args:
+    - new_directory (str): The directory path to be added to the 'config.toml' file.
+    
+    Returns:
+    None
+    
+    Raises:
+    - FileNotFoundError: If the 'config.toml' file doesn't exist.
+    - toml.TomlDecodeError: If there's an error decoding the 'config.toml' file.
+    """
     config = toml.load("config.toml")
     if "directories" not in config:
         config["directories"] = {"paths": []}
@@ -22,6 +44,24 @@ def add_directory(new_directory: str):
 
 
 def remove_directory(directory_to_remove: str):
+    """
+    Remove a directory path from the 'directories' section in the 'config.toml' file.
+    
+    The function reads the 'config.toml' file, verifies if the directory_to_remove exists 
+    in the 'directories' section, and if so, removes it. The updated configuration is then 
+    written back to the 'config.toml' file.
+
+    Args:
+    - directory_to_remove (str): The directory path to be removed from the 'config.toml' file.
+    
+    Returns:
+    None
+    
+    Raises:
+    - FileNotFoundError: If the 'config.toml' file doesn't exist.
+    - toml.TomlDecodeError: If there's an error decoding the 'config.toml' file.
+    """
+
     config = toml.load("config.toml")
     
     if "directories" in config and directory_to_remove in config["directories"]["paths"]:
@@ -33,8 +73,20 @@ def remove_directory(directory_to_remove: str):
 
 def load_directories_from_config() -> list:
     """
-    Load directories from the config TOML file.
+    Load directory paths from the 'directories' section of the 'config.toml' file.
+
+    This function attempts to load the 'config.toml' file and extract the list of directory paths
+    stored under the 'directories' section. If the 'config.toml' file does not exist, it creates a new one 
+    with an empty 'directories' section.
+
+    Returns:
+    - list: A list of directory paths loaded from the 'config.toml' file. 
+            Returns an empty list if no paths are found or if the config file is newly created.
+
+    Raises:
+    - toml.TomlDecodeError: If there's an error decoding the 'config.toml' file.
     """
+
     try:
         config = toml.load("config.toml")
         return config.get("directories", {}).get("paths", [])
@@ -127,19 +179,46 @@ class VersionType(TypeDecorator):
 
 
 class XMLElementType(TypeDecorator):
+    """
+    Custom SQLAlchemy type decorator for storing XML ElementTrees as strings in the database.
+
+    This type decorator facilitates the storage of XML ElementTrees in the database as strings.
+    When saving an XML ElementTree to the database, it's converted to a string, and when retrieving 
+    it from the database, it's parsed back into an XML ElementTree.
+    """
+    
     impl = Text
 
     def process_bind_param(self, value, dialect):
-        """Convert the XML ElementTree to a string before saving."""
+        """
+        Convert the XML ElementTree to a string before saving to the database.
+
+        Args:
+        - value: The XML ElementTree object to be stored.
+        - dialect: The database dialect in use.
+
+        Returns:
+        - str or None: The XML string representation or None if the value is None.
+        """
         if value is not None:
             return ElementTree.tostring(value, encoding='unicode')
         return None
 
     def process_result_value(self, value, dialect):
-        """Convert the string back to an XML ElementTree after loading."""
+        """
+        Convert the stored string back to an XML ElementTree after retrieving from the database.
+
+        Args:
+        - value: The stored XML string representation.
+        - dialect: The database dialect in use.
+
+        Returns:
+        - ElementTree or None: The XML ElementTree object or None if the stored value is None.
+        """
         if value is not None:
             return ElementTree.fromstring(value)
         return None
+
 
 
 class UUIDType(TypeDecorator):
@@ -177,6 +256,13 @@ class CommaSeparatedListType(TypeDecorator):
 
 
 class PathType(TypeDecorator):
+    """
+    Custom SQLAlchemy type decorator for storing `pathlib.Path` objects as strings in the database.
+
+    This type decorator facilitates the storage of `pathlib.Path` objects in the database as strings.
+    When saving a `pathlib.Path` to the database, it's converted to its string representation, 
+    and when retrieving it from the database, it's converted back into a `pathlib.Path` object.
+    """
     impl = String
 
     def process_bind_param(self, value, dialect):
