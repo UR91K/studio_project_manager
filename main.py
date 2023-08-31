@@ -20,9 +20,7 @@ if __name__ == '__main__':
     try:
         file_process = subprocess.Popen([sys.executable, os.path.join('file_watcher.py')])
         file_process.wait()
+        subprocess.call([sys.executable, os.path.join('gui.py')])
     except KeyboardInterrupt:
         # Handle Ctrl+C gracefully
         file_process.send_signal(signal.SIGINT)
-
-    # commented out because it doesn't work properly right now.
-    # subprocess.call([sys.executable, os.path.join('gui.py')])
