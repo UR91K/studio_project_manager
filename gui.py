@@ -4,6 +4,8 @@ from pathlib import Path
 import toml
 import os
 
+# THIS FILE DOESNT FUCKING WORK RIGHT NOW
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 config = toml.load("config.toml")
 user_home_dir = os.path.expanduser("~")
