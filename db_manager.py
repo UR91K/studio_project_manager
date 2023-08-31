@@ -229,7 +229,6 @@ def most_recent_db_file(directory):
     return sorted_files[0] if sorted_files else None
 
 def get_installed_plugins_from_ableton():
-    # Find the most recent database in the given directory
     latest_db_file = max((f for f in live_database_dir.iterdir() if f.suffix == '.db'), key=lambda p: p.stat().st_mtime, default=None)
     print(f"latest_db_file: {latest_db_file}")
     ableton_db = AbletonDatabase(latest_db_file)
@@ -342,8 +341,6 @@ class AbletonLiveSet(Base):
     estimated_duration = Column(utilities.TimeDeltaType)
     furthest_bar = Column(Integer)
 
-    # plugin_names = Column(utilities.CommaSeparatedListType)
-    # sample_paths = Column(utilities.CommaSeparatedListType)
     plugins = relationship('Plugin', secondary=ableton_live_set_plugins, back_populates='ableton_live_sets')
     samples = relationship('Sample', secondary=ableton_live_set_samples, back_populates='ableton_live_sets')
 
@@ -590,7 +587,6 @@ class AbletonLiveSet(Base):
         pre_10_tempo = "LiveSet.MasterTrack.MasterChain.Mixer.Tempo.ArrangerAutomation.Events.FloatEvent"
         major, minor, patch = self.major_minor_patch
 
-        # Extract the new tempo without updating self.tempo yet
         if major >= 10 or major >= 9 and minor >= 7:
             tempo_elem = get_element(
                 self.xml_root, post_10_tempo, attribute="Value", silent_error=True
@@ -599,11 +595,9 @@ class AbletonLiveSet(Base):
             tempo_elem = get_element(self.xml_root, pre_10_tempo, attribute="Value")
         new_tempo = round(float(tempo_elem), 6)
 
-        # If the new tempo is the same as the previous, just return
         if new_tempo == previous_tempo:
             return
 
-        # Otherwise, update the tempo and log the change
         self.tempo = new_tempo
         log.info(f"{self.name} ({str(self.uuid)[:5]}): updated tempo from {previous_tempo} to {self.tempo}")
 
@@ -665,7 +659,7 @@ class AbletonLiveSet(Base):
             session = object_session(self)
 
             for path in sample_paths:
-                sample_name = path.name  # Using pathlib to get the sample name
+                sample_name = path.name
                 sample = session.query(Sample).filter_by(path=str(path)).first()
 
                 if not sample:
@@ -756,7 +750,6 @@ class AbletonLiveSet(Base):
         enum_event = self.xml_root.find(f'.//EnumEvent[@Time="{TIME_SIGNATURE_EVENT_TIME}"]')
 
         if enum_event is None:
-            # Handle the case where the EnumEvent with the specified time is not found
             raise ValueError("Could not find EnumEvent with the specified time signature event time.")
 
         encoded_time_signature = int(enum_event.attrib["Value"])
@@ -767,7 +760,6 @@ class AbletonLiveSet(Base):
         return self.time_signature
 
 
-    # @above_version(supported_version=(11, 0, 0))
     def update_key(self) -> str:
         """
         Estimates the key of the project based on the most frequently used key and scale
@@ -793,7 +785,6 @@ class AbletonLiveSet(Base):
                 if is_in_key_elem is not None and is_in_key_elem.attrib["Value"] == "true":
                     scale_info = midi_clip.find("ScaleInformation")
                     
-                    # Safeguarding against missing XML elements
                     if scale_info is None:
                         log.warning(f"{self.name} ({str(self.uuid)[:5]}): Missing ScaleInformation for a MIDI clip.")
                         continue
@@ -801,7 +792,6 @@ class AbletonLiveSet(Base):
                     root_note_elem = scale_info.find("RootNote")
                     scale_name_elem = scale_info.find("Name")
                     
-                    # Proceed only if both elements are found
                     if root_note_elem and scale_name_elem:
                         root_note = get_note_symbol(int(root_note_elem.attrib["Value"]))
                         scale_name = scale_name_elem.attrib["Value"]
