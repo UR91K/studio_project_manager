@@ -13,5 +13,4 @@ if __name__ == '__main__':
     process = subprocess.Popen(['python', os.path.join('db_manager.py')])
     process.wait()
     process = subprocess.Popen(['python', os.path.join('file_watcher.py')])
-    # commented out because it doesn't work properly right now.
-    # subprocess.call(['python', os.path.join('gui.py')])
+    subprocess.call(['python', os.path.join('gui.py')])
