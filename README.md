@@ -1,3 +1,7 @@
+# studio_project_manager
+project scanner and indexer with a search engine gui
+=======
+
 # studio project manager
 
 A GUI Application for Ableton Live Set Management
