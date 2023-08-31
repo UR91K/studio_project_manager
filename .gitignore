@@ -1,7 +1,5 @@
-__pycache__/database_config.cpython-310.pyc
+__pycache__/
+.idea/
+logs/
+venv/
 config.toml
-__pycache__/db_manager.cpython-310.pyc
-__pycache__/logging_utility cpython 39.pyc
-__pycache__/logging_utility cpython 310.pyc
-__pycache__/logging_utility.cpython-310.pyc
-__pycache__/utilities.cpython-310.pyc
