@@ -3,3 +3,4 @@ __pycache__/
 logs/
 venv/
 config.toml
+ableton_live_sets.db
