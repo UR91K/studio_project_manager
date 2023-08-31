@@ -2,5 +2,4 @@ __pycache__/
 .idea/
 logs/
 venv/
-config.toml
 ableton_live_sets.db
