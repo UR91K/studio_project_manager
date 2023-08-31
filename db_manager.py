@@ -1,3 +1,19 @@
+
+"""
+This file contains:
+Data extraction related helper functions
+Database model definitions - Plugin, Sample and AbletonLiveSet models
+Methods for extracting data from .als files which can be found in the AbletonLiveSet model
+Initial database population using initial_scan()
+
+The database created by this code has 5 tables:
+    ableton_live_sets - contains all the data extracted from the ableton live sets
+    samples - a list of all the samples used in at least one of the scanned projects
+    plugins - a list of all the plugins used in at least one of the scanned projects
+    ableton_live_set_plugins
+    ableton_live_set_samples
+"""
+
 import gzip
 import os
 import pathlib

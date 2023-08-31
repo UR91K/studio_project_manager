@@ -1,10 +1,40 @@
+
+"""
+A GUI Application for Ableton Live Set Management
+
+This module provides a GUI application using PyQt5 to allow users to perform a full-text search on
+Ableton Live Set projects stored in a SQLite database. Search results include key project details such 
+as name, creator, key, tempo, time signature, estimated duration, furthest bar, plugins used, and sample paths.
+
+The app provides a search bar at the top where users can enter their query. Search results are displayed 
+in a table format with columns representing different attributes of the Ableton Live Set project.
+
+Attributes:
+    DATABASE_PATH (Path): Path to the SQLite database file.
+    columns_info_dict (dict): Dictionary containing column names and their corresponding indexes.
+    excluded_columns (list): List of column names to be excluded from the display.
+
+Functions:
+    perform_full_text_search(query): Executes a full-text search on the SQLite database using the provided query 
+                                     and returns the results.
+
+Classes:
+    SearchApp(QMainWindow): Main GUI class responsible for displaying the search bar, handling input,
+                            and displaying search results.
+
+Note:
+    This module initializes the SQLite database with the required tables and columns if they do not exist 
+    and loads necessary configurations from a "config.toml" file. The app currently focuses on GUI and search 
+    functionalities, with plans for additional features and improvements in the future.
+"""
+
+# currently not functional!
+
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QTableWidget, QTableWidgetItem, QComboBox
 import sqlite3
 from pathlib import Path
 import toml
 import os
-
-# THIS FILE DOESNT FUCKING WORK RIGHT NOW
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 config = toml.load("config.toml")
@@ -47,7 +77,7 @@ def perform_full_text_search(query):
     return results
 
 
-class SearchApp(QMainWindow):
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
@@ -127,6 +157,6 @@ class SearchApp(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication([])
-    window = SearchApp()
+    window = MainWindow()
     window.show()
     app.exec_()
