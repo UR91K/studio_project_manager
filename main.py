@@ -16,11 +16,7 @@ if __name__ == '__main__':
     db_process = subprocess.Popen([sys.executable, os.path.join('db_manager.py')])
     db_process.wait()
 
-    file_process = None
-    try:
-        file_process = subprocess.Popen([sys.executable, os.path.join('file_watcher.py')])
-        file_process.wait()
-        subprocess.call([sys.executable, os.path.join('gui.py')])
-    except KeyboardInterrupt:
-        # Handle Ctrl+C gracefully
-        file_process.send_signal(signal.SIGINT)
+    subprocess.Popen([sys.executable, os.path.join('file_watcher.py')])
+
+    # Blocks until GUI is closed, then program ends
+    subprocess.call([sys.executable, os.path.join('gui.py')])
