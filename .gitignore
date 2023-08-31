@@ -1,3 +1,5 @@
 __pycache__/
+.idea/
 logs/
+venv/
 ableton_live_sets.db
