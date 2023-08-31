@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import toml
 
 if __name__ == '__main__':
@@ -10,7 +11,10 @@ if __name__ == '__main__':
     if os.path.exists(config["database_path"]["path"].replace("{USER_HOME}", user_home_dir)):
         os.remove(config["database_path"]["path"].replace("{USER_HOME}", user_home_dir))
 
-    process = subprocess.Popen(['python', os.path.join('db_manager.py')])
-    process.wait()
-    process = subprocess.Popen(['python', os.path.join('file_watcher.py')])
-    subprocess.call(['python', os.path.join('gui.py')])
+    db_process = subprocess.Popen([sys.executable, os.path.join('db_manager.py')])
+    db_process.wait()
+
+    subprocess.Popen([sys.executable, os.path.join('file_watcher.py')])
+
+    # Blocks until GUI is closed, then program ends
+    subprocess.call([sys.executable, os.path.join('gui.py')])
