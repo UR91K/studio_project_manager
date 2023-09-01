@@ -86,8 +86,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.search_bar)
 
         self.results_table = QTableWidget(self)
-        initial_headers = [HEADER_MAPPING.get(info[1], info[1]) for info in columns_info if info[1] not in excluded_columns]
-        self.results_table.setHorizontalHeaderLabels(initial_headers)
+        self.headers = [HEADER_MAPPING.get(info[1], info[1]) for info in columns_info if info[1] not in excluded_columns]
+        self.results_table.setHorizontalHeaderLabels(self.headers)
         layout.addWidget(self.results_table)
 
         central_widget = QWidget()
@@ -129,8 +129,9 @@ class MainWindow(QMainWindow):
         self.results_table.setColumnCount(len(self.headers))
         for row_idx, row in enumerate(matching_rows):
             for col_idx, col in enumerate(row):
-                if columns_info[col_idx][1] not in excluded_columns:
-                    self.results_table.setItem(row_idx, col_idx, QTableWidgetItem(str(col)))
+                col_name = columns_info[col_idx][1]
+                if col_name not in excluded_columns:
+                    self.results_table.setItem(row_idx, self.headers.index(col_name), QTableWidgetItem(str(col)))
 
             ableton_set_id = row[columns_info_dict["identifier"]]
 
