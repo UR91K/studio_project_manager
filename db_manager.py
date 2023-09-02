@@ -14,26 +14,41 @@ The database created by this code has 5 tables:
     ableton_live_set_samples
 """
 
+import datetime
 import gzip
+import hashlib
 import os
 import pathlib
 import re
 import subprocess
-import datetime
-import xml
 import uuid
-import hashlib
-import utilities
-import toml
+import xml
 from collections import Counter
+from functools import wraps
 from typing import Any, List, Optional, Tuple
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
-from functools import wraps
+
+import toml
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    UniqueConstraint,
+    create_engine,
+)
+from sqlalchemy.orm import Session, object_session, relationship, sessionmaker
+
+import utilities
+from database_config import Base, create_tables, get_session
 from logging_utility import log
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, ForeignKey, Table, UniqueConstraint, Boolean, MetaData, Index
-from sqlalchemy.orm import sessionmaker, Session, relationship, object_session
-from database_config import get_session, create_tables, Base
 
 
 def above_version(supported_version):

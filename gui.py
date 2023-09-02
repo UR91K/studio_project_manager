@@ -27,14 +27,24 @@ Note:
     functionalities, with plans for additional features and improvements in the future.
 """
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QTableWidget, QTableWidgetItem, QComboBox
-from PyQt5.QtCore import QTimer
-import sqlite3
-from pathlib import Path
-import toml
 import os
+import sqlite3
 import sys
+from pathlib import Path
+
+import toml
 from fuzzywuzzy import fuzz
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QLineEdit,
+    QMainWindow,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 config = toml.load("config.toml")
@@ -68,6 +78,7 @@ HEADER_MAPPING = {
     'tempo': 'Tempo',
     'time_signature': 'Time Signature',
     'estimated_duration': 'Estimated Duration',
+    'furthest_bar': 'Furthest Bar',
     'plugins': 'Plugins',
     'samples': 'Samples'
 }

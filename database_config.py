@@ -1,8 +1,9 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
-import toml
 import os
 import pathlib
+
+import toml
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 config = toml.load("config.toml")

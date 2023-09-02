@@ -1,6 +1,6 @@
+import datetime
 import logging
 import pathlib
-import datetime
 
 VERSION = "1.0a"
 

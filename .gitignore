@@ -3,3 +3,4 @@ __pycache__/
 logs/
 venv/
 ableton_live_sets.db
+guitest.py

@@ -3,15 +3,17 @@
 This file contains helper functions, type decorators for the SQLAlchemy models, and exceptions
 """
 
-import uuid
-import pathlib
 import datetime
-from xml.etree import ElementTree
-from sqlalchemy import String, TypeDecorator, Text
-import toml
-from logging_utility import log
-import utilities
+import pathlib
+import uuid
 from typing import List
+from xml.etree import ElementTree
+
+import toml
+from sqlalchemy import String, Text, TypeDecorator
+
+import utilities
+from logging_utility import log
 
 
 def add_directory(new_directory: str):

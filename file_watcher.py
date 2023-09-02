@@ -27,14 +27,16 @@ Usage:
     Run this script to start the file observer. Use CTRL+C to stop the observer gracefully.
 """
 
+import os
 import pathlib
 import time
-import os
+
 import toml
-from watchdog.observers import Observer
-from db_manager import process_file, AbletonLiveSet, init_database
-from watchdog.events import FileSystemEventHandler
 from sqlalchemy.orm import Session
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+from db_manager import AbletonLiveSet, init_database, process_file
 from logging_utility import log
 
 
