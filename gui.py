@@ -83,6 +83,15 @@ HEADER_MAPPING = {
     'samples': 'Samples'
 }
 
+def get_best_match_score(row, query, exclude_columns):
+    best_score = 0
+    for index, column_info in enumerate(columns_info):
+        column_name = column_info[1]
+        if column_name not in exclude_columns and row[index] is not None:
+            score = fuzz.ratio(str(row[index]).lower(), query.lower())
+            best_score = max(best_score, score)
+    return best_score
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -127,18 +136,19 @@ class MainWindow(QMainWindow):
         cursor.execute("SELECT * FROM ableton_live_sets")
         rows = cursor.fetchall()
 
-        matching_rows = []
-        for row in rows:
-            for col in row:
-                if isinstance(col, str):
-                    score = fuzz.ratio(query, col)
-                    if score > 80:
-                        matching_rows.append(row)
-                        break
+        exclude_columns = ["uuid", "identifier", "xml_root", "path", "file_hash", "last_scan_timestamp"]
+        
+        # Get the best match score for each row
+        match_scores = [(row, get_best_match_score(row, query, exclude_columns)) for row in rows]
 
-        self.results_table.setRowCount(len(matching_rows))
+        # Sort rows based on score and take the top results (you can adjust the number)
+        sorted_matches = sorted(match_scores, key=lambda x: x[1], reverse=True)
+        top_matches = [match[0] for match in sorted_matches[:10]]
+
+        self.results_table.setRowCount(len(top_matches))
         self.results_table.setColumnCount(len(self.headers))
-        for row_idx, row in enumerate(matching_rows):
+
+        for row_idx, row in enumerate(top_matches):
             for col_idx, col in enumerate(row):
                 col_name = columns_info[col_idx][1]
                 if col_name not in excluded_columns:
