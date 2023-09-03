@@ -50,7 +50,9 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 config = toml.load("config.toml")
 user_home_dir = os.path.expanduser("~")
 DATABASE_PATH = Path(config["database_path"]["path"].replace("{USER_HOME}", user_home_dir))
+SEARCH_RESULT_COUNT = 20
 print("Database path: ", DATABASE_PATH)
+
 conn = sqlite3.connect(DATABASE_PATH)
 cursor = conn.cursor()
 cursor.execute("PRAGMA table_info(ableton_live_sets)")
@@ -65,7 +67,7 @@ excluded_columns = ["uuid",
                     "last_scan_timestamp", 
                     "major_version", 
                     "minor_version", 
-                    "creator"
+                    "creator",
                     "furthest_bar"
                     ]
 
@@ -119,6 +121,10 @@ class MainWindow(QMainWindow):
         self.debounce_timer.timeout.connect(self.search_database)
 
         self.headers = [info[1] for info in columns_info if info[1] not in excluded_columns]
+        if 'Plugins' not in self.headers:
+            self.headers.append('Plugins')
+        if 'Samples' not in self.headers:
+            self.headers.append('Samples')
         self.friendly_headers = [HEADER_MAPPING.get(header, header) for header in self.headers]
         self.friendly_headers.extend(['Plugins', 'Samples'])
         self.results_table.setHorizontalHeaderLabels(self.friendly_headers)
@@ -129,26 +135,30 @@ class MainWindow(QMainWindow):
 
     def search_database(self):
         query = self.search_bar.text()
-        if not query:
-            self.results_table.clear()
-            return
 
         cursor.execute("SELECT * FROM ableton_live_sets")
         rows = cursor.fetchall()
 
-        exclude_columns = ["uuid", "identifier", "xml_root", "path", "file_hash", "last_scan_timestamp"]
-        
-        # Get the best match score for each row
-        match_scores = [(row, get_best_match_score(row, query, exclude_columns)) for row in rows]
 
-        # Sort rows based on score and take the top results (you can adjust the number)
-        sorted_matches = sorted(match_scores, key=lambda x: x[1], reverse=True)
-        top_matches = [match[0] for match in sorted_matches[:10]]
 
-        self.results_table.setRowCount(len(top_matches))
+        if not query:
+            # If the query is empty, consider all rows as matching
+            matching_rows = rows
+        else:
+            exclude_columns = ["uuid", "identifier", "xml_root", "path", "file_hash", "last_scan_timestamp"]
+            
+            # Get the best match score for each row
+            match_scores = [(row, get_best_match_score(row, query, exclude_columns)) for row in rows]
+
+            # Sort rows based on score and take the top results (you can adjust the number)
+            sorted_matches = sorted(match_scores, key=lambda x: x[1], reverse=True)
+            matching_rows = [match[0] for match in sorted_matches[:SEARCH_RESULT_COUNT]]
+
+        # Populate the results table with matching_rows
+        self.results_table.setRowCount(len(matching_rows))
         self.results_table.setColumnCount(len(self.headers))
 
-        for row_idx, row in enumerate(top_matches):
+        for row_idx, row in enumerate(matching_rows):
             for col_idx, col in enumerate(row):
                 col_name = columns_info[col_idx][1]
                 if col_name not in excluded_columns:
@@ -180,8 +190,9 @@ class MainWindow(QMainWindow):
                 samples_combo.addItem(sample[0])
             self.results_table.setCellWidget(row_idx, self.friendly_headers.index('Samples'), samples_combo)
 
+        self.results_table.setColumnCount(len(self.headers))
         self.results_table.setHorizontalHeaderLabels(self.friendly_headers)
-
+        
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     main_window = MainWindow()
