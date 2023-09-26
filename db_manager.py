@@ -28,23 +28,11 @@ from functools import wraps
 from typing import Any, List, Optional, Tuple
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
-from pdb import set_trace
 
 import toml
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    ForeignKey,
-    Index,
-    Integer,
-    MetaData,
-    String,
-    Table,
-    UniqueConstraint,
-    create_engine,
-)
+from sqlalchemy import (Boolean, Column, DateTime, Float, ForeignKey, Index,
+                        Integer, MetaData, String, Table, UniqueConstraint,
+                        create_engine)
 from sqlalchemy.orm import Session, object_session, relationship, sessionmaker
 
 import utilities
@@ -251,7 +239,6 @@ def process_chunk_of_paths(chunk, session):
     session.bulk_save_objects(to_insert)
     session.bulk_update_mappings(AbletonLiveSet, [dict(identifier=obj.identifier, path=obj.path, file_hash=obj.file_hash) for obj in to_update])
     session.commit()
-
 
 
 def process_all_paths(paths, session, chunk_size=1000):
