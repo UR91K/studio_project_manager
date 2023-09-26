@@ -28,6 +28,7 @@ from functools import wraps
 from typing import Any, List, Optional, Tuple
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
+from pdb import set_trace
 
 import toml
 from sqlalchemy import (
@@ -204,7 +205,7 @@ def get_element(
         return element[0].get(attribute)
     return element[0]
 
-staticmethod
+
 def get_file_hash(file_path):
     sha256_hash = hashlib.sha256()
     
@@ -215,25 +216,55 @@ def get_file_hash(file_path):
     return sha256_hash.hexdigest()
 
 
-def process_file(path: pathlib.Path, session: Session):
-    current_hash = get_file_hash(str(path))
+def get_existing_entries_by_paths(paths, session):
+    """Retrieve all existing entries for a list of paths in one query."""
+    return {entry.path: entry for entry in session.query(AbletonLiveSet).filter(AbletonLiveSet.path.in_(paths)).all()}
 
-    existing_entry_by_path = session.query(AbletonLiveSet).filter_by(path=str(path)).first()
-    existing_entry_by_hash = session.query(AbletonLiveSet).filter_by(file_hash=current_hash).first()
+def process_chunk_of_paths(chunk, session):
+    hashes = [get_file_hash(str(path)) for path in chunk]
+    existing_entries = get_existing_entries_by_paths([str(path) for path in chunk], session)
+    existing_entries_by_hash = {entry.file_hash: entry for entry in session.query(AbletonLiveSet).filter(AbletonLiveSet.file_hash.in_(hashes)).all()}
 
-    if existing_entry_by_path:
-        existing_entry_by_path.parse_all()
-        existing_entry_by_path.file_hash = current_hash
-        session.commit()
-    elif existing_entry_by_hash:
-        existing_entry_by_hash.path = str(path)
-        session.commit()
-    else:
-        ableton_live_set = AbletonLiveSet(path)
-        session.add(ableton_live_set)
-        ableton_live_set.parse_all()
-        ableton_live_set.file_hash = current_hash
-        session.commit()
+    to_update = []
+    to_insert = []
+
+    for path, current_hash in zip(chunk, hashes):
+        existing_entry = existing_entries.get(str(path), None)
+
+        if existing_entry:
+            if existing_entry.file_hash != current_hash:
+                existing_entry.parse_all()
+                existing_entry.file_hash = current_hash
+                to_update.append(existing_entry)
+        else:
+            existing_entry_by_hash = existing_entries_by_hash.get(current_hash, None)
+
+            if existing_entry_by_hash:
+                existing_entry_by_hash.path = str(path)
+                to_update.append(existing_entry_by_hash)
+            else:
+                ableton_live_set = AbletonLiveSet(path)
+                ableton_live_set.parse_all()
+                ableton_live_set.file_hash = current_hash
+                to_insert.append(ableton_live_set)
+
+    session.bulk_save_objects(to_insert)
+    session.bulk_update_mappings(AbletonLiveSet, [dict(identifier=obj.identifier, path=obj.path, file_hash=obj.file_hash) for obj in to_update])
+    session.commit()
+
+
+
+def process_all_paths(paths, session, chunk_size=1000):
+    for i in range(0, len(paths), chunk_size):
+        process_chunk_of_paths(paths[i:i+chunk_size], session)
+
+
+def initial_scan(folder_path, session, search_subfolders=False, chunk_size=1000):  
+    paths = utilities.get_als_paths(folder_path, search_subfolders=search_subfolders)
+    if not paths:
+        log.error("No files to process; get_als_paths returned empty list")
+        return False
+    process_all_paths(paths, session, chunk_size=chunk_size)
 
 
 def standardized_string(string):
@@ -245,14 +276,6 @@ def standardized_string(string):
     string = " ".join(string.split())
     return string
 
-
-def initial_scan(folder_path, session, search_subfolders=False):  
-    paths = utilities.get_als_paths(folder_path, search_subfolders=search_subfolders)
-    if not paths:
-        log.error("No files to process; get_als_paths returned empty list")
-        return False
-    for path in paths:
-        process_file(path, session)
 
 def most_recent_db_file(directory):
     dir_path = pathlib.Path(directory)
@@ -396,12 +419,24 @@ class AbletonLiveSet(Base):
         self.tempo = None
         self.key = None
         self.furthest_bar = None
-        # self.sample_paths = None
         self.time_signature = None
+
+
+    def has_file_changed(self):
+        """Check if the file has changed since the last check."""
+        if self.file_hash is None:
+            return True
+
+        new_file_hash = get_file_hash(self.path)
+        return new_file_hash != self.file_hash
 
 
     def parse_all(self):
         """Parses all the data from the ableton project file in the correct order."""
+        if not self.has_file_changed():
+            return
+
+        self.update_file_hash()
         self.update_name()
         self.update_file_times()
         self.load_xml_data()
@@ -413,11 +448,13 @@ class AbletonLiveSet(Base):
         self.update_key()
         self.update_time_signature()
         self.calculate_duration()
-        self.generate_file_hash()
 
 
-    def generate_file_hash(self):
-        self.file_hash = get_file_hash(self.path)
+    def update_file_hash(self, returned = False):
+        file_hash = get_file_hash(self.path)
+        if returned:
+            return file_hash
+        self.file_hash = file_hash
 
 
     def update_creation_time(self) -> None:
@@ -800,38 +837,45 @@ class AbletonLiveSet(Base):
         Returns:
             str: The updated key of the project.
         """
+        print("Updating key")
         if not self.major_version:
             log.error(f"{self.name} ({str(self.uuid)[:5]}): Major version is not defined.")
             self.key = "Unknown"
             return self.key
 
         previous_key = self.key
-
+        print(f"Previous Key: {previous_key}")
         if self.major_version < 11:
             self.key = "Unknown"
         else:
+            print("previous Key is not unknown")
             scale_dict = {}
             for midi_clip in self.xml_root.iter("MidiClip"):
                 is_in_key_elem = midi_clip.find("IsInKey")
                 if is_in_key_elem is not None and is_in_key_elem.attrib["Value"] == "true":
                     scale_info = midi_clip.find("ScaleInformation")
+                    print(f"Scale Info: {scale_info}")
                     
-                    if scale_info is None:
+                    if scale_info is not None:
+
+                        print(scale_info.find("RootNote"))
+                        print(scale_info.find("Name"))
+                        root_note_elem = scale_info.find("RootNote")
+                        scale_name_elem = scale_info.find("Name")
+                        
+                        if root_note_elem is not None and scale_name_elem is not None:
+                            root_note = get_note_symbol(int(root_note_elem.attrib["Value"]))
+                            scale_name = scale_name_elem.attrib["Value"]
+                            scale_dict[root_note] = scale_name
+                        else:
+                            log.warning(f"{self.name} ({str(self.uuid)[:5]}): Missing RootNote or Name for a MIDI clip's ScaleInformation.")
+                    else:
                         log.warning(f"{self.name} ({str(self.uuid)[:5]}): Missing ScaleInformation for a MIDI clip.")
                         continue
-
-                    root_note_elem = scale_info.find("RootNote")
-                    scale_name_elem = scale_info.find("Name")
-                    
-                    if root_note_elem and scale_name_elem:
-                        root_note = get_note_symbol(int(root_note_elem.attrib["Value"]))
-                        scale_name = scale_name_elem.attrib["Value"]
-                        scale_dict[root_note] = scale_name
-                    else:
-                        log.warning(f"{self.name} ({str(self.uuid)[:5]}): Missing RootNote or Name for a MIDI clip's ScaleInformation.")
             
             scale_list = [f"{key} {value}" for key, value in scale_dict.items()]
             if scale_list:
+                print("Found Key")
                 self.key = find_most_frequent(scale_list)
             else:
                 self.key = "Unknown"
