@@ -4,9 +4,9 @@
 
 [directories]
 paths = [
-    '{USER_HOME}\Documents\Projects\rat music'
+    '{USER_HOME}\Documents\Projects\ambient + floating'
 ]
-                                                                                                                                                                                                        
+
 # use {USER_HOME} as a shortcut to your user folder
 
 [database_path]

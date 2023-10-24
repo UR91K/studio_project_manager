@@ -44,6 +44,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QPushButton,
 )
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -75,7 +76,7 @@ HEADER_MAPPING = {
     'name': 'Name',
     'creation_time': 'Creation Time',
     'last_modification_time': 'Last Modified',
-    'key': 'Key',
+    'key': 'Key Signature',
     'major_minor_patch': 'Version',
     'tempo': 'Tempo',
     'time_signature': 'Time Signature',
@@ -101,6 +102,7 @@ class MainWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
+    
         layout = QVBoxLayout()
 
         self.search_bar = QLineEdit(self)
@@ -138,8 +140,6 @@ class MainWindow(QMainWindow):
 
         cursor.execute("SELECT * FROM ableton_live_sets")
         rows = cursor.fetchall()
-
-
 
         if not query:
             # If the query is empty, consider all rows as matching

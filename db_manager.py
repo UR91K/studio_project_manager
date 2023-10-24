@@ -28,17 +28,16 @@ from functools import wraps
 from typing import Any, List, Optional, Tuple
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
-
 import toml
 from sqlalchemy import (Boolean, Column, DateTime, Float, ForeignKey, Index,
                         Integer, MetaData, String, Table, UniqueConstraint,
                         create_engine)
-from sqlalchemy.orm import Session, object_session, relationship, sessionmaker
+from sqlalchemy.orm import relationship
+from sqlalchemy.exc import IntegrityError
 
 import utilities
 from database_config import Base, create_tables, get_session
 from logging_utility import log
-
 
 def above_version(supported_version):
     """
@@ -90,14 +89,6 @@ def version_supported(live_set_version: str, supported_version: str) -> bool:
         elif set_v < supported_v:
             return False
     return True
-
-
-def init_database(path):
-    database_url = f"sqlite:///{path}"
-    engine = create_engine(database_url, echo=True)
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    return Session()
 
 
 def get_note_symbol(number) -> str:
@@ -208,6 +199,7 @@ def get_existing_entries_by_paths(paths, session):
     """Retrieve all existing entries for a list of paths in one query."""
     return {entry.path: entry for entry in session.query(AbletonLiveSet).filter(AbletonLiveSet.path.in_(paths)).all()}
 
+
 def process_chunk_of_paths(chunk, session):
     hashes = [get_file_hash(str(path)) for path in chunk]
     existing_entries = get_existing_entries_by_paths([str(path) for path in chunk], session)
@@ -221,7 +213,7 @@ def process_chunk_of_paths(chunk, session):
 
         if existing_entry:
             if existing_entry.file_hash != current_hash:
-                existing_entry.parse_all()
+                existing_entry.parse_all(session)
                 existing_entry.file_hash = current_hash
                 to_update.append(existing_entry)
         else:
@@ -232,7 +224,7 @@ def process_chunk_of_paths(chunk, session):
                 to_update.append(existing_entry_by_hash)
             else:
                 ableton_live_set = AbletonLiveSet(path)
-                ableton_live_set.parse_all()
+                ableton_live_set.parse_all(session)
                 ableton_live_set.file_hash = current_hash
                 to_insert.append(ableton_live_set)
 
@@ -268,6 +260,7 @@ def most_recent_db_file(directory):
     dir_path = pathlib.Path(directory)
     sorted_files = sorted(dir_path.glob('*.db'), key=lambda p: p.stat().st_mtime, reverse=True)
     return sorted_files[0] if sorted_files else None
+
 
 def get_installed_plugins_from_ableton():
     latest_db_file = max((f for f in live_database_dir.iterdir() if f.suffix == '.db'), key=lambda p: p.stat().st_mtime, default=None)
@@ -418,7 +411,7 @@ class AbletonLiveSet(Base):
         return new_file_hash != self.file_hash
 
 
-    def parse_all(self):
+    def parse_all(self, session):
         """Parses all the data from the ableton project file in the correct order."""
         if not self.has_file_changed():
             return
@@ -430,8 +423,8 @@ class AbletonLiveSet(Base):
         self.load_version()
         self.update_tempo()
         self.update_furthest_bar()
-        self.update_samples()
-        self.update_plugins()
+        self.update_samples(session)
+        self.update_plugins(session)
         self.update_key()
         self.update_time_signature()
         self.calculate_duration()
@@ -670,7 +663,7 @@ class AbletonLiveSet(Base):
             return None
 
 
-    def update_samples(self):
+    def update_samples(self, session):
         """
         Updates the sample paths for the project based on the XML data.
 
@@ -711,24 +704,30 @@ class AbletonLiveSet(Base):
             log.warning(f"{self.name} ({str(self.uuid)[:5]}): No sample paths detected")
             self.sample_paths = None
         else:
-            session = object_session(self)
+            existing_samples = {sample.path: sample for sample in session.query(Sample).all()}
 
             for path in sample_paths:
                 sample_name = path.name
-                sample = session.query(Sample).filter_by(path=str(path)).first()
-
-                if not sample:
-                    sample = Sample(path=str(path), name=sample_name, is_present=True)
+                # Explicitly check if the sample already exists
+                if str(path) not in existing_samples:
+                    # Sample does not exist in existing_samples, so create and add it
+                    sample = Sample(path=str(path), name=sample_name, is_present=True)  # assuming is_present=True
                     session.add(sample)
-                    session.flush()
+                    existing_samples[str(path)] = sample  # Update our existing_samples dictionary
+                else:
+                    # Sample already exists, so retrieve it from the dictionary
+                    sample = existing_samples[str(path)]
 
+                # Append to the AbletonLiveSet's samples if not already present
                 if sample not in self.samples:
                     self.samples.append(sample)
 
             session.commit()
+            # Adding the 'AbletonLiveSet' instance after updating samples
+            session.add(self)
+            session.commit()
 
-
-    def update_plugins(self):
+    def update_plugins(self, session):
         """
         Extracts the names of VST plugins from the project's XML data and associates them with the AbletonLiveSet instance.
         """
@@ -749,30 +748,32 @@ class AbletonLiveSet(Base):
         if not vst_plugin_names:
             log.warning(f"{self.name} ({str(self.uuid)[:5]}): No VstPluginInfo names found")
 
-        session = object_session(self)
+        if not vst_plugin_names and not vst3_plugin_names:
+            log.warning(f"{self.name} ({str(self.uuid)[:5]}): No plugins found in project")
 
-        for plugin_name in vst_plugin_names:
-            plugin = session.query(Plugin).filter_by(name=plugin_name, version="VST").first()
-            if not plugin:
-                plugin = Plugin(name=plugin_name, version="VST")
-                session.add(plugin)
-                session.flush()
+        else:
+            existing_plugins = {(plugin.name, plugin.version): plugin for plugin in session.query(Plugin).all()}
 
-            if plugin not in self.plugins:
-                self.plugins.append(plugin)
+            for version, plugin_names in [("VST", vst_plugin_names), ("VST3", vst3_plugin_names)]:
+                for plugin_name in plugin_names:
+                    # Explicitly checking if the plugin already exists
+                    if (plugin_name, version) not in existing_plugins:
+                        # Plugin does not exist in existing_plugins dictionary, so create and add it
+                        plugin = Plugin(name=plugin_name, version=version, installed=True) # assuming installed=True
+                        session.add(plugin)
+                        existing_plugins[(plugin_name, version)] = plugin  # Update our existing_plugins dictionary
+                    else:
+                        # Plugin already exists, so retrieve it from the dictionary
+                        plugin = existing_plugins[(plugin_name, version)]
 
-        for plugin_name in vst3_plugin_names:
-            plugin = session.query(Plugin).filter_by(name=plugin_name, version="VST3").first()
-            if not plugin:
-                plugin = Plugin(name=plugin_name, version="VST3")
-                session.add(plugin)
-                session.flush()
+                    # Append to the AbletonLiveSet's plugins if not already present
+                    if plugin not in self.plugins:
+                        self.plugins.append(plugin)
 
-            if plugin not in self.plugins:
-                self.plugins.append(plugin)
-
-        session.commit()
-
+            session.commit()
+            # Adding the 'AbletonLiveSet' instance after updating plugins
+            session.add(self)
+            session.commit()
 
     def _decode_numerator(self, encoded_value: int) -> int:
         """Decode numerator from the encoded time signature value."""

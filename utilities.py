@@ -222,7 +222,6 @@ class XMLElementType(TypeDecorator):
         return None
 
 
-
 class UUIDType(TypeDecorator):
     impl = String(36)  # UUIDs are 36 characters long when represented as strings
 
