@@ -1,4 +1,3 @@
-
 """
 This file contains:
 Data extraction related helper functions
@@ -33,7 +32,6 @@ from sqlalchemy import (Boolean, Column, DateTime, Float, ForeignKey, Index,
                         Integer, MetaData, String, Table, UniqueConstraint,
                         create_engine)
 from sqlalchemy.orm import relationship
-from sqlalchemy.exc import IntegrityError
 
 import utilities
 from database_config import Base, create_tables, get_session
@@ -354,7 +352,7 @@ class AbletonLiveSet(Base):
     # database information
     uuid = Column(utilities.UUIDType, unique=True) # assuming you are using UUID4
     identifier = Column(Integer, primary_key=True, autoincrement=True)
-    xml_root = Column(utilities.XMLElementType) # assuming it is stored as string
+    # xml_root = Column(utilities.XMLElementType) # assuming it is stored as string
     path = Column(utilities.PathType)
     file_hash = Column(String, unique=True)
     last_scan_timestamp = Column(DateTime)
@@ -383,6 +381,7 @@ class AbletonLiveSet(Base):
         Index('idx_ableton_live_sets_creator', 'identifier'),
     )
 
+
     def __init__(self, pathlib_object) -> None:
         self.path = pathlib_object
         self.uuid = uuid.uuid4()
@@ -391,7 +390,7 @@ class AbletonLiveSet(Base):
         self.name = None
         self.last_modification_time = None
         self.creation_time = None
-        self.xml_root = None
+        self._xml_root = None
         self.creator = None
         self.major_version = None
         self.minor_version = None
@@ -400,6 +399,16 @@ class AbletonLiveSet(Base):
         self.key = None
         self.furthest_bar = None
         self.time_signature = None
+
+
+    @property
+    def xml_root(self):
+        return self._xml_root
+
+
+    @xml_root.setter
+    def xml_root(self, value):
+        self._xml_root = value
 
 
     def has_file_changed(self):
@@ -428,6 +437,7 @@ class AbletonLiveSet(Base):
         self.update_key()
         self.update_time_signature()
         self.calculate_duration()
+        self._xml_root = None
 
 
     def update_file_hash(self, returned = False):
@@ -517,7 +527,7 @@ class AbletonLiveSet(Base):
         Returns:
             None
         """
-        self.creator = self.xml_root.get("Creator")
+        self.creator = self._xml_root.get("Creator")
         parsed = re.findall(
             r"Ableton Live ([0-9]{1,2})\.([0-9]{1,3})[\.b]{0,1}([0-9]{1,3}){0,1}",
             self.creator,
@@ -555,6 +565,7 @@ class AbletonLiveSet(Base):
         return datetime.datetime.fromtimestamp(timestamp).strftime("%m/%d/%Y %H:%M:%S")
 
 
+
     def load_xml_data(self) -> Optional[Element]:
         """
         Load XML data from the path provided in self.path and set it to the self.root attribute.
@@ -564,18 +575,18 @@ class AbletonLiveSet(Base):
         """
         if not pathlib.Path(self.path).exists():
             log.error(f"{self.name} ({str(self.uuid)[:5]}): {pathlib.Path(self.path)} does not exist")
-            self.xml_root = None
-            return self.xml_root
+            self._xml_root = None
+            return self._xml_root
         if not pathlib.Path(self.path).is_file():
             log.error(f"{self.name} ({str(self.uuid)[:5]}): {pathlib.Path(self.path)} is not a file")
-            self.xml_root = None
-            return self.xml_root
+            self._xml_root = None
+            return self._xml_root
         if pathlib.Path(self.path).suffix != ".als":
             log.error(
                 f"{self.name} ({str(self.uuid)[:5]}): {pathlib.Path(self.path)} is not a valid Ableton Live Set file"
             )
-            self.xml_root = None
-            return self.xml_root
+            self._xml_root = None
+            return self._xml_root
         if self.last_modification_time is None or self.creation_time is None:
             log.warning(f"{self.name} ({str(self.uuid)[:5]}): ")
             self.update_file_times()
@@ -585,10 +596,10 @@ class AbletonLiveSet(Base):
                 root = ElementTree.fromstring(data)
             except ElementTree.ParseError as e:
                 log.error(f"{self.name} ({str(self.uuid)[:5]}): {pathlib.Path(self.path)} is not a valid XML file: {e}")
-                self.xml_root = None
-                return self.xml_root
-        self.xml_root = root
-        return self.xml_root
+                self._xml_root = None
+                return self._xml_root
+        self._xml_root = root
+        return self._xml_root
 
 
     def update_furthest_bar(self) -> float:
@@ -608,7 +619,7 @@ class AbletonLiveSet(Base):
         previous = self.furthest_bar
         current_end_times = [
             float(end_times.get("Value"))
-            for end_times in self.xml_root.iter("CurrentEnd")
+            for end_times in self._xml_root.iter("CurrentEnd")
         ]
         
         self.furthest_bar = (
@@ -619,7 +630,6 @@ class AbletonLiveSet(Base):
             f"{self.name} ({str(self.uuid)[:5]}): updated furthest bar from {previous} to {self.furthest_bar}"
         )
         return self.furthest_bar
-
 
 
     @above_version(supported_version=(8, 2, 0))
@@ -637,10 +647,10 @@ class AbletonLiveSet(Base):
 
         if major >= 10 or major >= 9 and minor >= 7:
             tempo_elem = get_element(
-                self.xml_root, post_10_tempo, attribute="Value", silent_error=True
+                self._xml_root, post_10_tempo, attribute="Value", silent_error=True
             )
         else:
-            tempo_elem = get_element(self.xml_root, pre_10_tempo, attribute="Value")
+            tempo_elem = get_element(self._xml_root, pre_10_tempo, attribute="Value")
         new_tempo = round(float(tempo_elem), 6)
 
         if new_tempo == previous_tempo:
@@ -673,59 +683,66 @@ class AbletonLiveSet(Base):
         """
         sample_paths = set()
 
-        if self.major_minor_patch[0] < 11:
-            log.info('attempting to update sample paths')
-            for sample_ref in self.xml_root.iter("SampleRef"):
-                data_element = sample_ref.find("FileRef/Data")
-                if data_element is None:
-                    log.warning(f"{self.name} ({str(self.uuid)[:5]}): No data found in data_elem")
-                    continue
-                
-                abs_hash_path = data_element.text.replace('\t', '').replace('\n', '')
-                
-                try:
-                    byte_data = bytearray.fromhex(abs_hash_path)
-                    path_string = byte_data.decode('utf-16').replace('\x00', '')
-                except (AttributeError, UnicodeDecodeError, ValueError) as e:
-                    log.error(f"{self.name} ({str(self.uuid)[:5]}): Error processing path: {e}")
-                    continue
+        try:
+            if self.major_minor_patch[0] < 11:
+                log.info(f"{self.name} ({str(self.uuid)[:5]}): Updating sample paths for versions earlier than 11")
+                for sample_ref in self._xml_root.iter("SampleRef"):
+                    data_element = sample_ref.find("FileRef/Data")
+                    if data_element is None:
+                        log.warning(f"{self.name} ({str(self.uuid)[:5]}): No data found in data_elem")
+                        continue
 
-                sample_paths.add(pathlib.Path(path_string))
-        else:
-            for sample_ref in self.xml_root.iter("SampleRef"):
-                path_elem = sample_ref.find("./FileRef/Path")
-                if path_elem is not None:
-                    path_value = path_elem.attrib["Value"]
-                    sample_paths.add(pathlib.Path(path_value))
-                else:
-                    log.warning(f"{self.name} ({str(self.uuid)[:5]}): No path element found for sample reference")
+                    abs_hash_path = data_element.text.replace('\t', '').replace('\n', '')
 
-        if not sample_paths:
-            log.warning(f"{self.name} ({str(self.uuid)[:5]}): No sample paths detected")
-            self.sample_paths = None
-        else:
-            existing_samples = {sample.path: sample for sample in session.query(Sample).all()}
+                    try:
+                        byte_data = bytearray.fromhex(abs_hash_path)
+                        path_string = byte_data.decode('utf-16').replace('\x00', '')
+                    except (AttributeError, UnicodeDecodeError, ValueError) as e:
+                        log.error(f"{self.name} ({str(self.uuid)[:5]}): Error processing path: {e}")
+                        continue
 
-            for path in sample_paths:
-                sample_name = path.name
-                # Explicitly check if the sample already exists
-                if str(path) not in existing_samples:
-                    # Sample does not exist in existing_samples, so create and add it
-                    sample = Sample(path=str(path), name=sample_name, is_present=True)  # assuming is_present=True
-                    session.add(sample)
-                    existing_samples[str(path)] = sample  # Update our existing_samples dictionary
-                else:
-                    # Sample already exists, so retrieve it from the dictionary
-                    sample = existing_samples[str(path)]
+                    sample_paths.add(pathlib.Path(path_string))
+            else:
+                log.info(f"{self.name} ({str(self.uuid)[:5]}): Updating sample paths for versions 11 and onward")
+                for sample_ref in self._xml_root.iter("SampleRef"):
+                    path_elem = sample_ref.find("./FileRef/Path")
+                    if path_elem is not None:
+                        path_value = path_elem.attrib["Value"]
+                        sample_paths.add(pathlib.Path(path_value))
+                    else:
+                        log.warning(f"{self.name} ({str(self.uuid)[:5]}): No path element found for sample reference")
 
-                # Append to the AbletonLiveSet's samples if not already present
-                if sample not in self.samples:
-                    self.samples.append(sample)
+            if not sample_paths:
+                log.warning(f"{self.name} ({str(self.uuid)[:5]}): No sample paths detected")
+                self.sample_paths = None
+            else:
+                existing_samples = {sample.path: sample for sample in session.query(Sample).all()}
 
-            session.commit()
-            # Adding the 'AbletonLiveSet' instance after updating samples
-            session.add(self)
-            session.commit()
+                for path in sample_paths:
+                    sample_name = path.name
+                    # Explicitly check if the sample already exists
+                    if str(path) not in existing_samples:
+                        log.info(f"{self.name} ({str(self.uuid)[:5]}): Adding new sample {sample_name}")
+                        sample = Sample(path=str(path), name=sample_name, is_present=True)
+                        session.add(sample)
+                        existing_samples[str(path)] = sample
+                    else:
+                        log.info(f"{self.name} ({str(self.uuid)[:5]}): Sample {sample_name} already exists, skipping")
+
+                    # Append to the AbletonLiveSet's samples if not already present
+                    if sample not in self.samples:
+                        self.samples.append(sample)
+
+                session.commit()
+                log.info(f"{self.name} ({str(self.uuid)[:5]}): Sample paths updated and committed to the session")
+
+                session.add(self)
+                session.commit()
+                log.info(f"{self.name} ({str(self.uuid)[:5]}): AbletonLiveSet instance updated and committed to the session")
+
+        except Exception as e:
+            log.error(f"{self.name} ({str(self.uuid)[:5]}): An unexpected error occurred during the update: {e}")
+
 
     def update_plugins(self, session):
         """
@@ -734,14 +751,14 @@ class AbletonLiveSet(Base):
         vst_plugin_names = set()
         vst3_plugin_names = set()
 
-        for plugin_info in self.xml_root.iter("Vst3PluginInfo"):
+        for plugin_info in self._xml_root.iter("Vst3PluginInfo"):
             name = plugin_info.find("Name")
             if name is not None:
                 vst3_plugin_names.add(name.attrib["Value"])
         if not vst3_plugin_names:
             log.warning(f"{self.name} ({str(self.uuid)[:5]}): No Vst3PluginInfo names found")
 
-        for plugin_info in self.xml_root.iter("VstPluginInfo"):
+        for plugin_info in self._xml_root.iter("VstPluginInfo"):
             name = plugin_info.find("PlugName")
             if name is not None:
                 vst_plugin_names.add(name.attrib["Value"])
@@ -803,7 +820,7 @@ class AbletonLiveSet(Base):
         # This specific time value may represent a standard or default event time in MIDI. 
         # The value is completely undocumented, and I am basically assuming it is the correct value based on observations.
         TIME_SIGNATURE_EVENT_TIME = "-63072000"
-        enum_event = self.xml_root.find(f'.//EnumEvent[@Time="{TIME_SIGNATURE_EVENT_TIME}"]')
+        enum_event = self._xml_root.find(f'.//EnumEvent[@Time="{TIME_SIGNATURE_EVENT_TIME}"]')
 
         if enum_event is None:
             raise ValueError("Could not find EnumEvent with the specified time signature event time.")
@@ -838,7 +855,7 @@ class AbletonLiveSet(Base):
         else:
             print("previous Key is not unknown")
             scale_dict = {}
-            for midi_clip in self.xml_root.iter("MidiClip"):
+            for midi_clip in self._xml_root.iter("MidiClip"):
                 is_in_key_elem = midi_clip.find("IsInKey")
                 if is_in_key_elem is not None and is_in_key_elem.attrib["Value"] == "true":
                     scale_info = midi_clip.find("ScaleInformation")
