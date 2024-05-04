@@ -127,7 +127,7 @@ struct LiveSet {
 }
 
 fn main() {
-    // Create some dummy data for the LiveSet
+    // dummy data
     let uuid = Uuid::new_v4();
     let identifier = 19;
     let path = path::PathBuf::from("C:/Users/user/Documents/Projects/abstract/acid 2 Project/acid 2.als");
@@ -158,7 +158,6 @@ fn main() {
     let plugins: HashSet<Id> = HashSet::new();
     let samples: HashSet<Id> = HashSet::new();
 
-    // Instantiate the LiveSet
     let live_set = LiveSet {
         uuid,
         identifier,
