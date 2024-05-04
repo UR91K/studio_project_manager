@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.38"
 uuid = { version = "1.8.0", features = ["v4"] }
+xmltree = "0.10.3"
