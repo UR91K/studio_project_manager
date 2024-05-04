@@ -130,7 +130,7 @@ struct LiveSet {
     furthest_bar: u32,
     plugins: HashSet<Id>,
     samples: HashSet<Id>,
-    _xml_root: Option<Element>, // Private field to hold XML data
+    _xml_root: Option<Element>,
 }
 
 impl LiveSet {
@@ -155,10 +155,9 @@ impl LiveSet {
             _xml_root: None,
         };
 
-        // Attempt to load XML data
         match live_set.load_xml_data() {
-            Ok(_) => Ok(live_set), // Return the initialized LiveSet if XML data loading succeeds
-            Err(err) => Err(err), // Return an error if XML data loading fails
+            Ok(_) => Ok(live_set),
+            Err(err) => Err(err),
         }
     }
 
