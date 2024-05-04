@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::path;
-use std::path::Path;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -99,7 +98,7 @@ struct Plugin {
 struct Sample {
     id: Id,
     name: String,
-    path: Path,
+    path: path::PathBuf,
     is_present: bool
 }
 
