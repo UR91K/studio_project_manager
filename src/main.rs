@@ -114,7 +114,7 @@ struct LiveSet {
     creation_time: DateTime<Utc>,
     last_modification_time: DateTime<Utc>,
     creator: String,
-    key: String,
+    key_signature: KeySignature,
     major_version: u32,
     minor_version: u32,
     ableton_version: AbletonVersion,
@@ -126,4 +126,60 @@ struct LiveSet {
     samples: HashSet<Id>,
 }
 
-fn main() {}
+fn main() {
+    // Create some dummy data for the LiveSet
+    let uuid = Uuid::new_v4();
+    let identifier = 19;
+    let path = path::PathBuf::from("C:/Users/user/Documents/Projects/abstract/acid 2 Project/acid 2.als");
+    let file_hash = "dummy_hash".to_string();
+    let last_scan_timestamp = Utc::now();
+    let name = "acid 2".to_string();
+    let creation_time = Utc::now();
+    let last_modification_time = Utc::now();
+    let creator = "Ableton Live 11.0.0".to_string();
+    let key_signature = KeySignature {
+        tonic: Tonic::C,
+        scale: Scale::Major,
+    };
+    let major_version = 11;
+    let minor_version = 0;
+    let ableton_version = AbletonVersion {
+        major: 11,
+        minor: 0,
+        patch: 0,
+    };
+    let tempo = 120.0;
+    let time_signature = TimeSignature {
+        numerator: 4,
+        denominator: 4,
+    };
+    let estimated_duration = chrono::Duration::minutes(5);
+    let furthest_bar = 32;
+    let plugins: HashSet<Id> = HashSet::new();
+    let samples: HashSet<Id> = HashSet::new();
+
+    // Instantiate the LiveSet
+    let live_set = LiveSet {
+        uuid,
+        identifier,
+        path,
+        file_hash,
+        last_scan_timestamp,
+        name,
+        creation_time,
+        last_modification_time,
+        creator,
+        key_signature,
+        major_version,
+        minor_version,
+        ableton_version,
+        tempo,
+        time_signature,
+        estimated_duration,
+        furthest_bar,
+        plugins,
+        samples,
+    };
+
+    println!("{:#?}", live_set);
+}
