@@ -1,11 +1,14 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::fs::File;
-use std::io::Read;
+
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
-use xmltree::Element;
+use elementtree::Element;
+
+use std::io::{Read, Cursor};
+use flate2::read::GzDecoder;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Id(u64);
@@ -166,7 +169,7 @@ struct LiveSet {
     furthest_bar: u32,
     plugins: HashSet<Id>,
     samples: HashSet<Id>,
-    _xml_root: Option<Element>,
+    xml_root: Option<Element>,
 }
 
 impl LiveSet {
@@ -188,13 +191,15 @@ impl LiveSet {
             furthest_bar: 0,
             plugins: HashSet::new(),
             samples: HashSet::new(),
-            _xml_root: None,
+            xml_root: None,
         };
 
         match live_set.load_xml_data() {
             Ok(_) => Ok(live_set),
             Err(err) => Err(err),
         }
+
+
     }
 
     fn load_xml_data(&mut self) -> Result<(), String> {
@@ -208,19 +213,34 @@ impl LiveSet {
             Err(err) => return Err(format!("{}: Failed to open file {}: {}", self.file_name, path.display(), err)),
         };
 
+        let mut gzip_decoder = GzDecoder::new(&mut file);
         let mut data = Vec::new();
-        if let Err(err) = file.read_to_end(&mut data) {
-            return Err(format!("{}: Failed to read file {}: {}", self.file_name, path.display(), err));
+        if let Err(err) = gzip_decoder.read_to_end(&mut data) {
+            return Err(format!("{}: Failed to decompress file {}: {}", self.file_name, path.display(), err));
         }
 
-        match Element::parse(data.as_slice()) {
-            Ok(root) => {
-                self._xml_root = Some(root);
-                Ok(())
-            }
-            Err(err) => Err(format!("{}: {} is not a valid XML file: {}", self.file_name, path.display(), err)),
-        }
+        let xml_data = match std::str::from_utf8(&data) {
+            Ok(s) => s,
+            Err(err) => return Err(format!("{}: Failed to convert decompressed data to UTF-8 string: {}", self.file_name, err)),
+        };
+
+        let xml_start = match xml_data.find("<?xml") {
+            Some(start) => start,
+            None => return Err(format!("{}: No XML data found in decompressed file", self.file_name)),
+        };
+
+        let xml_slice = &xml_data[xml_start..];
+
+        let root = match Element::from_reader(Cursor::new(xml_slice.as_bytes())) {
+            Ok(root) => root,
+            Err(err) => return Err(format!("{}: {} is not a valid XML file: {}", self.file_name, path.display(), err)),
+        };
+
+        self.xml_root = Some(root);
+        Ok(())
     }
+
+
 }
 
 
@@ -228,7 +248,7 @@ fn main() {
     let path: PathBuf = r"C:\Users\judee\Documents\Projects\AMAPIANO 3 Project\amapiano4.als".into();
     let live_set_result = LiveSet::new(path);
     match live_set_result {
-        Ok(live_set) => println!("{:?}", live_set),
+        Ok(_) => println!("Success loading Live set."),
         Err(err) => eprintln!("Error: {}", err),
     }
 }
