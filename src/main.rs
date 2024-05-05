@@ -10,10 +10,25 @@ use xmltree::Element;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Id(u64);
 
+impl Default for Id {
+    fn default() -> Self {
+        Id(0)
+    }
+}
+
 #[derive(Debug)]
 struct TimeSignature {
-    numerator: u32,
-    denominator: u32,
+    numerator: u8,
+    denominator: u8,
+}
+
+impl Default for TimeSignature {
+    fn default() -> Self {
+        TimeSignature {
+            numerator: 4,
+            denominator: 4,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -21,6 +36,16 @@ struct AbletonVersion {
     major: u32,
     minor: u32,
     patch: u32,
+}
+
+impl Default for AbletonVersion {
+    fn default() -> Self {
+        AbletonVersion {
+            major: 0,
+            minor: 0,
+            patch: 0,
+        }
+    }
 }
 
 impl fmt::Display for AbletonVersion {
@@ -31,6 +56,7 @@ impl fmt::Display for AbletonVersion {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum Scale {
+    Empty,
     Major,
     Minor,
     Dorian,
@@ -69,6 +95,7 @@ enum Scale {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum Tonic {
+    Empty,
     C,
     CSharp,
     D,
@@ -87,6 +114,15 @@ enum Tonic {
 struct KeySignature {
     tonic: Tonic,
     scale: Scale,
+}
+
+impl Default for KeySignature {
+    fn default() -> Self {
+        KeySignature {
+            tonic: Tonic::Empty,
+            scale: Scale::Empty,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -136,7 +172,7 @@ struct LiveSet {
 impl LiveSet {
     fn new(path: PathBuf) -> Result<Self, String> {
         let mut live_set = LiveSet {
-            id: Id::new(),
+            id: Id::default(),
             path,
             file_hash: String::new(),
             last_scan_timestamp: Utc::now(),
@@ -167,11 +203,6 @@ impl LiveSet {
             return Err(format!("{}: is not a valid Ableton Live Set file", self.file_name));
         }
 
-        if self.last_modification_time.is_none() || self.creation_time.is_none() {
-            eprintln!("{}: Missing file times", self.file_name);
-            self.update_file_times();
-        }
-
         let mut file = match File::open(&path) {
             Ok(file) => file,
             Err(err) => return Err(format!("{}: Failed to open file {}: {}", self.file_name, path.display(), err)),
@@ -194,5 +225,10 @@ impl LiveSet {
 
 
 fn main() {
-
+    let path: PathBuf = r"C:\Users\judee\Documents\Projects\AMAPIANO 3 Project\amapiano4.als".into();
+    let live_set_result = LiveSet::new(path);
+    match live_set_result {
+        Ok(live_set) => println!("{:?}", live_set),
+        Err(err) => eprintln!("Error: {}", err),
+    }
 }
