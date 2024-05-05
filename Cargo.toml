@@ -9,3 +9,4 @@ uuid = { version = "1.8.0", features = ["v4"] }
 elementtree = "1.2.3"
 flate2 = "1.0.30"
 zune-inflate = "0.2.54"
+colored = "2.1.0"
