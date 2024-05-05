@@ -1,13 +1,12 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::fs::File;
-
 use std::path::{Path, PathBuf};
+use std::io::{Read, Cursor};
+use std::time::Instant;
 
 use chrono::{DateTime, Utc};
 use elementtree::Element;
-
-use std::io::{Read, Cursor};
 use flate2::read::GzDecoder;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -172,6 +171,51 @@ struct LiveSet {
     xml_root: Option<Element>,
 }
 
+fn decompress_file(file_path: &Path) -> Result<Vec<u8>, String> {
+    let mut file = match File::open(&file_path) {
+        Ok(file) => file,
+        Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
+    };
+
+    // Timing: Decompressing the file
+    let start_time = Instant::now();
+
+    let mut gzip_decoder = GzDecoder::new(&mut file);
+    let mut data = Vec::new();
+    if let Err(err) = gzip_decoder.read_to_end(&mut data) {
+        return Err(format!("Failed to decompress file {}: {}", file_path.display(), err));
+    }
+
+    let duration = start_time.elapsed();
+    println!("Decompressing the file: {:.2?}", duration);
+
+    Ok(data)
+}
+
+fn parse_xml_data(xml_data: &[u8], file_name: &str, file_path: &Path) -> Result<Element, String> {
+    let xml_data_str = match std::str::from_utf8(xml_data) {
+        Ok(s) => s,
+        Err(err) => return Err(format!("{}: Failed to convert decompressed data to UTF-8 string: {}", file_name, err)),
+    };
+
+    let xml_start = match xml_data_str.find("<?xml") {
+        Some(start) => start,
+        None => return Err(format!("{}: No XML data found in decompressed file", file_name)),
+    };
+
+    let xml_slice = &xml_data_str[xml_start..];
+
+    let start_time_xml = Instant::now();
+    let root = match Element::from_reader(Cursor::new(xml_slice.as_bytes())) {
+        Ok(root) => root,
+        Err(err) => return Err(format!("{}: {} is not a valid XML file: {}", file_name, file_path.display(), err)),
+    };
+    let duration = start_time_xml.elapsed();
+    println!("Creating XML Element: {:.2?}", duration);
+
+    Ok(root)
+}
+
 impl LiveSet {
     fn new(path: PathBuf) -> Result<Self, String> {
         let mut live_set = LiveSet {
@@ -204,51 +248,36 @@ impl LiveSet {
 
     fn load_xml_data(&mut self) -> Result<(), String> {
         let path = Path::new(&self.path);
+
         if !path.exists() || !path.is_file() || path.extension().unwrap_or_default() != "als" {
             return Err(format!("{}: is not a valid Ableton Live Set file", self.file_name));
         }
 
-        let mut file = match File::open(&path) {
-            Ok(file) => file,
-            Err(err) => return Err(format!("{}: Failed to open file {}: {}", self.file_name, path.display(), err)),
+        let decompressed_data = match decompress_file(&path) {
+            Ok(data) => data,
+            Err(err) => return Err(err),
         };
 
-        let mut gzip_decoder = GzDecoder::new(&mut file);
-        let mut data = Vec::new();
-        if let Err(err) = gzip_decoder.read_to_end(&mut data) {
-            return Err(format!("{}: Failed to decompress file {}: {}", self.file_name, path.display(), err));
-        }
-
-        let xml_data = match std::str::from_utf8(&data) {
-            Ok(s) => s,
-            Err(err) => return Err(format!("{}: Failed to convert decompressed data to UTF-8 string: {}", self.file_name, err)),
-        };
-
-        let xml_start = match xml_data.find("<?xml") {
-            Some(start) => start,
-            None => return Err(format!("{}: No XML data found in decompressed file", self.file_name)),
-        };
-
-        let xml_slice = &xml_data[xml_start..];
-
-        let root = match Element::from_reader(Cursor::new(xml_slice.as_bytes())) {
+        let root = match parse_xml_data(&decompressed_data, &self.file_name, &path) {
             Ok(root) => root,
-            Err(err) => return Err(format!("{}: {} is not a valid XML file: {}", self.file_name, path.display(), err)),
+            Err(err) => return Err(err),
         };
 
         self.xml_root = Some(root);
+
         Ok(())
     }
-
-
 }
-
 
 fn main() {
     let path: PathBuf = r"C:\Users\judee\Documents\Projects\AMAPIANO 3 Project\amapiano4.als".into();
+    let start_time = Instant::now();
     let live_set_result = LiveSet::new(path);
+    let end_time = Instant::now();
+    let duration = end_time - start_time;
+    let duration_ms = duration.as_secs_f64() * 1000.0;
     match live_set_result {
-        Ok(_) => println!("Success loading Live set."),
+        Ok(_) => println!("Success loading Live set. Time taken: {:.2} ms", duration_ms),
         Err(err) => eprintln!("Error: {}", err),
     }
 }
