@@ -9,6 +9,50 @@ use chrono::{DateTime, Utc};
 use elementtree::Element;
 use flate2::read::GzDecoder;
 
+fn decompress_file(file_path: &Path) -> Result<Vec<u8>, String> {
+    let mut file = match File::open(&file_path) {
+        Ok(file) => file,
+        Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
+    };
+
+    let start_time = Instant::now();
+
+    let mut gzip_decoder = GzDecoder::new(&mut file);
+    let mut data = Vec::new();
+    if let Err(err) = gzip_decoder.read_to_end(&mut data) {
+        return Err(format!("Failed to decompress file {}: {}", file_path.display(), err));
+    }
+
+    let duration = start_time.elapsed();
+    println!("Decompressing the file: {:.2?}", duration);
+
+    Ok(data)
+}
+
+fn parse_xml_data(xml_data: &[u8], file_name: &Option<String>, file_path: &Path) -> Result<Element, String> {
+    let xml_data_str = match std::str::from_utf8(xml_data) {
+        Ok(s) => s,
+        Err(err) => return Err(format!("{:?}: Failed to convert decompressed data to UTF-8 string: {}", file_name, err)),
+    };
+
+    let xml_start = match xml_data_str.find("<?xml") {
+        Some(start) => start,
+        None => return Err(format!("{:?}: No XML data found in decompressed file", file_name)),
+    };
+
+    let xml_slice = &xml_data_str[xml_start..];
+
+    let start_time_xml = Instant::now();
+    let root = match Element::from_reader(Cursor::new(xml_slice.as_bytes())) {
+        Ok(root) => root,
+        Err(err) => return Err(format!("{:?}: {} is not a valid XML file: {}", file_name, file_path.display(), err)),
+    };
+    let duration = start_time_xml.elapsed();
+    println!("Creating XML Element: {:.2?}", duration);
+
+    Ok(root)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Id(u64);
 
@@ -156,7 +200,7 @@ struct LiveSet {
     path: PathBuf,
     file_hash: String,
     last_scan_timestamp: DateTime<Utc>,
-    file_name: String,
+    file_name: Option<String>,
     creation_time: DateTime<Utc>,
     last_modification_time: DateTime<Utc>,
     creator: String,
@@ -168,53 +212,9 @@ struct LiveSet {
     furthest_bar: u32,
     plugins: HashSet<Id>,
     samples: HashSet<Id>,
-    xml_root: Option<Element>,
+    raw_xml_data: Option<Vec<u8>>,
 }
 
-fn decompress_file(file_path: &Path) -> Result<Vec<u8>, String> {
-    let mut file = match File::open(&file_path) {
-        Ok(file) => file,
-        Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
-    };
-
-    // Timing: Decompressing the file
-    let start_time = Instant::now();
-
-    let mut gzip_decoder = GzDecoder::new(&mut file);
-    let mut data = Vec::new();
-    if let Err(err) = gzip_decoder.read_to_end(&mut data) {
-        return Err(format!("Failed to decompress file {}: {}", file_path.display(), err));
-    }
-
-    let duration = start_time.elapsed();
-    println!("Decompressing the file: {:.2?}", duration);
-
-    Ok(data)
-}
-
-fn parse_xml_data(xml_data: &[u8], file_name: &str, file_path: &Path) -> Result<Element, String> {
-    let xml_data_str = match std::str::from_utf8(xml_data) {
-        Ok(s) => s,
-        Err(err) => return Err(format!("{}: Failed to convert decompressed data to UTF-8 string: {}", file_name, err)),
-    };
-
-    let xml_start = match xml_data_str.find("<?xml") {
-        Some(start) => start,
-        None => return Err(format!("{}: No XML data found in decompressed file", file_name)),
-    };
-
-    let xml_slice = &xml_data_str[xml_start..];
-
-    let start_time_xml = Instant::now();
-    let root = match Element::from_reader(Cursor::new(xml_slice.as_bytes())) {
-        Ok(root) => root,
-        Err(err) => return Err(format!("{}: {} is not a valid XML file: {}", file_name, file_path.display(), err)),
-    };
-    let duration = start_time_xml.elapsed();
-    println!("Creating XML Element: {:.2?}", duration);
-
-    Ok(root)
-}
 
 impl LiveSet {
     fn new(path: PathBuf) -> Result<Self, String> {
@@ -223,7 +223,7 @@ impl LiveSet {
             path,
             file_hash: String::new(),
             last_scan_timestamp: Utc::now(),
-            file_name: String::new(),
+            file_name: None,
             creation_time: Utc::now(),
             last_modification_time: Utc::now(),
             creator: String::new(),
@@ -235,35 +235,40 @@ impl LiveSet {
             furthest_bar: 0,
             plugins: HashSet::new(),
             samples: HashSet::new(),
-            xml_root: None,
+            raw_xml_data: None,
         };
 
-        match live_set.load_xml_data() {
-            Ok(_) => Ok(live_set),
-            Err(err) => Err(err),
-        }
-
-
+        live_set.load_raw_xml_data()
+            .and_then(|_| live_set.update_file_name().map_err(|err| err.to_string()))
+            .map(|_| live_set)
     }
 
-    fn load_xml_data(&mut self) -> Result<(), String> {
+    fn update_file_name(&mut self) -> Result<(), String> {
+        if let Some(file_name) = self.path.file_name() {
+            if let Some(name) = file_name.to_str() {
+                self.file_name = Some(name.to_string());
+                Ok(())
+            } else {
+                Err("File name is not valid UTF-8".to_string())
+            }
+        } else {
+            Err("File name is not present".to_string())
+        }
+    }
+
+    fn load_raw_xml_data(&mut self) -> Result<(), String> {
         let path = Path::new(&self.path);
 
         if !path.exists() || !path.is_file() || path.extension().unwrap_or_default() != "als" {
-            return Err(format!("{}: is not a valid Ableton Live Set file", self.file_name));
+            return Err(format!("{:?}: is not a valid Ableton Live Set file", self.file_name));
         }
 
         let decompressed_data = match decompress_file(&path) {
             Ok(data) => data,
             Err(err) => return Err(err),
         };
-
-        let root = match parse_xml_data(&decompressed_data, &self.file_name, &path) {
-            Ok(root) => root,
-            Err(err) => return Err(err),
-        };
-
-        self.xml_root = Some(root);
+        
+        self.raw_xml_data = Some(decompressed_data);
 
         Ok(())
     }
