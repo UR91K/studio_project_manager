@@ -1,14 +1,44 @@
+mod custom_types;
+use custom_types::{Id,
+                   TimeSignature,
+                   AbletonVersion,
+                   Scale,
+                   Tonic,
+                   KeySignature,
+                   PluginFormat,
+                   Plugin,
+                   Sample
+};
+
 use std::collections::HashSet;
-use std::fmt;
+
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::io::{Read, Cursor};
-use std::time::Instant;
+use std::time::{Instant};
+use std::fs;
 
+use colored::*;
 use chrono::{DateTime, Utc};
 use elementtree::Element;
 use zune_inflate::DeflateDecoder;
 use flate2::read::GzDecoder;
+
+fn format_file_size(size: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * KB;
+    const GB: u64 = 1024 * MB;
+
+    if size < KB {
+        format!("{} B", size)
+    } else if size < MB {
+        format!("{:.2} KB", size as f64 / KB as f64)
+    } else if size < GB {
+        format!("{:.2} MB", size as f64 / MB as f64)
+    } else {
+        format!("{:.2} GB", size as f64 / GB as f64)
+    }
+}
 
 fn decode_als_data(file_path: &Path) -> Result<Vec<u8>, String> {
     let mut file = match File::open(&file_path) {
@@ -25,7 +55,7 @@ fn decode_als_data(file_path: &Path) -> Result<Vec<u8>, String> {
     }
 
     let duration = start_time.elapsed();
-    println!("flate2: decompressing the file: {:.2?}", duration);
+    // println!("flate2: decompressing the file: {:.2?}", duration);
 
     Ok(decompressed_data)
 }
@@ -72,189 +102,56 @@ fn parse_xml_data(xml_data: &[u8], file_name: &Option<String>, file_path: &Path)
     Ok(root)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Id(u64);
-
-impl Default for Id {
-    fn default() -> Self {
-        Id(0)
-    }
-}
-
-#[derive(Debug)]
-struct TimeSignature {
-    numerator: u8,
-    denominator: u8,
-}
-
-impl Default for TimeSignature {
-    fn default() -> Self {
-        TimeSignature {
-            numerator: 4,
-            denominator: 4,
-        }
-    }
-}
-
-#[derive(Debug)]
-struct AbletonVersion {
-    major: u32,
-    minor: u32,
-    patch: u32,
-}
-
-impl Default for AbletonVersion {
-    fn default() -> Self {
-        AbletonVersion {
-            major: 0,
-            minor: 0,
-            patch: 0,
-        }
-    }
-}
-
-impl fmt::Display for AbletonVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Ableton {}.{}.{}", self.major, self.minor, self.patch)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-enum Scale {
-    Empty,
-    Major,
-    Minor,
-    Dorian,
-    Mixolydian,
-    Aeolian,
-    Phrygian,
-    Locrian,
-    WholeTone,
-    HalfWholeDim,
-    WholeHalfDim,
-    MinorBlues,
-    MinorPentatonic,
-    MajorPentatonic,
-    HarmonicMinor,
-    MelodicMinor,
-    Dorian4,
-    PhrygianDominant,
-    LydianDominant,
-    LydianAugmented,
-    HarmonicMajor,
-    SuperLocrian,
-    BToneSpanish,
-    HungarianMinor,
-    Hirajoshi,
-    Iwato,
-    PelogSelisir,
-    PelogTembung,
-    Messiaen1,
-    Messiaen2,
-    Messiaen3,
-    Messiaen4,
-    Messiaen5,
-    Messiaen6,
-    Messiaen7,
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-enum Tonic {
-    Empty,
-    C,
-    CSharp,
-    D,
-    DSharp,
-    E,
-    F,
-    FSharp,
-    G,
-    GSharp,
-    A,
-    ASharp,
-    B,
-}
-
-#[derive(Debug)]
-struct KeySignature {
-    tonic: Tonic,
-    scale: Scale,
-}
-
-impl Default for KeySignature {
-    fn default() -> Self {
-        KeySignature {
-            tonic: Tonic::Empty,
-            scale: Scale::Empty,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum PluginFormat {
-    AU,
-    VST2,
-    VST3,
-}
-
-#[derive(Debug)]
-struct Plugin {
-    id: Id,
-    name: String,
-    plugin_format: PluginFormat,
-    is_installed: bool
-}
-
-#[derive(Debug)]
-struct Sample {
-    id: Id,
-    name: String,
-    path: PathBuf,
-    is_present: bool
-}
 
 #[derive(Debug)]
 struct LiveSet {
     id: Id,
-    path: PathBuf,
-    file_hash: String,
-    last_scan_timestamp: DateTime<Utc>,
+
+    file_path: PathBuf,
     file_name: Option<String>,
-    creation_time: DateTime<Utc>,
-    last_modification_time: DateTime<Utc>,
-    creator: String,
-    key_signature: KeySignature,
+    raw_xml_data: Option<Vec<u8>>,
+    file_hash: Option<String>,
+
+    created_time: DateTime<Utc>,
+    modified_time: DateTime<Utc>,
+
+    last_scan_timestamp: DateTime<Utc>,
     ableton_version: AbletonVersion,
+    ableton_version_readable: String,
+    key_signature: KeySignature,
     tempo: f32,
     time_signature: TimeSignature,
     estimated_duration: chrono::Duration,
     furthest_bar: u32,
+
     plugins: HashSet<Id>,
     samples: HashSet<Id>,
-    raw_xml_data: Option<Vec<u8>>,
 }
-
 
 impl LiveSet {
     fn new(path: PathBuf) -> Result<Self, String> {
         let mut live_set = LiveSet {
             id: Id::default(),
-            path,
-            file_hash: String::new(),
-            last_scan_timestamp: Utc::now(),
+
+            file_path: path,
             file_name: None,
-            creation_time: Utc::now(),
-            last_modification_time: Utc::now(),
-            creator: String::new(),
-            key_signature: KeySignature::default(),
+            raw_xml_data: None,
+            file_hash: None,
+
+            created_time: Utc::now(),
+            modified_time: Utc::now(),
+
+            last_scan_timestamp: Utc::now(),
             ableton_version: AbletonVersion::default(),
+            ableton_version_readable: String::new(),
+            key_signature: KeySignature::default(),
             tempo: 0.0,
             time_signature: TimeSignature::default(),
             estimated_duration: chrono::Duration::zero(),
             furthest_bar: 0,
+
             plugins: HashSet::new(),
             samples: HashSet::new(),
-            raw_xml_data: None,
         };
 
         live_set.load_raw_xml_data()
@@ -263,7 +160,7 @@ impl LiveSet {
     }
 
     fn update_file_name(&mut self) -> Result<(), String> {
-        if let Some(file_name) = self.path.file_name() {
+        if let Some(file_name) = self.file_path.file_name() {
             if let Some(name) = file_name.to_str() {
                 self.file_name = Some(name.to_string());
                 Ok(())
@@ -275,11 +172,25 @@ impl LiveSet {
         }
     }
 
+    fn update_last_modification_time(&mut self) {
+        let metadata = fs::metadata(&self.file_path).expect("Failed to get metadata");
+
+        let modified_time = metadata.modified().expect("Failed to get modified time");
+        let modified_time = DateTime::<Utc>::from(modified_time);
+
+        let created_time = metadata.created().ok().map_or_else(|| Utc::now(), |time| {
+            DateTime::<Utc>::from(time)
+        });
+
+        self.modified_time = modified_time;
+        self.created_time = created_time;
+    }
+
     fn load_raw_xml_data(&mut self) -> Result<(), String> {
-        let path = Path::new(&self.path);
+        let path = Path::new(&self.file_path);
 
         if !path.exists() || !path.is_file() || path.extension().unwrap_or_default() != "als" {
-            return Err(format!("{:?}: is not a valid Ableton Live Set file", self.file_name));
+            return Err(format!("{:?}: is either inaccessible or not a valid Ableton Live Set file", self.file_path));
         }
 
         let decompressed_data = match decode_als_data(&path) {
@@ -307,8 +218,20 @@ fn main() {
         let end_time = Instant::now();
         let duration = end_time - start_time;
         let duration_ms = duration.as_secs_f64() * 1000.0;
+        let mut file_size: u64 = 0;
+        let mut formatted_size: String = String::new();
+        if let Ok(metadata) = fs::metadata(&path) {
+            file_size = metadata.len();
+            formatted_size = format_file_size(file_size);
+        }
+
         match live_set_result {
-            Ok(_) => println!("Success loading {}; {:.2} ms", path.file_name().unwrap().to_string_lossy(), duration_ms),
+            Ok(_) => println!(
+                "Loaded {} ({}) in {:.2} ms",
+                path.file_name().unwrap().to_string_lossy().bold().purple(),
+                formatted_size,
+                duration_ms
+            ),
             Err(err) => eprintln!("Error: {}", err),
         }
     }
