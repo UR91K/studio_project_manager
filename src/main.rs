@@ -7,9 +7,10 @@ use std::time::Instant;
 
 use chrono::{DateTime, Utc};
 use elementtree::Element;
+use zune_inflate::DeflateDecoder;
 use flate2::read::GzDecoder;
 
-fn decompress_file(file_path: &Path) -> Result<Vec<u8>, String> {
+fn decode_als_data(file_path: &Path) -> Result<Vec<u8>, String> {
     let mut file = match File::open(&file_path) {
         Ok(file) => file,
         Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
@@ -18,15 +19,33 @@ fn decompress_file(file_path: &Path) -> Result<Vec<u8>, String> {
     let start_time = Instant::now();
 
     let mut gzip_decoder = GzDecoder::new(&mut file);
-    let mut data = Vec::new();
-    if let Err(err) = gzip_decoder.read_to_end(&mut data) {
+    let mut decompressed_data = Vec::new();
+    if let Err(err) = gzip_decoder.read_to_end(&mut decompressed_data) {
         return Err(format!("Failed to decompress file {}: {}", file_path.display(), err));
     }
 
     let duration = start_time.elapsed();
-    println!("Decompressing the file: {:.2?}", duration);
+    println!("flate2: decompressing the file: {:.2?}", duration);
 
-    Ok(data)
+    Ok(decompressed_data)
+}
+
+fn zune_decode_als_data(file_path: &Path) -> Result<Vec<u8>, String> {
+    let mut file = File::open(file_path).map_err(|e| format!("Failed to open file: {}", e))?;
+
+    let start_time = Instant::now();
+
+    let mut compressed_data = Vec::new();
+    file.read_to_end(&mut compressed_data)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let mut decoder = DeflateDecoder::new(&compressed_data);
+    let decompressed_data = decoder.decode_gzip()
+        .map_err(|e| format!("Failed to decompress data: {}", e))?;
+
+    let duration = start_time.elapsed();
+    println!("zune_inflate: decompressing the file: {:.2?}", duration);
+
+    Ok(decompressed_data)
 }
 
 fn parse_xml_data(xml_data: &[u8], file_name: &Option<String>, file_path: &Path) -> Result<Element, String> {
@@ -263,7 +282,7 @@ impl LiveSet {
             return Err(format!("{:?}: is not a valid Ableton Live Set file", self.file_name));
         }
 
-        let decompressed_data = match decompress_file(&path) {
+        let decompressed_data = match decode_als_data(&path) {
             Ok(data) => data,
             Err(err) => return Err(err),
         };
@@ -275,14 +294,22 @@ impl LiveSet {
 }
 
 fn main() {
-    let path: PathBuf = r"C:\Users\judee\Documents\Projects\AMAPIANO 3 Project\amapiano4.als".into();
-    let start_time = Instant::now();
-    let live_set_result = LiveSet::new(path);
-    let end_time = Instant::now();
-    let duration = end_time - start_time;
-    let duration_ms = duration.as_secs_f64() * 1000.0;
-    match live_set_result {
-        Ok(_) => println!("Success loading Live set. Time taken: {:.2} ms", duration_ms),
-        Err(err) => eprintln!("Error: {}", err),
+    let mut paths: Vec<PathBuf> = Vec::new();
+    /// TEST DATA:
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\rodent beats\RODENT 4 Project\RODENT 4 ver 2.als")); // max size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\Beats Project\a lot on my mind 130 Live11.als")); // mean size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\rust mastering\dp tekno 19 master Project\dp tekno 19 master.als")); // mode size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\Beats Project\SET 120.als")); // median size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\tape\white tape b Project\white tape b.als")); // min size
+    for path in &paths {
+        let start_time = Instant::now();
+        let live_set_result = LiveSet::new(path.to_path_buf());
+        let end_time = Instant::now();
+        let duration = end_time - start_time;
+        let duration_ms = duration.as_secs_f64() * 1000.0;
+        match live_set_result {
+            Ok(_) => println!("Success loading {}; {:.2} ms", path.file_name().unwrap().to_string_lossy(), duration_ms),
+            Err(err) => eprintln!("Error: {}", err),
+        }
     }
 }
