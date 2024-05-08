@@ -388,13 +388,11 @@ impl LiveSet {
         let duration = end_time - start_time;
         let duration_ms = duration.as_secs_f64() * 1000.0;
 
-        println!(
-            "{}: found {:?} VST2 Plugins: {:?} and {:?} VST3 Plugins: {:?} in {:.2} ms",
+        info!(
+            "{}: found {:?} VST2 Plugins and {:?} VST3 Plugins in {:.2} ms",
             self.file_name.as_deref().unwrap().to_string().bold().purple(),
             vst2_plugin_names.len(),
-            vst2_plugin_names,
             vst3_plugin_names.len(),
-            vst3_plugin_names,
             duration_ms
         );
 
@@ -407,14 +405,16 @@ impl LiveSet {
     fn update_time_signature(&mut self) -> Result<()> {
         debug!("Updating time signature");
 
-        let xml_data = self.raw_xml_data.as_deref().ok_or_else(|| anyhow!("XML data not found"))?;
+        let xml_data = match &self.raw_xml_data {
+            Some(data) => data,
+            None => return Err(anyhow!("XML data not found")),
+        };
         trace!("XML data: {:?}", std::str::from_utf8(xml_data));
 
-        let time_signature_enum_event: String = TIME_SIGNATURE_ENUM_EVENT.to_string();
-        let search_query: String = "EnumEvent".to_string();
+        let search_query = "EnumEvent";
         // debug!("Time signature enum event: {}", time_signature_enum_event);
 
-        if let Some(attributes) = find_empty_event(xml_data, &search_query) {
+        if let Some(attributes) = find_empty_event(xml_data, search_query) {
             debug!("Found time signature enum event");
             trace!("Attributes: {:?}", attributes);
 
@@ -453,9 +453,9 @@ impl LiveSet {
 }
 
 fn main() {
-    Builder::new()
-        .filter_level(LevelFilter::Debug)
-        .init();
+    // Builder::new()
+    //     .filter_level(LevelFilter::Debug)
+    //     .init();
 
     let mut paths: Vec<PathBuf> = Vec::new();
     /// TEST DATA:
@@ -484,7 +484,7 @@ fn main() {
                 formatted_size,
                 duration_ms
             ),
-            Err(err) => eprintln!("Error: {}", err),
+            Err(err) => error!("Error: {}", err),
         }
     }
 }
