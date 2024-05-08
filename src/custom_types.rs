@@ -6,8 +6,8 @@ pub struct Id(u64);
 
 #[derive(Debug)]
 pub struct TimeSignature {
-    numerator: u8,
-    denominator: u8,
+    pub(crate) numerator: u8,
+    pub(crate) denominator: u8,
 }
 
 #[derive(Debug)]
