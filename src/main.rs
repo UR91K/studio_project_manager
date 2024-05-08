@@ -14,7 +14,7 @@ use std::collections::HashSet;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::io::{Read, Cursor};
+use std::io::{Read, Cursor, Error};
 use std::time::{Instant};
 use std::fs;
 
@@ -23,6 +23,9 @@ use chrono::{DateTime, Utc};
 use elementtree::Element;
 use zune_inflate::DeflateDecoder;
 use flate2::read::GzDecoder;
+
+use quick_xml::Reader;
+use quick_xml::events::Event;
 
 fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
@@ -40,13 +43,27 @@ fn format_file_size(size: u64) -> String {
     }
 }
 
-fn decode_als_data(file_path: &Path) -> Result<Vec<u8>, String> {
+fn decode_numerator(encoded_value: i32) -> i32 {
+    // this is done because the numerator is encoded weirdly
+    return if encoded_value < 0 {
+        1
+    } else if encoded_value < 99 {
+        encoded_value + 1
+    } else {
+        (encoded_value % 99) + 1
+    }
+}
+
+fn decode_denominator(encoded_value: i32) -> i32 {
+    let multiple = encoded_value / 99 + 1;
+    2_i32.pow((multiple - 1) as u32)
+}
+
+fn extract_gzipped_als_data(file_path: &Path) -> Result<Vec<u8>, String> {
     let mut file = match File::open(&file_path) {
         Ok(file) => file,
         Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
     };
-
-    let start_time = Instant::now();
 
     let mut gzip_decoder = GzDecoder::new(&mut file);
     let mut decompressed_data = Vec::new();
@@ -54,11 +71,10 @@ fn decode_als_data(file_path: &Path) -> Result<Vec<u8>, String> {
         return Err(format!("Failed to decompress file {}: {}", file_path.display(), err));
     }
 
-    let duration = start_time.elapsed();
-    // println!("flate2: decompressing the file: {:.2?}", duration);
-
     Ok(decompressed_data)
 }
+
+
 
 fn zune_decode_als_data(file_path: &Path) -> Result<Vec<u8>, String> {
     let mut file = File::open(file_path).map_err(|e| format!("Failed to open file: {}", e))?;
@@ -102,6 +118,126 @@ fn parse_xml_data(xml_data: &[u8], file_name: &Option<String>, file_path: &Path)
     Ok(root)
 }
 
+#[derive(Debug, Clone)]
+struct XmlTag {
+    name: String,
+    attributes: Vec<(String, String)>,
+}
+
+fn find_tags(xml_data: &[u8], search_query: &str) -> Vec<Vec<XmlTag>> {
+    // println!("Starting to find tags with search query: {}", search_query);
+    let mut reader = Reader::from_reader(xml_data);
+    reader.trim_text(true);
+
+    let mut buf = Vec::new();
+    let mut all_tags = Vec::new();
+    let mut current_tags = Vec::new();
+
+    let mut in_target_tag = false;
+    let mut depth: u8 = 0;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref event)) => {
+                let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
+                if name == search_query {
+                    // println!("Entering target tag: {}", name);
+                    in_target_tag = true;
+                    depth = 0;
+                } else if in_target_tag {
+                    depth += 1;
+                }
+            }
+            Ok(Event::Empty(ref event)) => {
+                if in_target_tag && depth == 0 {
+                    let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
+                    // println!("Found empty tag: {}", name);
+                    let mut attributes = Vec::new();
+                    for attr in event.attributes() {
+                        let attr = attr.unwrap();
+                        let key = std::str::from_utf8(attr.key.as_ref()).unwrap().to_string();
+                        let value = std::str::from_utf8(attr.value.as_ref()).unwrap().to_string();
+                        // println!("Found attribute in {}: {} = {}", name, key, value);
+                        attributes.push((key, value));
+                    }
+                    current_tags.push(XmlTag {
+                        name,
+                        attributes,
+                    });
+                }
+            }
+            Ok(Event::End(ref event)) => {
+                let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
+                if name == search_query {
+                    // println!("Exiting target tag: {}", name);
+                    in_target_tag = false;
+                    all_tags.push(current_tags.clone());
+                    current_tags.clear();
+                } else if in_target_tag {
+                    depth -= 1;
+                }
+            }
+            Ok(Event::Eof) => {
+                // println!("Reached end of XML data");
+                break;
+            }
+            _ => (),
+        }
+        buf.clear();
+    }
+    // println!("Found {} tag(s) matching search query: {}", all_tags.len(), search_query);
+    all_tags
+}
+
+fn find_attribute(tags: &[XmlTag], tag_query: &str, attribute_query: &str) -> Option<String> {
+    // println!("Searching for attribute '{}' in tag '{}'", attribute_query, tag_query);
+    for tag in tags {
+        if tag.name == tag_query {
+            for (key, value) in &tag.attributes {
+                if key == attribute_query {
+                    // println!("Found attribute '{}' with value: {}", attribute_query, value);
+                    return Some(value.clone());
+                }
+            }
+        }
+    }
+    // println!("Attribute '{}' not found in tag '{}'", attribute_query, tag_query);
+    None
+}
+
+fn find_vst_plugins(xml_data: &[u8]) -> Vec<String> {
+    // println!("Starting to find VST plugins");
+    let vst_plugin_tags = find_tags(xml_data, "VstPluginInfo");
+    let mut vst_plugin_names = Vec::new();
+
+    for tags in vst_plugin_tags {
+        if let Some(plug_name) = find_attribute(&tags, "PlugName", "Value") {
+            // println!("Found VST plugin: {}", plug_name);
+            vst_plugin_names.push(plug_name);
+        }
+    }
+
+    // println!("Found {} VST plugin(s)", vst_plugin_names.len());
+    vst_plugin_names
+}
+
+fn find_vst3_plugins(xml_data: &[u8]) -> Vec<String> {
+    println!("Starting to find VST3 plugins");
+    let vst3_plugin_tags = find_tags(xml_data, "Vst3PluginInfo");
+    println!("VST3 {:?}", vst3_plugin_tags);
+    let mut vst3_plugin_names = Vec::new();
+
+    for tags in vst3_plugin_tags {
+        if let Some(name) = find_attribute(&tags, "Name", "Value") {
+            println!("Found VST plugin: {}", name);
+            vst3_plugin_names.push(name);
+        }
+    }
+
+    println!("Found {} VST3 plugin(s)", vst3_plugin_names.len());
+    vst3_plugin_names
+}
+
 
 #[derive(Debug)]
 struct LiveSet {
@@ -124,7 +260,8 @@ struct LiveSet {
     estimated_duration: chrono::Duration,
     furthest_bar: u32,
 
-    plugins: HashSet<Id>,
+    vst2_plugin_names: HashSet<String>,
+    vst3_plugin_names: HashSet<String>,
     samples: HashSet<Id>,
 }
 
@@ -150,16 +287,20 @@ impl LiveSet {
             estimated_duration: chrono::Duration::zero(),
             furthest_bar: 0,
 
-            plugins: HashSet::new(),
+            vst2_plugin_names: HashSet::new(),
+            vst3_plugin_names: HashSet::new(),
+
             samples: HashSet::new(),
         };
 
         live_set.load_raw_xml_data()
             .and_then(|_| live_set.update_file_name().map_err(|err| err.to_string()))
+            .and_then(|_| live_set.find_vst2_plugins().map_err(|err| err.to_string()))
+            .and_then(|_| live_set.find_vst3_plugins().map_err(|err| err.to_string()))
             .map(|_| live_set)
     }
 
-    fn update_file_name(&mut self) -> Result<(), String> {
+    pub fn update_file_name(&mut self) -> Result<(), String> {
         if let Some(file_name) = self.file_path.file_name() {
             if let Some(name) = file_name.to_str() {
                 self.file_name = Some(name.to_string());
@@ -172,10 +313,10 @@ impl LiveSet {
         }
     }
 
-    fn update_last_modification_time(&mut self) {
-        let metadata = fs::metadata(&self.file_path).expect("Failed to get metadata");
+    pub fn update_last_modification_time(&mut self) -> Result<(), Error> {
+        let metadata = fs::metadata(&self.file_path)?;
 
-        let modified_time = metadata.modified().expect("Failed to get modified time");
+        let modified_time = metadata.modified()?;
         let modified_time = DateTime::<Utc>::from(modified_time);
 
         let created_time = metadata.created().ok().map_or_else(|| Utc::now(), |time| {
@@ -184,6 +325,8 @@ impl LiveSet {
 
         self.modified_time = modified_time;
         self.created_time = created_time;
+
+        Ok(())
     }
 
     fn load_raw_xml_data(&mut self) -> Result<(), String> {
@@ -193,7 +336,7 @@ impl LiveSet {
             return Err(format!("{:?}: is either inaccessible or not a valid Ableton Live Set file", self.file_path));
         }
 
-        let decompressed_data = match decode_als_data(&path) {
+        let decompressed_data = match extract_gzipped_als_data(&path) {
             Ok(data) => data,
             Err(err) => return Err(err),
         };
@@ -202,6 +345,61 @@ impl LiveSet {
 
         Ok(())
     }
+
+    pub fn find_vst2_plugins(&mut self) -> Result<(), &'static str> {
+        let start_time = Instant::now();
+
+        let xml_data = self.raw_xml_data.as_deref().ok_or("XML data not found")?;
+        let vst2_plugin_tags = find_tags(xml_data, "VstPluginInfo");
+        let mut vst2_plugin_names = HashSet::new();
+
+        for tags in vst2_plugin_tags {
+            if let Some(plug_name) = find_attribute(&tags, "PlugName", "Value") {
+                vst2_plugin_names.insert(plug_name);
+            }
+        }
+
+
+        let end_time = Instant::now();
+        let duration = end_time - start_time;
+        let duration_ms = duration.as_secs_f64() * 1000.0;
+
+        println!("{}: found {:?} VST2 Plugins: {:?} in {:.2} ms", self.file_name.as_deref().unwrap().to_string().bold().purple(), vst2_plugin_names.len(), vst2_plugin_names, duration_ms);
+
+        self.vst2_plugin_names = vst2_plugin_names;
+
+        Ok(())
+    }
+
+    pub fn find_vst3_plugins(&mut self) -> Result<(), &'static str> {
+        let start_time = Instant::now();
+
+        let xml_data = self.raw_xml_data.as_deref().ok_or("XML data not found")?;
+        let vst3_plugin_tags = find_tags(xml_data, "Vst3PluginInfo");
+        let mut vst3_plugin_names = HashSet::new();
+
+        for tags in vst3_plugin_tags {
+            if let Some(name) = find_attribute(&tags, "Name", "Value") {
+                vst3_plugin_names.insert(name);
+            }
+        }
+
+        let end_time = Instant::now();
+        let duration = end_time - start_time;
+        let duration_ms = duration.as_secs_f64() * 1000.0;
+
+        println!("{}: found {:?} VST3 plugins: {:?} in {:.2} ms", self.file_name.as_deref().unwrap().to_string().bold().purple(), vst3_plugin_names.len(), vst3_plugin_names, duration_ms);
+
+        self.vst3_plugin_names = vst3_plugin_names;
+
+        Ok(())
+    }
+
+    fn update_time_signature(&self) -> Result<(), String> {
+        let TIME_SIGNATURE_EVENT_TIME: i32 = -63072000;
+        Ok(())
+    }
+
 }
 
 fn main() {
@@ -227,7 +425,7 @@ fn main() {
 
         match live_set_result {
             Ok(_) => println!(
-                "Loaded {} ({}) in {:.2} ms",
+                "{} ({}) Loaded in {:.2} ms",
                 path.file_name().unwrap().to_string_lossy().bold().purple(),
                 formatted_size,
                 duration_ms
