@@ -215,6 +215,27 @@ impl LiveSet {
     }
 }
 
+fn print_first_and_last_32_bytes_as_text(data: &[u8]) {
+    let total_bytes = data.len();
+
+    println!("Total bytes: {}", total_bytes);
+
+    println!("First 32 bytes as text:");
+    let first_32 = &data[..32.min(total_bytes)];
+    print_bytes_as_text(first_32);
+
+    println!("Last 32 bytes as text:");
+    let last_32 = &data[total_bytes.saturating_sub(32)..];
+    print_bytes_as_text(last_32);
+}
+
+fn print_bytes_as_text(bytes: &[u8]) {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => println!("{}", text),
+        Err(err) => println!("Invalid UTF-8: {}", err),
+    }
+}
+
 fn main() {
     // Builder::new()
     //     .filter_level(LevelFilter::Debug)
@@ -241,12 +262,19 @@ fn main() {
         }
 
         match live_set_result {
-            Ok(_) => println!(
-                "{} ({}) Loaded in {:.2} ms",
-                path.file_name().unwrap().to_string_lossy().bold().purple(),
-                formatted_size,
-                duration_ms
-            ),
+            Ok(live_set) => {
+                println!(
+                    "{} ({}) Loaded in {:.2} ms",
+                    path.file_name().unwrap().to_string_lossy().bold().purple(),
+                    formatted_size,
+                    duration_ms
+                );
+
+                // Print the first and last 32 bytes of the XML data as text
+                // let xml_data = live_set.xml_data;
+                // println!("First and last 32 bytes of XML data:");
+                // print_first_and_last_32_bytes_as_text(xml_data.as_slice());
+            }
             Err(err) => error!("Error: {}", err),
         }
     }
