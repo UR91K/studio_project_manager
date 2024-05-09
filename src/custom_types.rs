@@ -5,10 +5,10 @@ use crate::errors::TimeSignatureError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Id(u64);
 
-#[derive(Debug)]
-pub struct TimeSignature {
-    pub(crate) numerator: u8,
-    pub(crate) denominator: u8,
+#[derive(Debug, Clone)]
+pub struct XmlTag {
+    pub(crate) name: String,
+    pub(crate) attributes: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -104,7 +104,11 @@ pub struct Sample {
 }
 
 // implementations
-
+#[derive(Debug)]
+pub struct TimeSignature {
+    pub(crate) numerator: u8,
+    pub(crate) denominator: u8,
+}
 
 impl TimeSignature {
     pub fn from_encoded(encoded_value: i32) -> Result<Self, TimeSignatureError> {
