@@ -1,5 +1,6 @@
 use std::fmt;
 use std::path::PathBuf;
+use crate::errors::TimeSignatureError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Id(u64);
@@ -104,12 +105,35 @@ pub struct Sample {
 
 // implementations
 
-impl Default for TimeSignature {
-    fn default() -> Self {
-        TimeSignature {
-            numerator: 4,
-            denominator: 4,
+
+impl TimeSignature {
+    pub fn from_encoded(encoded_value: i32) -> Result<Self, TimeSignatureError> {
+        if encoded_value < 0 || encoded_value > 494 {
+            return Err(TimeSignatureError::InvalidEncodedValue(encoded_value));
         }
+
+        let numerator = Self::decode_numerator(encoded_value);
+        let denominator = Self::decode_denominator(encoded_value);
+
+        Ok(TimeSignature {
+            numerator,
+            denominator,
+        })
+    }
+
+    fn decode_numerator(encoded_value: i32) -> u8 {
+        if encoded_value < 0 {
+            1
+        } else if encoded_value < 99 {
+            (encoded_value + 1) as u8
+        } else {
+            ((encoded_value % 99) + 1) as u8
+        }
+    }
+
+    fn decode_denominator(encoded_value: i32) -> u8 {
+        let multiple = encoded_value / 99 + 1;
+        2_u8.pow((multiple - 1) as u32)
     }
 }
 

@@ -1,4 +1,6 @@
 mod custom_types;
+mod errors;
+
 use custom_types::{Id,
                    TimeSignature,
                    AbletonVersion,
@@ -11,25 +13,34 @@ use custom_types::{Id,
 };
 
 use std::collections::{HashMap, HashSet};
-
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::io::{Read, Cursor, Error};
 use std::time::{Instant};
 use std::fs;
-
 use colored::*;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use elementtree::Element;
 use flate2::read::GzDecoder;
-
 use quick_xml::Reader;
 use quick_xml::events::Event;
+use crc32fast::Hasher;
+
 use log::{debug, info, error, trace};
 use anyhow::{anyhow, Context, Result};
-
 use log::LevelFilter;
 use env_logger::Builder;
+use thiserror::Error;
+use crate::errors::{LiveSetError, TimeSignatureError};
+
+
+fn validate_time_signature(value: i32) -> Result<i32, TimeSignatureError> {
+    if value >= 0 && value <= 16777215 {
+        Ok(value)
+    } else {
+        Err(TimeSignatureError::InvalidEncodedValue(value))
+    }
+}
 
 // This is the value of an EnumEvent tag that the time signature is stored in as a weirdly encoded number
 const TIME_SIGNATURE_ENUM_EVENT: i32 = -63072000;
@@ -48,21 +59,6 @@ fn format_file_size(size: u64) -> String {
     } else {
         format!("{:.2} GB", size as f64 / GB as f64)
     }
-}
-
-fn decode_numerator(encoded_value: i32) -> u8 {
-    if encoded_value < 0 {
-        1
-    } else if encoded_value < 99 {
-        (encoded_value + 1) as u8
-    } else {
-        ((encoded_value % 99) + 1) as u8
-    }
-}
-
-fn decode_denominator(encoded_value: i32) -> u8 {
-    let multiple = encoded_value / 99 + 1;
-    2_u8.pow((multiple - 1) as u32)
 }
 
 fn extract_gzipped_data(file_path: &Path) -> Result<Vec<u8>, String> {
@@ -265,89 +261,139 @@ struct LiveSet {
     id: Id,
 
     file_path: PathBuf,
-    file_name: Option<String>,
-    raw_xml_data: Option<Vec<u8>>,
-    file_hash: Option<String>,
+    file_name: String,
+    xml_data: Vec<u8>,
+    file_hash: String,
+    created_time: DateTime<Local>,
+    modified_time: DateTime<Local>,
+    last_scan_timestamp: DateTime<Local>,
 
-    created_time: DateTime<Utc>,
-    modified_time: DateTime<Utc>,
-
-    last_scan_timestamp: DateTime<Utc>,
-    ableton_version: AbletonVersion,
-    ableton_version_readable: String,
-    key_signature: KeySignature,
-    tempo: f32,
+    ableton_version: Option<AbletonVersion>,
+    key_signature: Option<KeySignature>,
+    tempo: Option<f32>,
     time_signature: Option<TimeSignature>,
-    estimated_duration: chrono::Duration,
-    furthest_bar: u32,
+    estimated_duration: Option<chrono::Duration>,
+    furthest_bar: Option<u32>,
 
-    vst2_plugin_names: HashSet<String>,
-    vst3_plugin_names: HashSet<String>,
-    samples: HashSet<Id>,
+    vst2_plugin_names: Option<HashSet<String>>,
+    vst3_plugin_names: Option<HashSet<String>>,
+    sample_paths: Option<HashSet<Id>>,
 }
 
-impl LiveSet {
-    fn new(path: PathBuf) -> Result<Self, String> {
-        let mut live_set = LiveSet {
-            id: Id::default(),
+fn get_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), String> {
+    let metadata = match fs::metadata(file_path) {
+        Ok(meta) => meta,
+        Err(error) => return Err(format!("Failed to retrieve file metadata: {}", error)),
+    };
 
-            file_path: path,
-            file_name: None,
-            raw_xml_data: None,
-            file_hash: None,
+    let modified_time = match metadata.modified() {
+        Ok(time) => DateTime::<Local>::from(time),
+        Err(error) => return Err(format!("Failed to retrieve modified time: {}", error)),
+    };
 
-            created_time: Utc::now(),
-            modified_time: Utc::now(),
+    let created_time = match metadata.created() {
+        Ok(time) => DateTime::<Local>::from(time),
+        Err(_) => Local::now(),
+    };
 
-            last_scan_timestamp: Utc::now(),
-            ableton_version: AbletonVersion::default(),
-            ableton_version_readable: String::new(),
-            key_signature: KeySignature::default(),
-            tempo: 0.0,
-            time_signature: Option::from(TimeSignature::default()),
-            estimated_duration: chrono::Duration::zero(),
-            furthest_bar: 0,
+    Ok((modified_time, created_time))
+}
 
-            vst2_plugin_names: HashSet::new(),
-            vst3_plugin_names: HashSet::new(),
+fn get_file_hash(file_path: &PathBuf) -> Result<String, String> {
+    let mut file = match File::open(file_path) {
+        Ok(file) => file,
+        Err(error) => return Err(format!("Failed to open file: {}", error)),
+    };
 
-            samples: HashSet::new(),
+    let mut hasher = Hasher::new();
+    let mut buffer = [0; 1024];
+
+    loop {
+        let bytes_read = match file.read(&mut buffer) {
+            Ok(bytes) => bytes,
+            Err(error) => return Err(format!("Failed to read file: {}", error)),
         };
 
-        live_set.load_raw_xml_data()
-            .and_then(|_| live_set.update_file_name().map_err(|err| err.to_string()))
-            .and_then(|_| live_set.find_plugins().map_err(|err| err.to_string()))
-            .and_then(|_| live_set.update_time_signature().map_err(|err| err.to_string()))
-            .map(|_| live_set)
-    }
-
-    pub fn update_file_name(&mut self) -> Result<(), String> {
-        if let Some(file_name) = self.file_path.file_name() {
-            if let Some(name) = file_name.to_str() {
-                self.file_name = Some(name.to_string());
-                Ok(())
-            } else {
-                Err("File name is not valid UTF-8".to_string())
-            }
-        } else {
-            Err("File name is not present".to_string())
+        if bytes_read == 0 {
+            break;
         }
+
+        hasher.update(&buffer[..bytes_read]);
     }
 
-    pub fn update_last_modification_time(&mut self) -> Result<(), Error> {
-        let metadata = fs::metadata(&self.file_path)?;
+    let hash = hasher.finalize();
+    let hash_string = format!("{:08x}", hash);
 
-        let modified_time = metadata.modified()?;
-        let modified_time = DateTime::<Utc>::from(modified_time);
+    Ok(hash_string)
+}
 
-        let created_time = metadata.created().ok().map_or_else(|| Utc::now(), |time| {
-            DateTime::<Utc>::from(time)
-        });
+pub fn get_file_name(file_path: &PathBuf) -> Result<String, String> {
+    match file_path.file_name() {
+        Some(file_name) => match file_name.to_str() {
+            Some(name) => Ok(name.to_string()),
+            None => Err("File name is not valid UTF-8".to_string()),
+        },
+        None => Err("File name is not present".to_string()),
+    }
+}
 
-        self.modified_time = modified_time;
-        self.created_time = created_time;
 
-        Ok(())
+
+impl LiveSet {
+    fn new(file_path: PathBuf) -> Result<Self, String> {
+        let file_name = match get_file_name(&file_path) {
+            Ok(name) => name,
+            Err(error) => return Err(error),
+        };
+
+        let path = Path::new(&file_path);
+
+        if !path.exists() || !path.is_file() || path.extension().unwrap_or_default() != "als" {
+            return Err(format!("{:?}: is either inaccessible or not a valid Ableton Live Set file", file_path));
+        }
+
+        let (modified_time, created_time) = match get_file_timestamps(&file_path) {
+            Ok(timestamps) => timestamps,
+            Err(error) => return Err(error),
+        };
+
+        let file_hash = match get_file_hash(&file_path) {
+            Ok(hash) => hash,
+            Err(error) => return Err(error),
+        };
+
+        let xml_data = match extract_gzipped_data(&file_path) {
+            Ok(data) => data,
+            Err(error) => return Err(error),
+        };
+
+        let last_scan_timestamp = Local::now();
+
+        let live_set = LiveSet {
+            id: Id::default(),
+
+            file_path,
+            file_name,
+            xml_data,
+            file_hash,
+            created_time,
+            modified_time,
+            last_scan_timestamp,
+
+            ableton_version: None,
+            key_signature: None,
+            tempo: None,
+            time_signature: None,
+            estimated_duration: None,
+            furthest_bar: None,
+
+            vst2_plugin_names: None,
+            vst3_plugin_names: None,
+
+            sample_paths: None,
+        };
+
+        Ok(live_set)
     }
 
     fn load_raw_xml_data(&mut self) -> Result<(), String> {
@@ -357,12 +403,9 @@ impl LiveSet {
             return Err(format!("{:?}: is either inaccessible or not a valid Ableton Live Set file", self.file_path));
         }
 
-        let decompressed_data = match extract_gzipped_data(&path) {
-            Ok(data) => data,
-            Err(err) => return Err(err),
-        };
-        
-        self.raw_xml_data = Some(decompressed_data);
+        let decompressed_data = extract_gzipped_data(&path).map_err(|err| err.to_string())?;
+
+        self.xml_data = decompressed_data;
 
         Ok(())
     }
@@ -370,8 +413,7 @@ impl LiveSet {
     pub fn find_plugins(&mut self) -> Result<(), &'static str> {
         let start_time = Instant::now();
 
-        let xml_data = self.raw_xml_data.as_deref().ok_or("XML data not found")?;
-        let plugin_names = find_all_plugins(xml_data);
+        let plugin_names = find_all_plugins(&self.xml_data);
 
         let mut vst2_plugin_names = HashSet::new();
         let mut vst3_plugin_names = HashSet::new();
@@ -389,32 +431,27 @@ impl LiveSet {
         let duration_ms = duration.as_secs_f64() * 1000.0;
 
         info!(
-            "{}: found {:?} VST2 Plugins and {:?} VST3 Plugins in {:.2} ms",
-            self.file_name.as_deref().unwrap().to_string().bold().purple(),
+            "{}: found {} VST2 Plugins and {} VST3 Plugins in {:.2} ms",
+            self.file_name.bold().purple(),
             vst2_plugin_names.len(),
             vst3_plugin_names.len(),
             duration_ms
         );
 
-        self.vst2_plugin_names = vst2_plugin_names;
-        self.vst3_plugin_names = vst3_plugin_names;
+        self.vst2_plugin_names = Some(vst2_plugin_names);
+        self.vst3_plugin_names = Some(vst3_plugin_names);
 
         Ok(())
     }
 
-    fn update_time_signature(&mut self) -> Result<()> {
+    fn update_time_signature(&mut self) -> Result<(), LiveSetError> {
         debug!("Updating time signature");
 
-        let xml_data = match &self.raw_xml_data {
-            Some(data) => data,
-            None => return Err(anyhow!("XML data not found")),
-        };
-        trace!("XML data: {:?}", std::str::from_utf8(xml_data));
+        trace!("XML data: {:?}", std::str::from_utf8(&self.xml_data));
 
         let search_query = "EnumEvent";
-        // debug!("Time signature enum event: {}", time_signature_enum_event);
 
-        if let Some(attributes) = find_empty_event(xml_data, search_query) {
+        if let Some(attributes) = find_empty_event(&self.xml_data, search_query) {
             debug!("Found time signature enum event");
             trace!("Attributes: {:?}", attributes);
 
@@ -422,33 +459,30 @@ impl LiveSet {
                 debug!("Found 'Value' attribute");
                 trace!("Value: {}", value);
 
-                let encoded_value = value.parse::<i32>().context("Failed to parse encoded time signature")?;
+                let encoded_value = value
+                    .parse::<i32>()
+                    .map_err(|e| LiveSetError::TimeSignatureError(TimeSignatureError::ParseEncodedError(e)))?;
                 debug!("Parsed encoded value: {}", encoded_value);
 
-                let numerator = decode_numerator(encoded_value);
-                debug!("Decoded numerator: {}", numerator);
-
-                let denominator = decode_denominator(encoded_value);
-                debug!("Decoded denominator: {}", denominator);
-
-                let time_signature = TimeSignature {
-                    numerator,
-                    denominator,
-                };
+                let time_signature = TimeSignature::from_encoded(encoded_value)
+                    .map_err(LiveSetError::TimeSignatureError)?;
+                debug!("Decoded time signature: {:?}", time_signature);
 
                 self.time_signature = Some(time_signature);
-                info!("Time signature updated: {}/{}", numerator, denominator);
+                info!(
+                "Time signature updated: {}/{}",
+                time_signature.numerator, time_signature.denominator
+            );
 
                 return Ok(());
             } else {
                 error!("'Value' attribute not found");
+                return Err(LiveSetError::ValueAttributeNotFound);
             }
         } else {
             error!("Time signature enum event not found");
+            return Err(LiveSetError::EnumEventNotFound);
         }
-
-        error!("Time signature not found");
-        Err(anyhow!("Time signature not found"))
     }
 }
 
