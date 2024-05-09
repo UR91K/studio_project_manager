@@ -13,16 +13,81 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use crate::custom_types::XmlTag;
 use crate::errors::{LiveSetError, TimeSignatureError};
+use anyhow::Result;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 pub const TIME_SIGNATURE_ENUM_EVENT: i32 = -63072000;
+const CHUNK_SIZE: usize = 1024 * 1024; // 1 MB
 
-pub fn parse_encoded_value(value: &str) -> anyhow::Result<i32, LiveSetError> {
+pub fn extract_gzipped_data_parallel(file_path: &Path) -> Result<Vec<u8>, String> {
+    let file = match File::open(&file_path) {
+        Ok(file) => file,
+        Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
+    };
+
+    let file_size = file.metadata().map(|m| m.len()).unwrap_or(0);
+    let num_chunks = (file_size as usize + CHUNK_SIZE - 1) / CHUNK_SIZE;
+
+    let file = Arc::new(Mutex::new(file));
+    let decompressed_data = Arc::new(Mutex::new(Vec::new()));
+
+    let mut threads = Vec::new();
+    for _ in 0..num_chunks {
+        let file = Arc::clone(&file);
+        let decompressed_data = Arc::clone(&decompressed_data);
+
+        let thread = thread::spawn(move || {
+            let mut chunk = Vec::with_capacity(CHUNK_SIZE);
+            let mut locked_file = file.lock().unwrap();
+            let mut gzip_decoder = GzDecoder::new(&mut *locked_file);
+
+            if let Err(err) = gzip_decoder.read_to_end(&mut chunk) {
+                eprintln!("Failed to decompress chunk: {}", err);
+                return;
+            }
+
+            let mut locked_data = decompressed_data.lock().unwrap();
+            locked_data.extend_from_slice(&chunk);
+        });
+
+        threads.push(thread);
+    }
+
+    for thread in threads {
+        thread.join().unwrap();
+    }
+
+    let decompressed_data = Arc::try_unwrap(decompressed_data)
+        .unwrap()
+        .into_inner()
+        .map_err(|_| "Failed to retrieve decompressed data".to_string())?;
+
+    Ok(decompressed_data)
+}
+
+pub fn extract_gzipped_data(file_path: &Path) -> Result<Vec<u8>, String> {
+    let mut file = match File::open(&file_path) {
+        Ok(file) => file,
+        Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
+    };
+
+    let mut gzip_decoder = GzDecoder::new(&mut file);
+    let mut decompressed_data = Vec::new();
+    if let Err(err) = gzip_decoder.read_to_end(&mut decompressed_data) {
+        return Err(format!("Failed to decompress file {}: {}", file_path.display(), err));
+    }
+
+    Ok(decompressed_data)
+}
+
+pub fn parse_encoded_value(value: &str) -> Result<i32, LiveSetError> {
     value
         .parse::<i32>()
         .map_err(|e| LiveSetError::TimeSignatureError(TimeSignatureError::ParseEncodedError(e)))
 }
 
-pub fn validate_time_signature(value: i32) -> anyhow::Result<i32, TimeSignatureError> {
+pub fn validate_time_signature(value: i32) -> Result<i32, TimeSignatureError> {
     if value >= 0 && value <= 16777215 {
         Ok(value)
     } else {
@@ -46,22 +111,7 @@ pub fn format_file_size(size: u64) -> String {
     }
 }
 
-pub fn extract_gzipped_data(file_path: &Path) -> anyhow::Result<Vec<u8>, String> {
-    let mut file = match File::open(&file_path) {
-        Ok(file) => file,
-        Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
-    };
-
-    let mut gzip_decoder = GzDecoder::new(&mut file);
-    let mut decompressed_data = Vec::new();
-    if let Err(err) = gzip_decoder.read_to_end(&mut decompressed_data) {
-        return Err(format!("Failed to decompress file {}: {}", file_path.display(), err));
-    }
-
-    Ok(decompressed_data)
-}
-
-pub fn parse_xml_data(xml_data: &[u8], file_name: &Option<String>, file_path: &Path) -> anyhow::Result<Element, String> {
+pub fn parse_xml_data(xml_data: &[u8], file_name: &Option<String>, file_path: &Path) -> Result<Element, String> {
     let xml_data_str = match std::str::from_utf8(xml_data) {
         Ok(s) => s,
         Err(err) => return Err(format!("{:?}: Failed to convert decompressed data to UTF-8 string: {}", file_name, err)),
@@ -209,7 +259,7 @@ pub fn find_empty_event(xml_data: &[u8], search_query: &str) -> Option<HashMap<S
 
 pub fn find_all_plugins(xml_data: &[u8]) -> HashMap<String, Vec<String>> {
     let search_queries = &["VstPluginInfo", "Vst3PluginInfo"];
-    let plugin_tags = crate::find_tags(xml_data, search_queries);
+    let plugin_tags = find_tags(xml_data, search_queries);
 
     let mut plugin_names: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -223,7 +273,7 @@ pub fn find_all_plugins(xml_data: &[u8]) -> HashMap<String, Vec<String>> {
                 _ => continue,
             };
 
-            if let Some(name) = crate::find_attribute(&tags, attribute_name, "Value") {
+            if let Some(name) = find_attribute(&tags, attribute_name, "Value") {
                 names.push(name);
             }
         }
@@ -234,7 +284,7 @@ pub fn find_all_plugins(xml_data: &[u8]) -> HashMap<String, Vec<String>> {
     plugin_names
 }
 
-pub fn get_file_timestamps(file_path: &PathBuf) -> anyhow::Result<(DateTime<Local>, DateTime<Local>), String> {
+pub fn get_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), String> {
     let metadata = match fs::metadata(file_path) {
         Ok(meta) => meta,
         Err(error) => return Err(format!("Failed to retrieve file metadata: {}", error)),
@@ -253,7 +303,7 @@ pub fn get_file_timestamps(file_path: &PathBuf) -> anyhow::Result<(DateTime<Loca
     Ok((modified_time, created_time))
 }
 
-pub fn get_file_hash(file_path: &PathBuf) -> anyhow::Result<String, String> {
+pub fn get_file_hash(file_path: &PathBuf) -> Result<String, String> {
     let mut file = match File::open(file_path) {
         Ok(file) => file,
         Err(error) => return Err(format!("Failed to open file: {}", error)),
@@ -281,7 +331,7 @@ pub fn get_file_hash(file_path: &PathBuf) -> anyhow::Result<String, String> {
     Ok(hash_string)
 }
 
-pub fn get_file_name(file_path: &PathBuf) -> anyhow::Result<String, String> {
+pub fn get_file_name(file_path: &PathBuf) -> Result<String, String> {
     match file_path.file_name() {
         Some(file_name) => match file_name.to_str() {
             Some(name) => Ok(name.to_string()),
