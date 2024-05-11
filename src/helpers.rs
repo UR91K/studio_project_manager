@@ -3,7 +3,11 @@ use std::fs;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Instant;
+
+use anyhow::Result;
 use chrono::{DateTime, Local};
 use crc32fast::Hasher;
 use elementtree::Element;
@@ -11,11 +15,9 @@ use flate2::read::GzDecoder;
 use log::{debug, trace};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+
 use crate::custom_types::XmlTag;
 use crate::errors::{LiveSetError, TimeSignatureError};
-use anyhow::Result;
-use std::sync::{Arc, Mutex};
-use std::thread;
 
 pub const TIME_SIGNATURE_ENUM_EVENT: i32 = -63072000;
 const CHUNK_SIZE: usize = 1024 * 1024; // 1 MB

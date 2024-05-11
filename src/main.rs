@@ -1,53 +1,54 @@
-mod custom_types;
-mod errors;
-mod helpers;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::fs::File;
+use std::io::{Cursor, Error, Read};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 
-use custom_types::{Id,
-                   TimeSignature,
-                   AbletonVersion,
-                   Scale,
-                   Tonic,
+use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Local, Utc};
+use colored::*;
+use crc32fast::Hasher;
+use elementtree::Element;
+use env_logger::Builder;
+use flate2::read::GzDecoder;
+use log::{debug, error, info, trace};
+use log::LevelFilter;
+use quick_xml::events::Event;
+use quick_xml::Reader;
+use thiserror::Error;
+
+use custom_types::{AbletonVersion,
+                   Id,
                    KeySignature,
-                   PluginFormat,
                    Plugin,
+                   PluginFormat,
                    Sample,
+                   Scale,
+                   TimeSignature,
+                   Tonic,
                    XmlTag,
 };
 
-use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use std::io::{Read, Cursor, Error};
-use std::time::{Instant};
-use std::fs;
-use colored::*;
-use chrono::{DateTime, Local, Utc};
-use elementtree::Element;
-use flate2::read::GzDecoder;
-use quick_xml::Reader;
-use quick_xml::events::Event;
-use crc32fast::Hasher;
-
-use log::{debug, info, error, trace};
-use anyhow::{anyhow, Context, Result};
-use log::LevelFilter;
-use env_logger::Builder;
-use thiserror::Error;
 use crate::errors::{LiveSetError, TimeSignatureError};
-use crate::helpers::{TIME_SIGNATURE_ENUM_EVENT,
-                     parse_encoded_value,
-                     validate_time_signature,
-                     format_file_size,
-                     extract_gzipped_data,
-                     parse_xml_data,
-                     find_tags,
+use crate::helpers::{extract_gzipped_data,
+                     find_all_plugins,
                      find_attribute,
                      find_empty_event,
-                     find_all_plugins,
-                     get_file_timestamps,
+                     find_tags,
+                     format_file_size,
                      get_file_hash,
                      get_file_name,
+                     get_file_timestamps,
+                     parse_encoded_value,
+                     parse_xml_data,
+                     TIME_SIGNATURE_ENUM_EVENT,
+                     validate_time_signature,
 };
+
+mod custom_types;
+mod errors;
+mod helpers;
 
 #[derive(Debug)]
 struct LiveSet {

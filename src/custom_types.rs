@@ -1,5 +1,6 @@
 use std::fmt;
 use std::path::PathBuf;
+
 use crate::errors::TimeSignatureError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
