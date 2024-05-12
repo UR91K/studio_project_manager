@@ -15,9 +15,10 @@ use flate2::read::GzDecoder;
 use log::{debug, trace};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use encoding_rs::UTF_16LE;
 
 use crate::custom_types::XmlTag;
-use crate::errors::{LiveSetError, TimeSignatureError};
+use crate::errors::{DecodeSamplePathError, LiveSetError, TimeSignatureError};
 
 pub const TIME_SIGNATURE_ENUM_EVENT: i32 = -63072000;
 const CHUNK_SIZE: usize = 1024 * 1024; // 1 MB
@@ -137,7 +138,7 @@ pub fn parse_xml_data(xml_data: &[u8], file_name: &Option<String>, file_path: &P
     Ok(root)
 }
 
-pub fn find_tags(xml_data: &[u8], search_queries: &[&str]) -> HashMap<String, Vec<Vec<XmlTag>>> {
+pub fn find_tags(xml_data: &[u8], search_queries: &[&str], target_depth: u8) -> HashMap<String, Vec<Vec<XmlTag>>> {
     /// Retrieves all the empty tags which are immediate children of the search queries
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
@@ -164,40 +165,40 @@ pub fn find_tags(xml_data: &[u8], search_queries: &[&str]) -> HashMap<String, Ve
                 }
             }
             Ok(Event::Empty(ref event)) => {
-                if in_target_tag && depth == 0 {
+                if in_target_tag && depth == target_depth {
                     let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
                     let mut attributes = Vec::new();
                     for attr in event.attributes() {
                         let attr = attr.unwrap();
-                        let key = std::str::from_utf8(attr.key.as_ref()).unwrap().to_string();
-                        let value = std::str::from_utf8(attr.value.as_ref()).unwrap().to_string();
-                        attributes.push((key, value));
+                            let key = std::str::from_utf8(attr.key.as_ref()).unwrap().to_string();
+                            let value = std::str::from_utf8(attr.value.as_ref()).unwrap().to_string();
+                            attributes.push((key, value));
+                        }
+                        current_tags.get_mut(&current_query).unwrap().push(XmlTag {
+                            name,
+                            attributes,
+                        });
                     }
-                    current_tags.get_mut(&current_query).unwrap().push(XmlTag {
-                        name,
-                        attributes,
-                    });
                 }
-            }
-            Ok(Event::End(ref event)) => {
-                let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
-                if name == current_query {
-                    in_target_tag = false;
-                    all_tags.entry(current_query.clone()).or_default().push(current_tags[&current_query].clone());
-                    current_tags.get_mut(&current_query).unwrap().clear();
-                } else if in_target_tag {
-                    depth -= 1;
+                Ok(Event::End(ref event)) => {
+                    let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
+                    if name == current_query {
+                        in_target_tag = false;
+                        all_tags.entry(current_query.clone()).or_default().push(current_tags[&current_query].clone());
+                        current_tags.get_mut(&current_query).unwrap().clear();
+                    } else if in_target_tag {
+                        depth -= 1;
+                    }
                 }
+                Ok(Event::Eof) => {
+                    break;
+                }
+                _ => (),
             }
-            Ok(Event::Eof) => {
-                break;
-            }
-            _ => (),
+            buf.clear();
         }
-        buf.clear();
+        all_tags
     }
-    all_tags
-}
 
 pub fn find_attribute(tags: &[XmlTag], tag_query: &str, attribute_query: &str) -> Option<String> {
     // println!("Searching for attribute '{}' in tag '{}'", attribute_query, tag_query);
@@ -259,9 +260,56 @@ pub fn find_empty_event(xml_data: &[u8], search_query: &str) -> Option<HashMap<S
     None
 }
 
+pub fn find_sample_path_data(xml_data: &[u8]) -> Vec<String> {
+    let mut reader = Reader::from_reader(xml_data);
+    reader.trim_text(true);
+
+    let mut buf = Vec::new();
+    let mut in_sample_ref = false;
+    let mut in_data_tag = false;
+    let mut data_list = Vec::new();
+    let mut current_data = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref event)) => {
+                let name = std::str::from_utf8(event.name().as_ref()).unwrap();
+                if name == "SampleRef" {
+                    in_sample_ref = true;
+                } else if in_sample_ref && name == "Data" {
+                    in_data_tag = true;
+                }
+            }
+            Ok(Event::Text(ref event)) => {
+                if in_data_tag {
+                    current_data = std::str::from_utf8(event.as_ref()).unwrap().to_string();
+                }
+            }
+            Ok(Event::End(ref event)) => {
+                let name = std::str::from_utf8(event.name().as_ref()).unwrap();
+                if name == "Data" {
+                    in_data_tag = false;
+                    if !current_data.is_empty() {
+                        data_list.push(current_data.clone());
+                        current_data.clear();
+                    }
+                } else if name == "SampleRef" {
+                    in_sample_ref = false;
+                }
+            }
+            Ok(Event::Eof) => break,
+            _ => (),
+        }
+        buf.clear();
+    }
+
+    data_list
+}
+
 pub fn find_all_plugins(xml_data: &[u8]) -> HashMap<String, Vec<String>> {
     let search_queries = &["VstPluginInfo", "Vst3PluginInfo"];
-    let plugin_tags = find_tags(xml_data, search_queries);
+    let target_depth: u8 = 0;
+    let plugin_tags = find_tags(xml_data, search_queries, target_depth);
 
     let mut plugin_names: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -284,6 +332,61 @@ pub fn find_all_plugins(xml_data: &[u8]) -> HashMap<String, Vec<String>> {
     }
 
     plugin_names
+}
+
+pub fn find_all_samples(xml_data: &[u8], major_version: u32) -> Result<HashMap<String, Vec<PathBuf>>, DecodeSamplePathError> {
+    let mut sample_paths: HashMap<String, Vec<PathBuf>> = HashMap::new();
+
+    if major_version < 11 {
+        let sample_data: Vec<String> = find_sample_path_data(xml_data);
+        let mut decoded_paths = Vec::new();
+        for data in sample_data {
+            match decode_sample_path(&data) {
+                Ok(path) => decoded_paths.push(path),
+                Err(e) => return Err(e),
+            }
+        }
+        sample_paths.insert("SampleData".to_string(), decoded_paths);
+    } else {
+        let search_queries = &["SampleRef"];
+        let target_depth: u8 = 1;
+        let sample_tags = find_tags(xml_data, search_queries, target_depth);
+
+        for (query, tags_list) in sample_tags {
+            let mut paths = Vec::new();
+            for tags in tags_list {
+                if let Some(path) = find_attribute(&tags, "Path", "Value") {
+                    paths.push(PathBuf::from(path));
+                }
+            }
+            sample_paths.insert(query, paths);
+        }
+    }
+
+    Ok(sample_paths)
+}
+
+fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, DecodeSamplePathError> {
+    let abs_hash_path = abs_hash_path.replace("\\t", "").replace("\\n", "");
+
+    let byte_data = hex::decode(&abs_hash_path).map_err(DecodeSamplePathError::HexDecodeError)?;
+
+    let (cow, _, had_errors) = UTF_16LE.decode(&byte_data);
+    if had_errors {
+        return Err(DecodeSamplePathError::InvalidUtf16Encoding);
+    }
+
+    let path_string = cow.replace("\u{0}", "");
+    let path = PathBuf::from(path_string);
+
+    if let Err(e) = path.canonicalize() {
+        return Err(DecodeSamplePathError::PathProcessingError(format!(
+            "Failed to canonicalize path: {}",
+            e
+        )));
+    }
+
+    Ok(path)
 }
 
 pub fn get_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), String> {

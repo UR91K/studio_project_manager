@@ -31,3 +31,24 @@ pub enum LiveSetError {
     #[error("Failed to create LiveSet: {0}")]
     CreateLiveSetError(String),
 }
+
+#[derive(Error, Debug)]
+pub enum SamplePathError {
+    #[error("Failed to decode hexadecimal string: {0}")]
+    HexDecodeError(#[from] hex::FromHexError),
+
+    #[error("Failed to convert path from bytes to UTF-16 string")]
+    Utf16ConversionError,
+}
+
+#[derive(Error, Debug)]
+pub enum DecodeSamplePathError {
+    #[error("Failed to decode hex string: {0}")]
+    HexDecodeError(#[from] hex::FromHexError),
+
+    #[error("Invalid UTF-16 encoding")]
+    InvalidUtf16Encoding,
+
+    #[error("Failed to process path: {0}")]
+    PathProcessingError(String),
+}

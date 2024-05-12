@@ -263,7 +263,7 @@ fn main() {
         }
 
         match live_set_result {
-            Ok(live_set) => {
+            Ok(_) => {
                 println!(
                     "{} ({}) Loaded in {:.2} ms",
                     path.file_name().unwrap().to_string_lossy().bold().purple(),
