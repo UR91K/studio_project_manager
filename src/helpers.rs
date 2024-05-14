@@ -17,8 +17,9 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use encoding_rs::UTF_16LE;
 
-use crate::custom_types::XmlTag;
+use crate::custom_types::{AbletonVersion, XmlTag};
 use crate::errors::{DecodeSamplePathError, LiveSetError, TimeSignatureError};
+use crate::VersionInfo;
 
 pub const TIME_SIGNATURE_ENUM_EVENT: i32 = -63072000;
 const CHUNK_SIZE: usize = 1024 * 1024; // 1 MB
@@ -387,6 +388,38 @@ fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, DecodeSamplePathEr
     }
 
     Ok(path)
+}
+
+pub fn extract_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> {
+    let mut reader = Reader::from_bytes(&self.xml_data);
+    reader.trim_text(true);
+
+    let mut buf = Vec::new();
+    // quickxml loop
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                if e.name() == b"Ableton" {
+                    let version_info = VersionInfo::from_attributes(e.attributes())?;
+
+                    self.ableton_version = Some(AbletonVersion {
+                        major: version_info.major,
+                        minor: version_info.minor,
+                        patch: version_info.patch,
+                        beta: version_info.beta,
+                    });
+
+                    return Ok(());
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(LiveSetError::XmlParseError(e)),
+            _ => (),
+        }
+        buf.clear();
+    }
+
+    Err(LiveSetError::RootTagNotFound)
 }
 
 pub fn get_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), String> {
