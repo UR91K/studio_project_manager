@@ -1,4 +1,5 @@
 use thiserror::Error;
+use quick_xml::Error as XmlError;
 
 #[derive(Error, Debug)]
 pub enum TimeSignatureError {
@@ -30,6 +31,15 @@ pub enum LiveSetError {
 
     #[error("Failed to create LiveSet: {0}")]
     CreateLiveSetError(String),
+
+    #[error("Failed to parse XML: {0}")]
+    XmlParseError(#[from] XmlError),
+
+    #[error("Root tag not found")]
+    RootTagNotFound,
+
+    #[error("Failed to parse version: {0}")]
+    ParseVersionError(#[from] std::num::ParseIntError),
 }
 
 #[derive(Error, Debug)]

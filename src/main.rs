@@ -104,6 +104,8 @@ impl LiveSet {
 
         let last_scan_timestamp = Local::now();
 
+        let ableton_version =
+
         let live_set = LiveSet {
             id: Id::default(),
 
@@ -114,8 +116,8 @@ impl LiveSet {
             created_time,
             modified_time,
             last_scan_timestamp,
+            ableton_version,
 
-            ableton_version: None,
             key_signature: None,
             tempo: None,
             time_signature: None,
@@ -178,6 +180,10 @@ impl LiveSet {
         Ok(())
     }
 
+    fn find_samples(&mut self) -> Result<(), LiveSetError> {
+        Ok(())
+    }
+
     fn update_time_signature(&mut self) -> Result<(), LiveSetError> {
         debug!("Updating time signature");
         trace!("XML data: {:?}", std::str::from_utf8(&self.xml_data));
@@ -214,6 +220,12 @@ impl LiveSet {
 
         Ok(())
     }
+
+    //TODO Add version finding
+    //TODO Add furthest bar finding
+    //TODO Add tempo finding
+    //TODO Add duration estimation (based on furthest bar and tempo)
+    //TODO Add key signature finding
 }
 
 fn print_first_and_last_32_bytes_as_text(data: &[u8]) {

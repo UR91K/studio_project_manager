@@ -14,9 +14,10 @@ pub struct XmlTag {
 
 #[derive(Debug)]
 pub struct AbletonVersion {
-    major: u32,
-    minor: u32,
-    patch: u32,
+    pub(crate) major: u32,
+    pub(crate) minor: u32,
+    pub(crate) patch: u32,
+    pub beta: bool
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -154,16 +155,6 @@ impl Default for KeySignature {
 impl fmt::Display for AbletonVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Ableton {}.{}.{}", self.major, self.minor, self.patch)
-    }
-}
-
-impl Default for AbletonVersion {
-    fn default() -> Self {
-        AbletonVersion {
-            major: 0,
-            minor: 0,
-            patch: 0,
-        }
     }
 }
 
