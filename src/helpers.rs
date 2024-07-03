@@ -1,3 +1,4 @@
+//helpers.rs
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -19,7 +20,6 @@ use encoding_rs::UTF_16LE;
 
 use crate::custom_types::{AbletonVersion, XmlTag};
 use crate::errors::{DecodeSamplePathError, LiveSetError, TimeSignatureError};
-use crate::VersionInfo;
 
 pub const TIME_SIGNATURE_ENUM_EVENT: i32 = -63072000;
 const CHUNK_SIZE: usize = 1024 * 1024; // 1 MB
@@ -274,7 +274,7 @@ pub fn find_sample_path_data(xml_data: &[u8]) -> Vec<String> {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref event)) => {
-                let name = std::str::from_utf8(event.name().as_ref()).unwrap();
+                let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
                 if name == "SampleRef" {
                     in_sample_ref = true;
                 } else if in_sample_ref && name == "Data" {
@@ -287,7 +287,7 @@ pub fn find_sample_path_data(xml_data: &[u8]) -> Vec<String> {
                 }
             }
             Ok(Event::End(ref event)) => {
-                let name = std::str::from_utf8(event.name().as_ref()).unwrap();
+                let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
                 if name == "Data" {
                     in_data_tag = false;
                     if !current_data.is_empty() {
@@ -391,35 +391,31 @@ fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, DecodeSamplePathEr
 }
 
 pub fn extract_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> {
-    let mut reader = Reader::from_bytes(&self.xml_data);
+    let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
-
     let mut buf = Vec::new();
-    // quickxml loop
+
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                if e.name() == b"Ableton" {
-                    let version_info = VersionInfo::from_attributes(e.attributes())?;
+            Ok(Event::Decl(_)) => continue, // Skip XML declaration
+            Ok(Event::Start(ref event)) => {
+                let name = event.name();
+                let name_str = std::str::from_utf8(name.as_ref())
+                    .map_err(|e| LiveSetError::Utf8Error(e))?;
 
-                    self.ableton_version = Some(AbletonVersion {
-                        major: version_info.major,
-                        minor: version_info.minor,
-                        patch: version_info.patch,
-                        beta: version_info.beta,
-                    });
-
-                    return Ok(());
+                if name_str != "Ableton" {
+                    return Err(LiveSetError::InvalidFileFormat(format!("First element is '{}', expected 'Ableton'", name_str)));
                 }
-            }
-            Ok(Event::Eof) => break,
-            Err(e) => return Err(LiveSetError::XmlParseError(e)),
-            _ => (),
-        }
-        buf.clear();
-    }
 
-    Err(LiveSetError::RootTagNotFound)
+                return AbletonVersion::from_attributes(event.attributes());
+            }
+            Ok(Event::Eof) => {
+                return Err(LiveSetError::InvalidFileFormat("Reached end of file without finding Ableton tag".into()));
+            }
+            Ok(_) => continue, // Skip other events like comments
+            Err(e) => return Err(LiveSetError::XmlParseError(e)),
+        }
+    }
 }
 
 pub fn get_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), String> {
@@ -476,5 +472,40 @@ pub fn get_file_name(file_path: &PathBuf) -> Result<String, String> {
             None => Err("File name is not valid UTF-8".to_string()),
         },
         None => Err("File name is not present".to_string()),
+    }
+}
+
+
+
+// BEGIN TESTS
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_version() {
+        let xml_data = br#"<?xml version="1.0" encoding="UTF-8"?>
+        <Ableton MajorVersion="11" MinorVersion="0" SchemaChangeCount="3" Creator="Ableton Live 11.0.12" Revision="1b1951c0f4b3d5a5ad5d1ac69c3d9b5aa7a36dd8">"#;
+
+        let version = extract_version(xml_data).unwrap();
+        assert_eq!(version.major, 11);
+        assert_eq!(version.minor, 0);
+        assert_eq!(version.patch, 3);
+        assert_eq!(version.beta, false);
+    }
+
+    #[test]
+    fn test_extract_version_beta() {
+        let xml_data = br#"<?xml version="1.0" encoding="UTF-8"?>
+        <Ableton MajorVersion="11" MinorVersion="1" SchemaChangeCount="0" Creator="Ableton Live 11.1 Beta" Revision="1b1951c0f4b3d5a5ad5d1ac69c3d9b5aa7a36dd8">"#;
+
+        let version = extract_version(xml_data).unwrap();
+        assert_eq!(version.major, 11);
+        assert_eq!(version.minor, 1);
+        assert_eq!(version.patch, 0);
+        assert_eq!(version.beta, true);
     }
 }

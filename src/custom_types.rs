@@ -1,6 +1,13 @@
+//custom_types.rs
 use std::fmt;
 use std::path::PathBuf;
+use std::str;
 
+use quick_xml::events::attributes::Attribute;
+use quick_xml::name::QName;
+use quick_xml::events::attributes::AttrError;
+
+use crate::errors::LiveSetError;
 use crate::errors::TimeSignatureError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,9 +21,9 @@ pub struct XmlTag {
 
 #[derive(Debug)]
 pub struct AbletonVersion {
-    pub(crate) major: u32,
-    pub(crate) minor: u32,
-    pub(crate) patch: u32,
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
     pub beta: bool
 }
 
@@ -158,8 +165,52 @@ impl fmt::Display for AbletonVersion {
     }
 }
 
+impl AbletonVersion {
+    pub fn from_attributes<'a, I>(attributes: I) -> Result<Self, LiveSetError>
+    where
+        I: Iterator<Item = Result<Attribute<'a>, AttrError>>,
+    {
+        let mut major = None;
+        let mut minor = None;
+        let mut patch = None;
+        let mut beta = false;
+
+        for attr in attributes {
+            let attr = attr.map_err(|e| LiveSetError::XmlAttrError(e))?;
+            match attr.key {
+                QName(b"MajorVersion") => {
+                    let value = std::str::from_utf8(&attr.value)?;
+                    major = Some(value.parse()?);
+                },
+                QName(b"MinorVersion") => {
+                    let value = std::str::from_utf8(&attr.value)?;
+                    minor = Some(value.parse()?);
+                },
+                QName(b"SchemaChangeCount") => {
+                    let value = std::str::from_utf8(&attr.value)?;
+                    patch = Some(value.parse()?);
+                },
+                QName(b"Creator") => {
+                    let creator = std::str::from_utf8(&attr.value)?;
+                    beta = creator.contains("Beta");
+                },
+                _ => {}
+            }
+        }
+
+        Ok(AbletonVersion {
+            major: major.ok_or(LiveSetError::MissingVersionInfo)?,
+            minor: minor.ok_or(LiveSetError::MissingVersionInfo)?,
+            patch: patch.ok_or(LiveSetError::MissingVersionInfo)?,
+            beta,
+        })
+    }
+}
+
 impl Default for Id {
     fn default() -> Self {
         Id(0)
     }
 }
+
+//end of custom type.rs
