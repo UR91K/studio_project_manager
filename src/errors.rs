@@ -1,5 +1,8 @@
+//errors.rs
 use thiserror::Error;
 use quick_xml::Error as XmlError;
+use std::str::Utf8Error;
+use quick_xml::events::attributes::AttrError;
 
 #[derive(Error, Debug)]
 pub enum TimeSignatureError {
@@ -40,6 +43,18 @@ pub enum LiveSetError {
 
     #[error("Failed to parse version: {0}")]
     ParseVersionError(#[from] std::num::ParseIntError),
+
+    #[error("Missing version information")]
+    MissingVersionInfo,
+
+    #[error("UTF-8 conversion error: {0}")]
+    Utf8Error(#[from] Utf8Error),
+
+    #[error("Invalid file format: {0}")]
+    InvalidFileFormat(String),
+
+    #[error("XML attribute error: {0}")]
+    XmlAttrError(#[from] AttrError),
 }
 
 #[derive(Error, Debug)]
@@ -62,3 +77,4 @@ pub enum DecodeSamplePathError {
     #[error("Failed to process path: {0}")]
     PathProcessingError(String),
 }
+//end of errors.rs

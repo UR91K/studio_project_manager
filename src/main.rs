@@ -1,3 +1,4 @@
+// main.rs
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
@@ -31,20 +32,7 @@ use custom_types::{AbletonVersion,
 };
 
 use crate::errors::{LiveSetError, TimeSignatureError};
-use crate::helpers::{extract_gzipped_data,
-                     find_all_plugins,
-                     find_attribute,
-                     find_empty_event,
-                     find_tags,
-                     format_file_size,
-                     get_file_hash,
-                     get_file_name,
-                     get_file_timestamps,
-                     parse_encoded_value,
-                     parse_xml_data,
-                     TIME_SIGNATURE_ENUM_EVENT,
-                     validate_time_signature,
-};
+use crate::helpers::{extract_gzipped_data, extract_version, find_all_plugins, find_attribute, find_empty_event, find_tags, format_file_size, get_file_hash, get_file_name, get_file_timestamps, parse_encoded_value, parse_xml_data, TIME_SIGNATURE_ENUM_EVENT, validate_time_signature};
 
 mod custom_types;
 mod errors;
@@ -62,7 +50,7 @@ struct LiveSet {
     modified_time: DateTime<Local>,
     last_scan_timestamp: DateTime<Local>,
 
-    ableton_version: Option<AbletonVersion>,
+    ableton_version: AbletonVersion,
     key_signature: Option<KeySignature>,
     tempo: Option<f32>,
     time_signature: Option<TimeSignature>,
@@ -104,7 +92,10 @@ impl LiveSet {
 
         let last_scan_timestamp = Local::now();
 
-        let ableton_version =
+        let ableton_version = match extract_version(&xml_data) {
+                Ok(ableton_version) => ableton_version,
+                Err(error) => return Err(error.to_string()),
+            };
 
         let live_set = LiveSet {
             id: Id::default(),
@@ -221,7 +212,6 @@ impl LiveSet {
         Ok(())
     }
 
-    //TODO Add version finding
     //TODO Add furthest bar finding
     //TODO Add tempo finding
     //TODO Add duration estimation (based on furthest bar and tempo)
@@ -292,3 +282,4 @@ fn main() {
         }
     }
 }
+// end of main.rs
