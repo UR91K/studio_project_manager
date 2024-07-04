@@ -406,8 +406,16 @@ pub fn extract_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> 
                 if name_str != "Ableton" {
                     return Err(LiveSetError::InvalidFileFormat(format!("First element is '{}', expected 'Ableton'", name_str)));
                 }
-
-                return AbletonVersion::from_attributes(event.attributes());
+                debug!("Found Ableton tag, attributes:");
+                for attr_result in event.attributes() {
+                    match attr_result {
+                        Ok(attr) => debug!("  {}: {:?}", String::from_utf8_lossy(attr.key.as_ref()), String::from_utf8_lossy(&attr.value)),
+                        Err(e) => debug!("  Error parsing attribute: {:?}", e),
+                    }
+                }
+                let ableton_version = AbletonVersion::from_attributes(event.attributes());
+                debug!("Parsed version: {:?}", &ableton_version);
+                return ableton_version;
             }
             Ok(Event::Eof) => {
                 return Err(LiveSetError::InvalidFileFormat("Reached end of file without finding Ableton tag".into()));
@@ -476,9 +484,7 @@ pub fn get_file_name(file_path: &PathBuf) -> Result<String, String> {
 }
 
 
-
 // BEGIN TESTS
-
 
 
 #[cfg(test)]
@@ -507,5 +513,11 @@ mod tests {
         assert_eq!(version.minor, 1);
         assert_eq!(version.patch, 0);
         assert_eq!(version.beta, true);
+    }
+
+    #[test]
+    fn test_extract_version_invalid_xml() {
+        let xml_data = b"<Invalid>XML</Invalid>";
+        assert!(extract_version(xml_data).is_err());
     }
 }
