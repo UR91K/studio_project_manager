@@ -55,6 +55,9 @@ pub enum LiveSetError {
 
     #[error("XML attribute error: {0}")]
     XmlAttrError(#[from] AttrError),
+
+    #[error("Invalid version format")]
+    InvalidVersionFormat,
 }
 
 #[derive(Error, Debug)]

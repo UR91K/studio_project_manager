@@ -2,7 +2,9 @@
 use std::fmt;
 use std::path::PathBuf;
 use std::str;
+use std::str::FromStr;
 
+use log::debug;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::name::QName;
 use quick_xml::events::attributes::AttrError;
@@ -170,42 +172,45 @@ impl AbletonVersion {
     where
         I: Iterator<Item = Result<Attribute<'a>, AttrError>>,
     {
-        let mut major = None;
-        let mut minor = None;
-        let mut patch = None;
+        let mut creator = None;
         let mut beta = false;
 
         for attr in attributes {
             let attr = attr.map_err(|e| LiveSetError::XmlAttrError(e))?;
             match attr.key {
-                QName(b"MajorVersion") => {
-                    let value = std::str::from_utf8(&attr.value)?;
-                    major = Some(value.parse()?);
-                },
-                QName(b"MinorVersion") => {
-                    let value = std::str::from_utf8(&attr.value)?;
-                    minor = Some(value.parse()?);
-                },
-                QName(b"SchemaChangeCount") => {
-                    let value = std::str::from_utf8(&attr.value)?;
-                    patch = Some(value.parse()?);
-                },
                 QName(b"Creator") => {
-                    let creator = std::str::from_utf8(&attr.value)?;
-                    beta = creator.contains("Beta");
+                    creator = Some(str::from_utf8(&attr.value)?.to_string());
                 },
                 _ => {}
             }
         }
 
+        let creator = creator.ok_or(LiveSetError::MissingVersionInfo)?;
+        debug!("Creator: {}", creator);
+
+        let version_str = creator.strip_prefix("Ableton Live ")
+            .ok_or(LiveSetError::InvalidVersionFormat)?;
+
+        beta = version_str.to_lowercase().contains("beta");
+
+        let version_str = version_str.replace("Beta", "").trim().to_string();
+
+        let mut version_parts = vec![0, 0, 0];
+        for (i, part) in version_str.split('.').enumerate() {
+            if i >= 3 { break; }
+            version_parts[i] = u32::from_str(part)
+                .map_err(|_| LiveSetError::InvalidVersionFormat)?;
+        }
+
         Ok(AbletonVersion {
-            major: major.ok_or(LiveSetError::MissingVersionInfo)?,
-            minor: minor.ok_or(LiveSetError::MissingVersionInfo)?,
-            patch: patch.ok_or(LiveSetError::MissingVersionInfo)?,
+            major: version_parts[0],
+            minor: version_parts[1],
+            patch: version_parts[2],
             beta,
         })
     }
 }
+
 
 impl Default for Id {
     fn default() -> Self {
@@ -213,4 +218,83 @@ impl Default for Id {
     }
 }
 
-//end of custom type.rs
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quick_xml::events::attributes::Attribute;
+    use quick_xml::name::QName;
+    use std::borrow::Cow;
+
+    #[test]
+    fn test_from_attributes() {
+        let attributes = vec![
+            Ok(Attribute {
+                key: QName(b"Creator"),
+                value: Cow::Borrowed(b"Ableton Live 11.0.12"),
+            }),
+        ];
+
+        let version = AbletonVersion::from_attributes(attributes.into_iter()).unwrap();
+        assert_eq!(version.major, 11);
+        assert_eq!(version.minor, 0);
+        assert_eq!(version.patch, 12);
+        assert_eq!(version.beta, false);
+    }
+
+    #[test]
+    fn test_from_attributes_beta() {
+        let attributes = vec![
+            Ok(Attribute {
+                key: QName(b"Creator"),
+                value: Cow::Borrowed(b"Ableton Live 12.0 Beta"),
+            }),
+        ];
+
+        let version = AbletonVersion::from_attributes(attributes.into_iter()).unwrap();
+        assert_eq!(version.major, 12);
+        assert_eq!(version.minor, 0);
+        assert_eq!(version.patch, 0);
+        assert_eq!(version.beta, true);
+    }
+
+    #[test]
+    fn test_from_attributes_no_patch() {
+        let attributes = vec![
+            Ok(Attribute {
+                key: QName(b"Creator"),
+                value: Cow::Borrowed(b"Ableton Live 12.0"),
+            }),
+        ];
+
+        let version = AbletonVersion::from_attributes(attributes.into_iter()).unwrap();
+        assert_eq!(version.major, 12);
+        assert_eq!(version.minor, 0);
+        assert_eq!(version.patch, 0);
+        assert_eq!(version.beta, false);
+    }
+
+    #[test]
+    fn test_from_attributes_missing_creator() {
+        let attributes = vec![
+            Ok(Attribute {
+                key: QName(b"SomeOtherAttribute"),
+                value: Cow::Borrowed(b"SomeValue"),
+            }),
+        ];
+
+        assert!(AbletonVersion::from_attributes(attributes.into_iter()).is_err());
+    }
+
+    #[test]
+    fn test_from_attributes_invalid_format() {
+        let attributes = vec![
+            Ok(Attribute {
+                key: QName(b"Creator"),
+                value: Cow::Borrowed(b"Not Ableton Live Version"),
+            }),
+        ];
+
+        assert!(AbletonVersion::from_attributes(attributes.into_iter()).is_err());
+    }
+}
