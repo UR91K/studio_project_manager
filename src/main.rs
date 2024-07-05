@@ -30,7 +30,7 @@ use custom_types::{AbletonVersion,
                    XmlTag,
 };
 
-use crate::errors::{LiveSetError, TimeSignatureError};
+use crate::errors::{LiveSetError, TimeSignatureError, XmlParseError};
 use crate::helpers::{extract_gzipped_data,
                      extract_version,
                      find_all_plugins,
@@ -43,7 +43,6 @@ use crate::helpers::{extract_gzipped_data,
                      get_file_timestamps,
                      parse_encoded_value,
                      parse_xml_data,
-                     TIME_SIGNATURE_ENUM_EVENT,
                      validate_time_signature,
                      find_all_samples,
 };
@@ -262,13 +261,13 @@ impl LiveSet {
         }
 
         #[cfg(debug_assertions)]
-        debug!("{}: found {} samples in {:.2} ms",
+        debug!("{}: found {} sample(s) in {:.2} ms",
             self.file_name.bold().purple(),
             all_samples.len(),
             start_time.elapsed().as_secs_f64() * 1000.0
         );
 
-        info!("{}: found {} samples",
+        info!("{}: found {} sample(s)",
             self.file_name.bold().purple(),
             all_samples.len()
         );
@@ -283,7 +282,10 @@ impl LiveSet {
         let search_query = "EnumEvent";
 
         let event_attributes = find_empty_event(&self.xml_data, search_query)
-            .ok_or(LiveSetError::EnumEventNotFound)?;
+            .map_err(|e| match e {
+                XmlParseError::EventNotFound(_) => LiveSetError::EnumEventNotFound,
+                _ => LiveSetError::XmlError(e),
+            })?;
 
         debug!("Found time signature enum event");
         trace!("Attributes: {:?}", event_attributes);
