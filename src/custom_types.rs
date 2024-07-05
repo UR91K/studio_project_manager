@@ -224,13 +224,11 @@ impl AbletonVersion {
     }
 }
 
-
 impl Default for Id {
     fn default() -> Self {
         Id(0)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

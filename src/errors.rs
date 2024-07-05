@@ -4,6 +4,7 @@ use thiserror::Error;
 use quick_xml::Error as QuickXmlError;
 use std::str::Utf8Error;
 use quick_xml::events::attributes::AttrError;
+use elementtree::Error as ElementTreeError;
 
 #[derive(Error, Debug)]
 pub enum TimeSignatureError {
@@ -11,6 +12,16 @@ pub enum TimeSignatureError {
     ParseEncodedError(#[from] std::num::ParseIntError),
     #[error("Retrieved time signature value ({0}) is outside of valid range (0-494)")]
     InvalidEncodedValue(i32),
+}
+
+#[derive(Error, Debug)]
+pub enum FindEmptyEventError {
+    #[error("XML parsing error: {0}")]
+    XmlParseError(#[from] quick_xml::Error),
+    #[error("UTF-8 conversion error: {0}")]
+    Utf8Error(#[from] Utf8Error),
+    #[error("Requested event '{0}' not found")]
+    EventNotFound(String),
 }
 
 #[derive(Error, Debug)]
@@ -37,7 +48,7 @@ pub enum LiveSetError {
     CreateLiveSetError(String),
 
     #[error("Failed to parse XML: {0}")]
-    XmlParseError(#[from] XmlParseError),
+    XmlError(#[from] XmlParseError),
 
     #[error("Root tag not found")]
     RootTagNotFound,
@@ -127,11 +138,20 @@ pub enum XmlParseError {
     #[error("XML parsing error: {0}")]
     QuickXmlError(#[from] QuickXmlError),
 
+    #[error("XML attribute error: {0}")]
+    AttrError(#[from] AttrError),
+
+    #[error("ElementTree error: {0}")]
+    ElementTreeError(#[from] ElementTreeError),
+
     #[error("Attribute parsing error")]
     AttributeError,
 
     #[error("Invalid XML structure")]
     InvalidStructure,
+
+    #[error("Requested event '{0}' not found")]
+    EventNotFound(String),
 }
 
 #[derive(Error, Debug)]
@@ -144,6 +164,6 @@ pub enum AttributeError {
 
 impl From<quick_xml::Error> for LiveSetError {
     fn from(error: quick_xml::Error) -> Self {
-        LiveSetError::XmlParseError(XmlParseError::QuickXmlError(error))
+        LiveSetError::XmlError(XmlParseError::QuickXmlError(error))
     }
 }
