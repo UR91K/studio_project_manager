@@ -1,4 +1,3 @@
-//helpers.rs
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -13,13 +12,13 @@ use chrono::{DateTime, Local};
 use crc32fast::Hasher;
 use elementtree::Element;
 use flate2::read::GzDecoder;
-use log::{debug, trace};
+use log::{debug, error, trace, warn};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use encoding_rs::UTF_16LE;
 
 use crate::custom_types::{AbletonVersion, XmlTag};
-use crate::errors::{DecodeSamplePathError, LiveSetError, TimeSignatureError};
+use crate::errors::{DecodeSamplePathError, LiveSetError, TimeSignatureError, XmlParseError, AttributeError};
 
 pub const TIME_SIGNATURE_ENUM_EVENT: i32 = -63072000;
 const CHUNK_SIZE: usize = 1024 * 1024; // 1 MB
@@ -139,8 +138,31 @@ pub fn parse_xml_data(xml_data: &[u8], file_name: &Option<String>, file_path: &P
     Ok(root)
 }
 
-pub fn find_tags(xml_data: &[u8], search_queries: &[&str], target_depth: u8) -> HashMap<String, Vec<Vec<XmlTag>>> {
-    /// Retrieves all the empty tags which are immediate children of the search queries
+/// Searches for and extracts specific XML tags and their attributes from the given XML data.
+///
+/// # Arguments
+///
+/// * `xml_data` - A byte slice containing the XML data to be parsed.
+/// * `search_queries` - A slice of string slices representing the tag names to search for.
+/// * `target_depth` - The depth at which to extract child tags relative to the matched search query tags.
+///
+/// # Returns
+///
+/// A `Result` containing either:
+/// * A `HashMap` where:
+///   - Keys are strings representing the matched search query tags.
+///   - Values are vectors of vectors of `XmlTag`s. Each inner vector represents a group of tags
+///     found at the specified `target_depth` under a single instance of a matched search query tag.
+/// * A `LiveSetError` if any parsing or processing error occurs.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// * There are issues with XML parsing.
+/// * UTF-8 conversion fails for tag names or attribute values.
+/// * Attribute parsing fails.
+pub fn find_tags(xml_data: &[u8], search_queries: &[&str], target_depth: u8)
+                 -> Result<HashMap<String, Vec<Vec<XmlTag>>>, LiveSetError> {
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
 
@@ -155,7 +177,9 @@ pub fn find_tags(xml_data: &[u8], search_queries: &[&str], target_depth: u8) -> 
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref event)) => {
-                let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
+                let name = std::str::from_utf8(event.name().as_ref())
+                    .map_err(|e| LiveSetError::XmlParseError(XmlParseError::Utf8Error(e)))?
+                    .to_string();
                 if search_queries.contains(&name.as_str()) {
                     in_target_tag = true;
                     depth = 0;
@@ -167,54 +191,67 @@ pub fn find_tags(xml_data: &[u8], search_queries: &[&str], target_depth: u8) -> 
             }
             Ok(Event::Empty(ref event)) => {
                 if in_target_tag && depth == target_depth {
-                    let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
+                    let name = std::str::from_utf8(event.name().as_ref())
+                        .map_err(|e| LiveSetError::XmlParseError(XmlParseError::Utf8Error(e)))?
+                        .to_string();
                     let mut attributes = Vec::new();
                     for attr in event.attributes() {
-                        let attr = attr.unwrap();
-                            let key = std::str::from_utf8(attr.key.as_ref()).unwrap().to_string();
-                            let value = std::str::from_utf8(attr.value.as_ref()).unwrap().to_string();
-                            attributes.push((key, value));
-                        }
-                        current_tags.get_mut(&current_query).unwrap().push(XmlTag {
+                        let attr = attr.map_err(|_| LiveSetError::XmlParseError(XmlParseError::AttributeError))?;
+                        let key = std::str::from_utf8(attr.key.as_ref())
+                            .map_err(|e| LiveSetError::XmlParseError(XmlParseError::Utf8Error(e)))?
+                            .to_string();
+                        let value = std::str::from_utf8(&attr.value)
+                            .map_err(|e| LiveSetError::XmlParseError(XmlParseError::Utf8Error(e)))?
+                            .to_string();
+                        attributes.push((key, value));
+                    }
+                    current_tags.get_mut(&current_query)
+                        .ok_or_else(|| LiveSetError::XmlParseError(XmlParseError::InvalidStructure))?
+                        .push(XmlTag {
                             name,
                             attributes,
                         });
-                    }
                 }
-                Ok(Event::End(ref event)) => {
-                    let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
-                    if name == current_query {
-                        in_target_tag = false;
-                        all_tags.entry(current_query.clone()).or_default().push(current_tags[&current_query].clone());
-                        current_tags.get_mut(&current_query).unwrap().clear();
-                    } else if in_target_tag {
-                        depth -= 1;
-                    }
-                }
-                Ok(Event::Eof) => {
-                    break;
-                }
-                _ => (),
             }
-            buf.clear();
+            Ok(Event::End(ref event)) => {
+                let name = std::str::from_utf8(event.name().as_ref())
+                    .map_err(|e| LiveSetError::XmlParseError(XmlParseError::Utf8Error(e)))?
+                    .to_string();
+                if name == current_query {
+                    in_target_tag = false;
+                    all_tags.entry(current_query.clone()).or_default()
+                        .push(current_tags[&current_query].clone());
+                    current_tags.get_mut(&current_query)
+                        .ok_or_else(|| LiveSetError::XmlParseError(XmlParseError::InvalidStructure))?
+                        .clear();
+                } else if in_target_tag {
+                    depth -= 1;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(LiveSetError::XmlParseError(XmlParseError::QuickXmlError(e))),
+            _ => (),
         }
-        all_tags
+        buf.clear();
     }
+    Ok(all_tags)
+}
 
-pub fn find_attribute(tags: &[XmlTag], tag_query: &str, attribute_query: &str) -> Option<String> {
-    // println!("Searching for attribute '{}' in tag '{}'", attribute_query, tag_query);
+
+pub fn find_attribute(tags: &[XmlTag], tag_query: &str, attribute_query: &str) -> Result<String, LiveSetError> {
     for tag in tags {
         if tag.name == tag_query {
             for (key, value) in &tag.attributes {
                 if key == attribute_query {
-                    // println!("Found attribute '{}' with value: {}", attribute_query, value);
-                    return Some(value.clone());
+                    return Ok(value.clone());
                 }
             }
+            // If we found the tag but not the attribute
+            return Err(LiveSetError::AttributeError(AttributeError::ValueNotFound(attribute_query.to_string())));
         }
     }
-    // println!("Attribute '{}' not found in tag '{}'", attribute_query, tag_query);
-    None
+    // If we didn't find the tag at all
+    Err(LiveSetError::AttributeError(AttributeError::NotFound(tag_query.to_string())))
 }
 
 pub fn find_empty_event(xml_data: &[u8], search_query: &str) -> Option<HashMap<String, String>> {
@@ -230,7 +267,7 @@ pub fn find_empty_event(xml_data: &[u8], search_query: &str) -> Option<HashMap<S
         match reader.read_event_into(&mut buf) {
             Ok(Event::Empty(ref event)) => {
                 let name = std::str::from_utf8(event.name().as_ref()).unwrap().to_string();
-                // debug!("Found empty event with name: {}", name);
+                trace!("Found empty event with name: {}", name);
 
                 if name == search_query {
                     debug!("Empty event {} matches search query {}", name, search_query);
@@ -307,10 +344,10 @@ pub fn find_sample_path_data(xml_data: &[u8]) -> Vec<String> {
     data_list
 }
 
-pub fn find_all_plugins(xml_data: &[u8]) -> HashMap<String, Vec<String>> {
+pub fn find_all_plugins(xml_data: &[u8]) -> Result<HashMap<String, Vec<String>>, LiveSetError> {
     let search_queries = &["VstPluginInfo", "Vst3PluginInfo"];
     let target_depth: u8 = 0;
-    let plugin_tags = find_tags(xml_data, search_queries, target_depth);
+    let plugin_tags = find_tags(xml_data, search_queries, target_depth)?;
 
     let mut plugin_names: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -324,46 +361,82 @@ pub fn find_all_plugins(xml_data: &[u8]) -> HashMap<String, Vec<String>> {
                 _ => continue,
             };
 
-            if let Some(name) = find_attribute(&tags, attribute_name, "Value") {
-                names.push(name);
+            match find_attribute(&tags, attribute_name, "Value") {
+                Ok(name) => names.push(name),
+                Err(LiveSetError::AttributeError(AttributeError::NotFound(_))) => {
+                    warn!("Expected tag '{}' not found while searching for plugin info. This may indicate an unexpected XML structure.", attribute_name);
+                    continue;
+                },
+                Err(LiveSetError::AttributeError(AttributeError::ValueNotFound(_))) => {
+                    warn!("Tag '{}' found, but 'Value' attribute is missing. Plugin type: {}. This may indicate corrupted or unexpected plugin data.", attribute_name, query);
+                    continue;
+                },
+                Err(e) => return Err(e), // Propagate other errors
             }
         }
 
         plugin_names.insert(query, names);
     }
 
-    plugin_names
+    Ok(plugin_names)
 }
 
-pub fn find_all_samples(xml_data: &[u8], major_version: u32) -> Result<HashMap<String, Vec<PathBuf>>, DecodeSamplePathError> {
+pub fn find_all_samples(xml_data: &[u8], major_version: u32) -> Result<HashMap<String, Vec<PathBuf>>, LiveSetError> {
     let mut sample_paths: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
     if major_version < 11 {
+        debug!("Processing samples for Ableton version < 11");
         let sample_data: Vec<String> = find_sample_path_data(xml_data);
         let mut decoded_paths = Vec::new();
-        for data in sample_data {
-            match decode_sample_path(&data) {
-                Ok(path) => decoded_paths.push(path),
-                Err(e) => return Err(e),
+        for (index, data) in sample_data.iter().enumerate() {
+            match decode_sample_path(data) {
+                Ok(path) => {
+                    debug!("Successfully decoded sample path {}: {:?}", index, path);
+                    decoded_paths.push(path);
+                },
+                Err(e) => {
+                    warn!("Failed to decode sample path {}: {:?}", index, e);
+                    return Err(LiveSetError::DecodeSamplePathError(e));
+                },
             }
         }
+        debug!("Found {} samples for version < 11", decoded_paths.len());
         sample_paths.insert("SampleData".to_string(), decoded_paths);
+
     } else {
+        debug!("Processing samples for Ableton version >= 11");
         let search_queries = &["SampleRef"];
         let target_depth: u8 = 1;
-        let sample_tags = find_tags(xml_data, search_queries, target_depth);
+        let sample_tags = find_tags(xml_data, search_queries, target_depth)?;
 
         for (query, tags_list) in sample_tags {
             let mut paths = Vec::new();
-            for tags in tags_list {
-                if let Some(path) = find_attribute(&tags, "Path", "Value") {
-                    paths.push(PathBuf::from(path));
+            for (index, tags) in tags_list.iter().enumerate() {
+                match find_attribute(tags, "Path", "Value") {
+                    Ok(path) => {
+                        debug!("Found sample path {} for '{}': {:?}", index, query, path);
+                        paths.push(PathBuf::from(path));
+                    },
+                    Err(LiveSetError::AttributeError(AttributeError::NotFound(_))) => {
+                        warn!("Expected 'Path' tag not found for sample {} in '{}'. This may indicate an unexpected XML structure.", index, query);
+                        continue;
+                    },
+                    Err(LiveSetError::AttributeError(AttributeError::ValueNotFound(_))) => {
+                        warn!("'Path' tag found for sample {} in '{}', but 'Value' attribute is missing. This may indicate corrupted or unexpected sample data.", index, query);
+                        continue;
+                    },
+                    Err(e) => {
+                        warn!("Unexpected error while processing sample {} in '{}': {:?}", index, query, e);
+                        return Err(e);
+                    },
                 }
             }
+            debug!("Found {} samples for '{}'", paths.len(), query);
             sample_paths.insert(query, paths);
         }
     }
 
+    debug!("Total sample collections found: {}", sample_paths.len());
     Ok(sample_paths)
 }
 
@@ -390,6 +463,30 @@ fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, DecodeSamplePathEr
     Ok(path)
 }
 
+
+/// Extracts the Ableton version information from the given XML data.
+///
+/// This function parses the XML data of an Ableton Live project file to extract
+/// the version information. It looks for the "Ableton" tag and its "Creator" attribute.
+///
+/// # Arguments
+///
+/// * `xml_data` - A byte slice containing the XML data of the Ableton Live project file.
+///
+/// # Returns
+///
+/// * `Result<AbletonVersion, LiveSetError>` - The parsed Ableton version if successful,
+///   or an error if parsing fails.
+///
+/// # Examples
+///
+/// ```
+/// let xml_data = b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Ableton Creator=\"Ableton Live 11.0.12\">";
+/// let version = extract_version(xml_data).unwrap();
+/// assert_eq!(version.major, 11);
+/// assert_eq!(version.minor, 0);
+/// assert_eq!(version.patch, 12);
+/// ```
 pub fn extract_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> {
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
@@ -397,7 +494,7 @@ pub fn extract_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> 
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Decl(_)) => continue, // Skip XML declaration
+            Ok(Event::Decl(_)) => continue,
             Ok(Event::Start(ref event)) => {
                 let name = event.name();
                 let name_str = std::str::from_utf8(name.as_ref())
@@ -420,8 +517,8 @@ pub fn extract_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> 
             Ok(Event::Eof) => {
                 return Err(LiveSetError::InvalidFileFormat("Reached end of file without finding Ableton tag".into()));
             }
-            Ok(_) => continue, // Skip other events like comments
-            Err(e) => return Err(LiveSetError::XmlParseError(e)),
+            Ok(_) => continue,
+            Err(e) => return Err(e.into()),
         }
     }
 }
@@ -483,10 +580,6 @@ pub fn get_file_name(file_path: &PathBuf) -> Result<String, String> {
     }
 }
 
-
-// BEGIN TESTS
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -494,12 +587,12 @@ mod tests {
     #[test]
     fn test_extract_version() {
         let xml_data = br#"<?xml version="1.0" encoding="UTF-8"?>
-        <Ableton MajorVersion="11" MinorVersion="0" SchemaChangeCount="3" Creator="Ableton Live 11.0.12" Revision="1b1951c0f4b3d5a5ad5d1ac69c3d9b5aa7a36dd8">"#;
+        <Ableton MajorVersion="11" MinorVersion="0" SchemaChangeCount="3" Creator="Ableton Live 11.0.1" Revision="1b1951c0f4b3d5a5ad5d1ac69c3d9b5aa7a36dd8">"#;
 
         let version = extract_version(xml_data).unwrap();
         assert_eq!(version.major, 11);
         assert_eq!(version.minor, 0);
-        assert_eq!(version.patch, 3);
+        assert_eq!(version.patch, 1);
         assert_eq!(version.beta, false);
     }
 
