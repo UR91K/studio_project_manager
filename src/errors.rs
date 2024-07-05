@@ -1,3 +1,5 @@
+use std::io;
+use std::path::PathBuf;
 use thiserror::Error;
 use quick_xml::Error as QuickXmlError;
 use std::str::Utf8Error;
@@ -63,6 +65,37 @@ pub enum LiveSetError {
 
     #[error("Attribute error: {0}")]
     AttributeError(#[from] AttributeError),
+
+    #[error("File name error: {0}")]
+    FileNameError(String),
+
+    #[error("Invalid Ableton Live Set file: {path:?}")]
+    InvalidLiveSetFile {
+        path: PathBuf,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[error("File metadata error for {path:?}")]
+    FileMetadataError {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("File hashing error for {path:?}")]
+    FileHashingError {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("Gzip decompression error for {path:?}")]
+    GzipDecompressionError {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 #[derive(Error, Debug)]

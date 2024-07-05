@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::{fs, io};
 use std::fs::File;
 use std::io::{Cursor, Error, Read};
 use std::path::{Path, PathBuf};
@@ -31,7 +31,22 @@ use custom_types::{AbletonVersion,
 };
 
 use crate::errors::{LiveSetError, TimeSignatureError};
-use crate::helpers::{extract_gzipped_data, extract_version, find_all_plugins, find_attribute, find_empty_event, find_tags, format_file_size, get_file_hash, get_file_name, get_file_timestamps, parse_encoded_value, parse_xml_data, TIME_SIGNATURE_ENUM_EVENT, validate_time_signature};
+use crate::helpers::{extract_gzipped_data,
+                     extract_version,
+                     find_all_plugins,
+                     find_attribute,
+                     find_empty_event,
+                     find_tags,
+                     format_file_size,
+                     get_file_hash,
+                     get_file_name,
+                     get_file_timestamps,
+                     parse_encoded_value,
+                     parse_xml_data,
+                     TIME_SIGNATURE_ENUM_EVENT,
+                     validate_time_signature,
+                     find_all_samples,
+};
 
 mod custom_types;
 mod errors;
@@ -58,70 +73,115 @@ struct LiveSet {
 
     vst2_plugin_names: Option<HashSet<String>>,
     vst3_plugin_names: Option<HashSet<String>>,
-    sample_paths: Option<HashSet<Id>>,
+    sample_paths: Option<HashSet<Sample>>,
 }
 
 impl LiveSet {
-    fn new(file_path: PathBuf) -> Result<Self, String> {
-        let file_name = match get_file_name(&file_path) {
-            Ok(name) => name,
-            Err(error) => return Err(error),
-        };
-
+    /// Creates a new `LiveSet` instance from the given file path.
+    ///
+    /// This function performs several initialization steps:
+    /// 1. Extracts the file name from the path
+    /// 2. Validates that the file exists and has the correct extension
+    /// 3. Retrieves file timestamps (creation and modification times)
+    /// 4. Generates a hash of the file contents
+    /// 5. Extracts and decompresses the XML data from the Ableton Live Set file
+    /// 6. Extracts the Ableton version information from the XML data
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - A `PathBuf` representing the path to the Ableton Live Set file
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, String>` - A `Result` containing either the new `LiveSet` instance or an error message
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// * The file does not exist or is not accessible
+    /// * The file is not a valid Ableton Live Set file (doesn't have .als extension)
+    /// * File metadata cannot be retrieved
+    /// * XML data cannot be extracted or decompressed
+    /// * Ableton version information cannot be parsed from the XML data
+    fn new(file_path: PathBuf) -> Result<Self, LiveSetError> {
+        let file_name = get_file_name(&file_path)?;
         let path = Path::new(&file_path);
 
-        if !path.exists() || !path.is_file() || path.extension().unwrap_or_default() != "als" {
-            return Err(format!("{:?}: is either inaccessible or not a valid Ableton Live Set file", file_path));
+        if !path.exists() {
+            return Err(LiveSetError::InvalidLiveSetFile {
+                path: file_path.clone(),
+                source: Box::new(Error::new(io::ErrorKind::NotFound, "File does not exist")),
+            });
         }
 
-        let (modified_time, created_time) = match get_file_timestamps(&file_path) {
-            Ok(timestamps) => timestamps,
-            Err(error) => return Err(error),
-        };
+        if !path.is_file() {
+            return Err(LiveSetError::InvalidLiveSetFile {
+                path: file_path.clone(),
+                source: Box::new(Error::new(io::ErrorKind::InvalidInput, "Path is not a file")),
+            });
+        }
 
-        let file_hash = match get_file_hash(&file_path) {
-            Ok(hash) => hash,
-            Err(error) => return Err(error),
-        };
+        if path.extension().unwrap_or_default() != "als" {
+            return Err(LiveSetError::InvalidLiveSetFile {
+                path: file_path.clone(),
+                source: Box::new(Error::new(io::ErrorKind::InvalidInput, "File is not an Ableton Live Set (.als) file")),
+            });
+        }
 
-        let xml_data = match extract_gzipped_data(&file_path) {
-            Ok(data) => data,
-            Err(error) => return Err(error),
-        };
-
+        let (modified_time, created_time) = get_file_timestamps(&file_path)?;
+        let file_hash = get_file_hash(&file_path)?;
+        let xml_data = extract_gzipped_data(&file_path)?;
         let last_scan_timestamp = Local::now();
-
-        let ableton_version = match extract_version(&xml_data) {
-                Ok(ableton_version) => ableton_version,
-                Err(error) => return Err(error.to_string()),
-            };
+        let ableton_version = extract_version(&xml_data)?;
 
         let live_set = LiveSet {
             id: Id::default(),
-
             file_path,
             file_name,
-            xml_data,
+            xml_data: xml_data.clone(),
             file_hash,
             created_time,
             modified_time,
             last_scan_timestamp,
             ableton_version,
-
             key_signature: None,
             tempo: None,
             time_signature: None,
             estimated_duration: None,
             furthest_bar: None,
-
             vst2_plugin_names: None,
             vst3_plugin_names: None,
             sample_paths: None,
         };
 
-        Ok(live_set)
+        let samples = live_set.find_samples()?;
+        let (vst2, vst3) = live_set.find_plugins()?;
+        let time_signature = live_set.update_time_signature()?;
+
+        Ok(Self {
+            sample_paths: Some(samples),
+            vst2_plugin_names: Some(vst2),
+            vst3_plugin_names: Some(vst3),
+            time_signature: Some(time_signature),
+            ..live_set
+        })
     }
 
+    /// Loads and decompresses the raw XML data from the Ableton Live Set file.
+    ///
+    /// This function re-reads the file from disk, decompresses its contents,
+    /// and stores the resulting XML data in the `xml_data` field of the `LiveSet` instance.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), String>` - A `Result` indicating success or containing an error message
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// * The file does not exist or is not accessible
+    /// * The file is not a valid Ableton Live Set file (doesn't have .als extension)
+    /// * The file contents cannot be decompressed
     fn load_raw_xml_data(&mut self) -> Result<(), String> {
         let path = Path::new(&self.file_path);
 
@@ -136,7 +196,27 @@ impl LiveSet {
         Ok(())
     }
 
-    pub fn find_plugins(&mut self) -> Result<(), LiveSetError> {
+    /// Finds and stores all plugin names used in the Ableton Live Set.
+    ///
+    /// This function parses the XML data to extract names of VST2 and VST3 plugins
+    /// used in the project. The plugin names are stored in `vst2_plugin_names` and
+    /// `vst3_plugin_names` fields of the `LiveSet` instance.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), LiveSetError>` - A `Result` indicating success or containing a `LiveSetError`
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// * The XML data cannot be parsed
+    /// * Plugin information cannot be extracted from the XML data
+    ///
+    /// # Performance
+    ///
+    /// This function measures and logs its execution time for performance monitoring.
+    pub fn find_plugins(&self) -> Result<(HashSet<String>, HashSet<String>), LiveSetError> {
+        #[cfg(debug_assertions)]
         let start_time = Instant::now();
 
         let plugin_names = find_all_plugins(&self.xml_data)?;
@@ -152,29 +232,51 @@ impl LiveSet {
             vst3_plugin_names.extend(vst3_names.iter().cloned());
         }
 
-        let end_time = Instant::now();
-        let duration = end_time - start_time;
-        let duration_ms = duration.as_secs_f64() * 1000.0;
+        #[cfg(debug_assertions)]
+        debug!("{}: found {} VST2 Plugins and {} VST3 Plugins in {:.2} ms",
+            self.file_name.bold().purple(),
+            vst2_plugin_names.len(),
+            vst3_plugin_names.len(),
+            start_time.elapsed().as_secs_f64() * 1000.0
+        );
 
-        info!(
-        "{}: found {} VST2 Plugins and {} VST3 Plugins in {:.2} ms",
-        self.file_name.bold().purple(),
-        vst2_plugin_names.len(),
-        vst3_plugin_names.len(),
-        duration_ms
-    );
-
-        self.vst2_plugin_names = Some(vst2_plugin_names);
-        self.vst3_plugin_names = Some(vst3_plugin_names);
-
-        Ok(())
+        Ok((vst2_plugin_names, vst3_plugin_names))
     }
 
-    fn find_samples(&mut self) -> Result<(), LiveSetError> {
-        Ok(())
+    pub fn find_samples(&self) -> Result<HashSet<Sample>, LiveSetError> {
+        #[cfg(debug_assertions)]
+        let start_time = Instant::now();
+
+        let sample_paths = find_all_samples(&self.xml_data, self.ableton_version.major)?;
+
+        let mut all_samples = HashSet::new();
+        for (_, paths) in sample_paths {
+            for path in paths {
+                let sample = Sample::new(
+                    Id::default(), //TODO: generate unique IDs
+                    path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+                    path,
+                );
+                all_samples.insert(sample);
+            }
+        }
+
+        #[cfg(debug_assertions)]
+        debug!("{}: found {} samples in {:.2} ms",
+            self.file_name.bold().purple(),
+            all_samples.len(),
+            start_time.elapsed().as_secs_f64() * 1000.0
+        );
+
+        info!("{}: found {} samples",
+            self.file_name.bold().purple(),
+            all_samples.len()
+        );
+
+        Ok(all_samples)
     }
 
-    fn update_time_signature(&mut self) -> Result<(), LiveSetError> {
+    fn update_time_signature(&self) -> Result<TimeSignature, LiveSetError> {
         debug!("Updating time signature");
         trace!("XML data: {:?}", std::str::from_utf8(&self.xml_data));
 
@@ -201,20 +303,40 @@ impl LiveSet {
 
         debug!("Decoded time signature: {:?}", time_signature);
 
-        self.time_signature = Some(time_signature);
         info!(
             "Time signature updated: {}/{}",
-            self.time_signature.as_ref().unwrap().numerator,
-            self.time_signature.as_ref().unwrap().denominator
+            time_signature.numerator,
+            time_signature.denominator
         );
+
+        Ok(time_signature)
+    }
+
+    //TODO: Add furthest bar finding
+    //TODO: Add tempo finding
+    //TODO: Add duration estimation (based on furthest bar and tempo)
+    //TODO: Add key signature finding
+
+    pub fn rescan_project(&mut self) -> Result<(), String> {
+        self.load_raw_xml_data()?;
+
+        match self.find_samples() {
+            Ok(samples) => self.sample_paths = Some(samples),
+            Err(e) => return Err(format!("Failed to rescan samples: {}", e)),
+        }
+
+        if let Err(e) = self.find_plugins() {
+            return Err(format!("Failed to rescan plugins: {}", e));
+        }
+
+        if let Err(e) = self.update_time_signature() {
+            return Err(format!("Failed to update time signature: {}", e));
+        }
+
+        //TODO: ddd other rescanning steps
 
         Ok(())
     }
-
-    //TODO Add furthest bar finding
-    //TODO Add tempo finding
-    //TODO Add duration estimation (based on furthest bar and tempo)
-    //TODO Add key signature finding
 }
 
 fn print_first_and_last_32_bytes_as_text(data: &[u8]) {
@@ -239,9 +361,9 @@ fn print_bytes_as_text(bytes: &[u8]) {
 }
 
 fn main() {
-    // Builder::new()
-    //     .filter_level(LevelFilter::Debug)
-    //     .init();
+    Builder::new()
+        .filter_level(LevelFilter::Debug)
+        .init();
 
     let mut paths: Vec<PathBuf> = Vec::new();
     /// TEST DATA:

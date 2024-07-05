@@ -69,17 +69,19 @@ pub fn extract_gzipped_data_parallel(file_path: &Path) -> Result<Vec<u8>, String
     Ok(decompressed_data)
 }
 
-pub fn extract_gzipped_data(file_path: &Path) -> Result<Vec<u8>, String> {
-    let mut file = match File::open(&file_path) {
-        Ok(file) => file,
-        Err(err) => return Err(format!("Failed to open file {}: {}", file_path.display(), err)),
-    };
+pub fn extract_gzipped_data(file_path: &Path) -> Result<Vec<u8>, LiveSetError> {
+    let file = File::open(file_path).map_err(|e| LiveSetError::GzipDecompressionError {
+        path: file_path.to_path_buf(),
+        source: e,
+    })?;
 
-    let mut gzip_decoder = GzDecoder::new(&mut file);
+    let mut gzip_decoder = GzDecoder::new(file);
     let mut decompressed_data = Vec::new();
-    if let Err(err) = gzip_decoder.read_to_end(&mut decompressed_data) {
-        return Err(format!("Failed to decompress file {}: {}", file_path.display(), err));
-    }
+
+    gzip_decoder.read_to_end(&mut decompressed_data).map_err(|e| LiveSetError::GzipDecompressionError {
+        path: file_path.to_path_buf(),
+        source: e,
+    })?;
 
     Ok(decompressed_data)
 }
@@ -523,39 +525,40 @@ pub fn extract_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> 
     }
 }
 
-pub fn get_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), String> {
-    let metadata = match fs::metadata(file_path) {
-        Ok(meta) => meta,
-        Err(error) => return Err(format!("Failed to retrieve file metadata: {}", error)),
-    };
+pub fn get_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), LiveSetError> {
+    let metadata = fs::metadata(file_path).map_err(|e| LiveSetError::FileMetadataError {
+        path: file_path.clone(),
+        source: e,
+    })?;
 
-    let modified_time = match metadata.modified() {
-        Ok(time) => DateTime::<Local>::from(time),
-        Err(error) => return Err(format!("Failed to retrieve modified time: {}", error)),
-    };
+    let modified_time = metadata.modified()
+        .map(DateTime::<Local>::from)
+        .map_err(|e| LiveSetError::FileMetadataError {
+            path: file_path.clone(),
+            source: e,
+        })?;
 
-    let created_time = match metadata.created() {
-        Ok(time) => DateTime::<Local>::from(time),
-        Err(_) => Local::now(),
-    };
+    let created_time = metadata.created()
+        .map(DateTime::<Local>::from)
+        .unwrap_or_else(|_| Local::now());
 
     Ok((modified_time, created_time))
 }
 
-pub fn get_file_hash(file_path: &PathBuf) -> Result<String, String> {
-    let mut file = match File::open(file_path) {
-        Ok(file) => file,
-        Err(error) => return Err(format!("Failed to open file: {}", error)),
-    };
+pub fn get_file_hash(file_path: &PathBuf) -> Result<String, LiveSetError> {
+    let mut file = File::open(file_path).map_err(|e| LiveSetError::FileHashingError {
+        path: file_path.clone(),
+        source: e,
+    })?;
 
     let mut hasher = Hasher::new();
     let mut buffer = [0; 1024];
 
     loop {
-        let bytes_read = match file.read(&mut buffer) {
-            Ok(bytes) => bytes,
-            Err(error) => return Err(format!("Failed to read file: {}", error)),
-        };
+        let bytes_read = file.read(&mut buffer).map_err(|e| LiveSetError::FileHashingError {
+            path: file_path.clone(),
+            source: e,
+        })?;
 
         if bytes_read == 0 {
             break;
@@ -570,14 +573,13 @@ pub fn get_file_hash(file_path: &PathBuf) -> Result<String, String> {
     Ok(hash_string)
 }
 
-pub fn get_file_name(file_path: &PathBuf) -> Result<String, String> {
-    match file_path.file_name() {
-        Some(file_name) => match file_name.to_str() {
-            Some(name) => Ok(name.to_string()),
-            None => Err("File name is not valid UTF-8".to_string()),
-        },
-        None => Err("File name is not present".to_string()),
-    }
+pub fn get_file_name(file_path: &PathBuf) -> Result<String, LiveSetError> {
+    file_path
+        .file_name()
+        .ok_or_else(|| LiveSetError::FileNameError("File name is not present".to_string()))?
+        .to_str()
+        .ok_or_else(|| LiveSetError::FileNameError("File name is not valid UTF-8".to_string()))
+        .map(|s| s.to_string())
 }
 
 #[cfg(test)]

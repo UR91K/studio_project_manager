@@ -105,15 +105,28 @@ pub struct Plugin {
     is_installed: bool
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Sample {
-    id: Id,
-    name: String,
-    path: PathBuf,
-    is_present: bool
+    pub id: Id,
+    pub name: String,
+    pub path: PathBuf,
+    pub(crate) is_present: bool
 }
 
+impl Sample {
+    pub fn new(id: Id, name: String, path: PathBuf) -> Self {
+        let is_present = path.exists();
+        Self { id, name, path, is_present }
+    }
 
+    pub fn is_present(&self) -> bool {
+        self.is_present
+    }
+
+    pub fn update_presence(&mut self) {
+        self.is_present = self.path.exists();
+    }
+}
 
 #[derive(Debug)]
 pub struct TimeSignature {
