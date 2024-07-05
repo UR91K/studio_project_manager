@@ -1,4 +1,3 @@
-// main.rs
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
@@ -137,10 +136,10 @@ impl LiveSet {
         Ok(())
     }
 
-    pub fn find_plugins(&mut self) -> Result<(), &'static str> {
+    pub fn find_plugins(&mut self) -> Result<(), LiveSetError> {
         let start_time = Instant::now();
 
-        let plugin_names = find_all_plugins(&self.xml_data);
+        let plugin_names = find_all_plugins(&self.xml_data)?;
 
         let mut vst2_plugin_names = HashSet::new();
         let mut vst3_plugin_names = HashSet::new();
@@ -158,12 +157,12 @@ impl LiveSet {
         let duration_ms = duration.as_secs_f64() * 1000.0;
 
         info!(
-            "{}: found {} VST2 Plugins and {} VST3 Plugins in {:.2} ms",
-            self.file_name.bold().purple(),
-            vst2_plugin_names.len(),
-            vst3_plugin_names.len(),
-            duration_ms
-        );
+        "{}: found {} VST2 Plugins and {} VST3 Plugins in {:.2} ms",
+        self.file_name.bold().purple(),
+        vst2_plugin_names.len(),
+        vst3_plugin_names.len(),
+        duration_ms
+    );
 
         self.vst2_plugin_names = Some(vst2_plugin_names);
         self.vst3_plugin_names = Some(vst3_plugin_names);
@@ -282,4 +281,3 @@ fn main() {
         }
     }
 }
-// end of main.rs

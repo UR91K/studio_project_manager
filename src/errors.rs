@@ -1,6 +1,5 @@
-//errors.rs
 use thiserror::Error;
-use quick_xml::Error as XmlError;
+use quick_xml::Error as QuickXmlError;
 use std::str::Utf8Error;
 use quick_xml::events::attributes::AttrError;
 
@@ -36,7 +35,7 @@ pub enum LiveSetError {
     CreateLiveSetError(String),
 
     #[error("Failed to parse XML: {0}")]
-    XmlParseError(#[from] XmlError),
+    XmlParseError(#[from] XmlParseError),
 
     #[error("Root tag not found")]
     RootTagNotFound,
@@ -58,6 +57,12 @@ pub enum LiveSetError {
 
     #[error("Invalid version format")]
     InvalidVersionFormat,
+
+    #[error("Sample path decoding error: {0}")]
+    DecodeSamplePathError(#[from] DecodeSamplePathError),
+
+    #[error("Attribute error: {0}")]
+    AttributeError(#[from] AttributeError),
 }
 
 #[derive(Error, Debug)]
@@ -80,4 +85,32 @@ pub enum DecodeSamplePathError {
     #[error("Failed to process path: {0}")]
     PathProcessingError(String),
 }
-//end of errors.rs
+
+#[derive(Error, Debug)]
+pub enum XmlParseError {
+    #[error("UTF-8 conversion error: {0}")]
+    Utf8Error(#[from] Utf8Error),
+
+    #[error("XML parsing error: {0}")]
+    QuickXmlError(#[from] QuickXmlError),
+
+    #[error("Attribute parsing error")]
+    AttributeError,
+
+    #[error("Invalid XML structure")]
+    InvalidStructure,
+}
+
+#[derive(Error, Debug)]
+pub enum AttributeError {
+    #[error("Attribute '{0}' not found")]
+    NotFound(String),
+    #[error("Value for attribute '{0}' not found")]
+    ValueNotFound(String),
+}
+
+impl From<quick_xml::Error> for LiveSetError {
+    fn from(error: quick_xml::Error) -> Self {
+        LiveSetError::XmlParseError(XmlParseError::QuickXmlError(error))
+    }
+}

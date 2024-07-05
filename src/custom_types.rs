@@ -1,4 +1,3 @@
-//custom_types.rs
 use std::fmt;
 use std::path::PathBuf;
 use std::str;
@@ -114,7 +113,8 @@ pub struct Sample {
     is_present: bool
 }
 
-// implementations
+
+
 #[derive(Debug)]
 pub struct TimeSignature {
     pub(crate) numerator: u8,
