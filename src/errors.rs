@@ -1,101 +1,78 @@
-use std::io;
-use std::path::PathBuf;
 use thiserror::Error;
-use quick_xml::Error as QuickXmlError;
+use std::path::PathBuf;
+use std::io;
 use std::str::Utf8Error;
 use quick_xml::events::attributes::AttrError;
+use quick_xml::Error as QuickXmlError;
 use elementtree::Error as ElementTreeError;
+use rusqlite;
+use serde::de::Error;
 
 #[derive(Error, Debug)]
-pub enum TimeSignatureError {
-    #[error("Failed to parse encoded time signature: {0}")]
-    ParseEncodedError(#[from] std::num::ParseIntError),
-    #[error("Retrieved time signature value ({0}) is outside of valid range (0-494)")]
-    InvalidEncodedValue(i32),
-}
-
-#[derive(Error, Debug)]
-pub enum FindEmptyEventError {
-    #[error("XML parsing error: {0}")]
-    XmlParseError(#[from] quick_xml::Error),
-    #[error("UTF-8 conversion error: {0}")]
-    Utf8Error(#[from] Utf8Error),
-    #[error("Requested event '{0}' not found")]
-    EventNotFound(String),
-}
-
-#[derive(Error, Debug)]
-pub enum LiveSetError {
+pub enum XmlParseError {
     #[error("XML data not found")]
-    XmlDataNotFound,
-
-    #[error("Time signature enum event not found")]
-    EnumEventNotFound,
-
-    #[error("'Value' attribute not found")]
-    ValueAttributeNotFound,
-
-    #[error("Failed to update time signature: {0}")]
-    TimeSignatureError(#[from] TimeSignatureError),
-
-    #[error("Failed to find plugins: {0}")]
-    FindPluginsError(String),
-
-    #[error("Failed to load raw XML data: {0}")]
-    LoadRawXmlDataError(String),
-
-    #[error("Failed to create LiveSet: {0}")]
-    CreateLiveSetError(String),
-
-    #[error("Failed to parse XML: {0}")]
-    XmlError(#[from] XmlParseError),
+    DataNotFound,
 
     #[error("Root tag not found")]
     RootTagNotFound,
 
-    #[error("Failed to parse version: {0}")]
-    ParseVersionError(#[from] std::num::ParseIntError),
-
-    #[error("Missing version information")]
-    MissingVersionInfo,
-
     #[error("UTF-8 conversion error: {0}")]
     Utf8Error(#[from] Utf8Error),
 
-    #[error("Invalid file format: {0}")]
-    InvalidFileFormat(String),
-
     #[error("XML attribute error: {0}")]
-    XmlAttrError(#[from] AttrError),
+    AttrError(#[from] AttrError),
 
-    #[error("Invalid version format")]
-    InvalidVersionFormat,
+    #[error("Invalid XML structure")]
+    InvalidStructure,
 
-    #[error("Sample path decoding error: {0}")]
-    DecodeSamplePathError(#[from] DecodeSamplePathError),
+    #[error("XML parsing error: {0}")]
+    QuickXmlError(#[from] QuickXmlError),
 
-    #[error("Attribute error: {0}")]
-    AttributeError(#[from] AttributeError),
+    #[error("ElementTree error: {0}")]
+    ElementTreeError(#[from] ElementTreeError),
+
+    #[error("Requested event '{0}' not found")]
+    EventNotFound(String),
+
+    #[error("Required attribute not found: {0}")]
+    MissingRequiredAttribute(String),
+
+    #[error("Unknown plugin format: {0}")]
+    UnknownPluginFormat(String)
+}
+
+#[derive(Error, Debug)]
+pub enum FileError {
+    #[error("Invalid file format: {0}")]
+    InvalidFormat(String),
 
     #[error("File name error: {0}")]
-    FileNameError(String),
+    NameError(String),
 
-    #[error("Invalid Ableton Live Set file: {path:?}")]
-    InvalidLiveSetFile {
-        path: PathBuf,
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
+    #[error("File not found: {0}")]
+    NotFound(PathBuf),
+
+    #[error("Path is not a file: {0}")]
+    NotAFile(PathBuf),
+
+    #[error("Invalid file extension: {0}")]
+    InvalidExtension(PathBuf),
+
+    #[error("Invalid Ableton Live Set file: {0}")]
+    InvalidLiveSetFile(PathBuf),
+
+    #[error("XML error: {0}")]
+    XmlError(#[from] XmlParseError),
 
     #[error("File metadata error for {path:?}")]
-    FileMetadataError {
+    MetadataError {
         path: PathBuf,
         #[source]
         source: io::Error,
     },
 
     #[error("File hashing error for {path:?}")]
-    FileHashingError {
+    HashingError {
         path: PathBuf,
         #[source]
         source: io::Error,
@@ -110,16 +87,43 @@ pub enum LiveSetError {
 }
 
 #[derive(Error, Debug)]
-pub enum SamplePathError {
-    #[error("Failed to decode hexadecimal string: {0}")]
-    HexDecodeError(#[from] hex::FromHexError),
+pub enum VersionError {
+    #[error("Failed to parse version: {0}")]
+    ParseError(#[from] std::num::ParseIntError),
 
-    #[error("Failed to convert path from bytes to UTF-16 string")]
-    Utf16ConversionError,
+    #[error("Missing version information")]
+    MissingInfo,
+
+    #[error("Invalid version format")]
+    InvalidFormat,
+
+    #[error("UTF-8 conversion error: {0}")]
+    Utf8Error(#[from] Utf8Error),
+
+    #[error("XML parsing error: {0}")]
+    XmlParseError(#[from] XmlParseError),
+
+    #[error("Invalid file structure: {0}")]
+    InvalidFileStructure(String),
+
+    #[error("Missing required attribute: {0}")]
+    MissingRequiredAttribute(String),
+
+    #[error("XML attribute error: {0}")]
+    AttrError(#[from] AttrError),
 }
 
 #[derive(Error, Debug)]
-pub enum DecodeSamplePathError {
+pub enum AttributeError {
+    #[error("'Value' attribute not found")]
+    ValueNotFound(String),
+
+    #[error("Attribute not found: {0}")]
+    NotFound(String),
+}
+
+#[derive(Error, Debug)]
+pub enum SampleError {
     #[error("Failed to decode hex string: {0}")]
     HexDecodeError(#[from] hex::FromHexError),
 
@@ -128,42 +132,166 @@ pub enum DecodeSamplePathError {
 
     #[error("Failed to process path: {0}")]
     PathProcessingError(String),
-}
 
-#[derive(Error, Debug)]
-pub enum XmlParseError {
-    #[error("UTF-8 conversion error: {0}")]
-    Utf8Error(#[from] Utf8Error),
+    #[error("Sample file not found: {0}")]
+    FileNotFound(PathBuf),
+
+    #[error("Failed to read sample file: {0}")]
+    FileReadError(#[from] io::Error),
 
     #[error("XML parsing error: {0}")]
-    QuickXmlError(#[from] QuickXmlError),
+    XmlError(#[from] XmlParseError),
 
-    #[error("XML attribute error: {0}")]
-    AttrError(#[from] AttrError),
-
-    #[error("ElementTree error: {0}")]
-    ElementTreeError(#[from] ElementTreeError),
-
-    #[error("Attribute parsing error")]
-    AttributeError,
-
-    #[error("Invalid XML structure")]
-    InvalidStructure,
-
-    #[error("Requested event '{0}' not found")]
-    EventNotFound(String),
+    #[error("Attribute error: {0}")]
+    AttributeError(#[from] AttributeError),
 }
 
 #[derive(Error, Debug)]
-pub enum AttributeError {
-    #[error("Attribute '{0}' not found")]
-    NotFound(String),
-    #[error("Value for attribute '{0}' not found")]
-    ValueNotFound(String),
+pub enum TimeSignatureError {
+    #[error("Failed to parse encoded time signature: {0}")]
+    ParseEncodedError(#[from] std::num::ParseIntError),
+    #[error("Retrieved time signature value ({0}) is outside of valid range (0-494)")]
+    InvalidEncodedValue(i32),
+    #[error("Time signature enum event not found")]
+    EnumEventNotFound,
+    #[error("Value attribute not found in time signature event")]
+    ValueAttributeNotFound,
 }
 
-impl From<quick_xml::Error> for LiveSetError {
-    fn from(error: quick_xml::Error) -> Self {
-        LiveSetError::XmlError(XmlParseError::QuickXmlError(error))
+#[derive(Error, Debug)]
+pub enum PluginError {
+    #[error("XML parsing error: {0}")]
+    XmlError(#[from] XmlParseError),
+
+    #[error("Attribute error: {0}")]
+    AttributeError(#[from] AttributeError),
+
+    #[error("Unexpected plugin type: {0}")]
+    UnexpectedPluginType(String),
+
+    #[error("Failed to access Ableton database file: {0}")]
+    DatabaseError(#[from] DatabaseError),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(#[from] ConfigError),
+}
+
+#[derive(Error, Debug)]
+pub enum DatabaseError {
+    #[error("SQLite error: {0}")]
+    SqliteError(#[from] rusqlite::Error),
+
+    #[error("Database not found at path: {0}")]
+    DatabaseNotFound(PathBuf),
+
+    #[error("Failed to open database connection: {0}")]
+    ConnectionError(String),
+
+    #[error("Query execution failed: {0}")]
+    QueryError(String),
+
+    #[error("Failed to parse database result: {0}")]
+    ParseError(String),
+
+    #[error("Invalid database schema: {0}")]
+    InvalidSchema(String),
+
+    #[error("File system error: {0}")]
+    FileError(#[from] FileError),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(#[from] ConfigError),
+}
+
+#[derive(Debug)]
+pub enum ConfigError {
+    ReadError(io::Error),
+    ParseError(toml::de::Error),
+    HomeDirError,
+    InvalidPath(String),
+}
+
+impl std::error::Error for ConfigError {}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfigError::ReadError(e) => write!(f, "Failed to read config file: {}", e),
+            ConfigError::ParseError(e) => write!(f, "Failed to parse config file: {}", e),
+            ConfigError::HomeDirError => write!(f, "Failed to get home directory"),
+            ConfigError::InvalidPath(s) => write!(f, "Invalid path in config: {}", s),
+        }
+    }
+}
+
+impl Clone for ConfigError {
+    fn clone(&self) -> Self {
+        match self {
+            ConfigError::ReadError(e) => ConfigError::ReadError(
+                io::Error::new(e.kind(), e.to_string())
+            ),
+            ConfigError::ParseError(e) => ConfigError::ParseError(
+                toml::de::Error::custom(e.to_string())
+            ),
+            ConfigError::HomeDirError => ConfigError::HomeDirError,
+            ConfigError::InvalidPath(s) => ConfigError::InvalidPath(s.clone()),
+        }
+    }
+}
+
+impl From<io::Error> for ConfigError {
+    fn from(error: io::Error) -> Self {
+        ConfigError::ReadError(error)
+    }
+}
+
+impl From<toml::de::Error> for ConfigError {
+    fn from(error: toml::de::Error) -> Self {
+        ConfigError::ParseError(error)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum LiveSetError {
+    #[error("XML error: {0}")]
+    XmlError(#[from] XmlParseError),
+
+    #[error("Time signature error: {0}")]
+    TimeSignatureError(#[from] TimeSignatureError),
+
+    #[error("Sample error: {0}")]
+    SampleError(#[from] SampleError),
+
+    #[error("File error: {0}")]
+    FileError(#[from] FileError),
+
+    #[error("Version error: {0}")]
+    VersionError(#[from] VersionError),
+
+    #[error("Attribute error: {0}")]
+    AttributeError(#[from] AttributeError),
+
+    #[error("Plugin error: {0}")]
+    PluginError(#[from] PluginError),
+
+    #[error("Failed to create LiveSet: {0}")]
+    CreateLiveSetError(String),
+
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] DatabaseError),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(#[from] ConfigError),
+}
+
+impl From<rusqlite::Error> for LiveSetError {
+    fn from(err: rusqlite::Error) -> Self {
+        LiveSetError::DatabaseError(DatabaseError::SqliteError(err))
+    }
+}
+
+impl DatabaseError {
+    pub fn to_live_set_error(self) -> LiveSetError {
+        LiveSetError::DatabaseError(self)
     }
 }
