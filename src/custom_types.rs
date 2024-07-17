@@ -1,35 +1,39 @@
+use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::str;
-use std::str::FromStr;
+use std::sync::Arc;
 
 use log::debug;
+use once_cell::sync::Lazy;
+use quick_xml::events::attributes::AttrError;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::name::QName;
-use quick_xml::events::attributes::AttrError;
 
-use crate::errors::LiveSetError;
-use crate::errors::TimeSignatureError;
+use crate::ableton_db::{AbletonDatabase};
+use crate::config::CONFIG;
+use crate::errors::{DatabaseError, SampleError, TimeSignatureError, VersionError};
+use crate::helpers::get_most_recent_db_file;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Id(u64);
+pub(crate) struct Id(u64);
 
 #[derive(Debug, Clone)]
-pub struct XmlTag {
+pub(crate) struct XmlTag {
     pub(crate) name: String,
     pub(crate) attributes: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
-pub struct AbletonVersion {
-    pub major: u32,
-    pub minor: u32,
-    pub patch: u32,
-    pub beta: bool
+pub(crate) struct AbletonVersion {
+    pub(crate) major: u32,
+    pub(crate) minor: u32,
+    pub(crate) patch: u32,
+    pub(crate) beta: bool
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum Scale {
+pub(crate) enum Scale {
     Empty,
     Major,
     Minor,
@@ -68,7 +72,7 @@ pub enum Scale {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum Tonic {
+pub(crate) enum Tonic {
     Empty,
     C,
     CSharp,
@@ -85,45 +89,143 @@ pub enum Tonic {
 }
 
 #[derive(Debug)]
-pub struct KeySignature {
-    tonic: Tonic,
-    scale: Scale,
+pub(crate) struct KeySignature {
+    pub(crate) tonic: Tonic,
+    pub(crate) scale: Scale,
 }
+
+
+// PLUGINS
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PluginFormat {
-    AU,
-    VST2,
-    VST3,
-}
-
-#[derive(Debug)]
-pub struct Plugin {
-    id: Id,
-    name: String,
-    plugin_format: PluginFormat,
-    is_installed: bool
+pub(crate) enum PluginFormat {
+    VST2Instrument,
+    VST2AudioFx,
+    VST3Instrument,
+    VST3AudioFx,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Sample {
-    pub id: Id,
-    pub name: String,
-    pub path: PathBuf,
+pub struct Plugin {
+    pub(crate) plugin_id: Option<i32>,
+    pub(crate) module_id: Option<i32>,
+    pub(crate) dev_identifier: String,
+    pub(crate) name: String,
+    pub(crate) vendor: Option<String>,
+    pub(crate) version: Option<String>,
+    pub(crate) sdk_version: Option<String>,
+    pub(crate) flags: Option<i32>,
+    pub(crate) scanstate: Option<i32>,
+    pub(crate) enabled: Option<i32>,
+    pub(crate) plugin_format: PluginFormat,
+    pub(crate) installed: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct PluginInfo {
+    pub(crate) name: String,
+    pub(crate) dev_identifier: String,
+    pub(crate) plugin_format: PluginFormat,
+}
+
+// Plugin implementations
+
+static INSTALLED_PLUGINS: Lazy<Arc<Result<HashSet<(String, PluginFormat)>, DatabaseError>>> = Lazy::new(|| {
+    Arc::new({
+        (|| {
+            let config = CONFIG.as_ref().map_err(|e| DatabaseError::ConfigError(e.clone()))?;
+            let db_dir = PathBuf::from(&config.live_database_dir);
+            let db_path = get_most_recent_db_file(&db_dir)?;
+
+            let db = AbletonDatabase::new(db_path)?;
+
+            db.get_installed_plugins()
+                .map(|vec| vec.into_iter().collect::<HashSet<_>>())
+        })()
+    })
+});
+
+pub fn get_installed_plugins() -> Arc<Result<HashSet<(String, PluginFormat)>, DatabaseError>> {
+    INSTALLED_PLUGINS.clone()
+}
+
+impl Plugin {
+    pub fn rescan(&mut self, db: &AbletonDatabase) -> Result<(), DatabaseError> {
+        if let Some(db_plugin) = db.get_plugin_by_dev_identifier(&self.dev_identifier)? {
+            self.plugin_id = Some(db_plugin.plugin_id);
+            self.module_id = db_plugin.module_id;
+            self.name = db_plugin.name;
+            self.vendor = db_plugin.vendor;
+            self.version = db_plugin.version;
+            self.sdk_version = db_plugin.sdk_version;
+            self.flags = db_plugin.flags;
+            self.scanstate = db_plugin.scanstate;
+            self.enabled = db_plugin.enabled;
+            self.installed = true;
+        } else {
+            self.installed = false;
+        }
+        Ok(())
+    }
+}
+
+
+// Sample types
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct Sample {
+    pub(crate) id: Id,
+    pub(crate) name: String,
+    pub(crate) path: PathBuf,
     pub(crate) is_present: bool
 }
 
 impl Sample {
-    pub fn new(id: Id, name: String, path: PathBuf) -> Self {
+    pub(crate) fn new(id: Id, name: String, path: PathBuf) -> Self {
         let is_present = path.exists();
         Self { id, name, path, is_present }
     }
 
-    pub fn is_present(&self) -> bool {
+    pub(crate) fn from_pre_11_data(data: &str) -> Result<Self, SampleError> {
+        let cleaned_data = data.replace('\t', "").replace('\n', "");
+        let byte_data = hex::decode(&cleaned_data)
+            .map_err(SampleError::HexDecodeError)?;
+
+        let utf16_chunks: Vec<u16> = byte_data
+            .chunks_exact(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+
+        let path_string = String::from_utf16(&utf16_chunks)
+            .map_err(|_| SampleError::InvalidUtf16Encoding)?
+            .replace('\0', "");
+
+        let path = PathBuf::from(path_string);
+
+        if !path.exists() {
+            return Err(SampleError::FileNotFound(path));
+        }
+
+        let name = path
+            .file_name()
+            .and_then(|osstr| osstr.to_str())
+            .map(String::from)
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        Ok(Self::new(Id::default(), name, path))
+    }
+
+    pub(crate) fn from_11_plus_data(path_value: &str) -> Self {
+        let path = PathBuf::from(path_value);
+        let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        Self::new(Id::default(), name, path)
+    }
+
+    pub(crate) fn is_present(&self) -> bool {
         self.is_present
     }
 
-    pub fn update_presence(&mut self) {
+    pub(crate) fn update_presence(&mut self) {
         self.is_present = self.path.exists();
     }
 }
@@ -181,46 +283,76 @@ impl fmt::Display for AbletonVersion {
 }
 
 impl AbletonVersion {
-    pub fn from_attributes<'a, I>(attributes: I) -> Result<Self, LiveSetError>
+    pub fn from_attributes<'a, I>(attributes: I) -> Result<Self, VersionError>
     where
         I: Iterator<Item = Result<Attribute<'a>, AttrError>>,
     {
         let mut creator = None;
-        let mut beta = false;
 
         for attr in attributes {
-            let attr = attr.map_err(|e| LiveSetError::XmlAttrError(e))?;
-            match attr.key {
-                QName(b"Creator") => {
-                    creator = Some(str::from_utf8(&attr.value)?.to_string());
-                },
-                _ => {}
+            let attr = attr.map_err(VersionError::AttrError)?;
+            if attr.key == QName(b"Creator") {
+                creator = Some(str::from_utf8(&attr.value)
+                    .map_err(VersionError::Utf8Error)?
+                    .to_string());
             }
         }
 
-        let creator = creator.ok_or(LiveSetError::MissingVersionInfo)?;
+        let creator = creator.ok_or_else(|| VersionError::MissingRequiredAttribute("Creator".to_string()))?;
         debug!("Creator: {}", creator);
 
+        Self::parse_version_string(&creator)
+    }
+
+    fn parse_version_string(creator: &str) -> Result<Self, VersionError> {
         let version_str = creator.strip_prefix("Ableton Live ")
-            .ok_or(LiveSetError::InvalidVersionFormat)?;
+            .ok_or(VersionError::InvalidFormat)?;
 
-        beta = version_str.to_lowercase().contains("beta");
+        let beta = version_str.to_lowercase().contains("beta");
 
-        let version_str = version_str.replace("Beta", "").trim().to_string();
+        let version_str = version_str.replace("Beta", "");
+        let version_parts: Vec<&str> = version_str.split_ascii_whitespace().next()
+            .ok_or(VersionError::InvalidFormat)?
+            .split('.')
+            .collect();
 
-        let mut version_parts = vec![0, 0, 0];
-        for (i, part) in version_str.split('.').enumerate() {
-            if i >= 3 { break; }
-            version_parts[i] = u32::from_str(part)
-                .map_err(|_| LiveSetError::InvalidVersionFormat)?;
+        if version_parts.len() < 2 || version_parts.len() > 3 {
+            return Err(VersionError::InvalidFormat);
         }
 
+        let parse_version = |s: &str| s
+            .parse()
+            .map_err(|e| VersionError::ParseError(e));
+
         Ok(AbletonVersion {
-            major: version_parts[0],
-            minor: version_parts[1],
-            patch: version_parts[2],
+            major: parse_version(version_parts[0])?,
+            minor: parse_version(version_parts[1])?,
+            patch: version_parts.get(2).map_or(Ok(0), |&s| parse_version(s))?,
             beta,
         })
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PluginTagType {
+    VST3,
+    VST2,
+}
+
+impl PluginTagType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PluginTagType::VST3 => "Vst3PluginInfo",
+            PluginTagType::VST2 => "VstPluginInfo",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Vst3PluginInfo" => Some(PluginTagType::VST3),
+            "VstPluginInfo" => Some(PluginTagType::VST2),
+            _ => None,
+        }
     }
 }
 
@@ -230,12 +362,15 @@ impl Default for Id {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::borrow::Cow;
+
     use quick_xml::events::attributes::Attribute;
     use quick_xml::name::QName;
-    use std::borrow::Cow;
+
+    use super::*;
 
     #[test]
     fn test_from_attributes() {
