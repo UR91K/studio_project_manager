@@ -28,7 +28,7 @@ impl AbletonDatabase {
         Ok(Self { conn })
     }
     
-    pub fn get_installed_plugins(&self) -> Result<Vec<(String, PluginFormat)>, DatabaseError> {
+    pub fn get_database_plugins(&self) -> Result<Vec<(String, PluginFormat)>, DatabaseError> {
         let mut stmt = self.conn.prepare(
             "SELECT name, dev_identifier FROM plugins WHERE scanstate = 1 AND enabled = 1"
         )?;

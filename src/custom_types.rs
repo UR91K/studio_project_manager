@@ -139,7 +139,7 @@ static INSTALLED_PLUGINS: Lazy<Arc<Result<HashSet<(String, PluginFormat)>, Datab
 
             let db = AbletonDatabase::new(db_path)?;
 
-            db.get_installed_plugins()
+            db.get_database_plugins()
                 .map(|vec| vec.into_iter().collect::<HashSet<_>>())
         })()
     })

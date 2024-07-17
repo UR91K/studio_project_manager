@@ -19,7 +19,7 @@ crc32fast = "1.4.0"
 thiserror = "1.0.60"
 hex = "0.4.3"
 encoding_rs = "0.8.34"
-rusqlite = "0.31.0"
+rusqlite = { version = "0.31.0", features = ["bundled"] }
 serde = { version = "1.0.200", features = ["derive"] }
 lazy_static = "1.4.0"
 toml = "0.8.14"
