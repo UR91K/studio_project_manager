@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use rusqlite::{Connection, Result as SqliteResult, params, types::Type};
 use crate::errors::DatabaseError;
 use crate::custom_types::PluginFormat;
+use crate::helpers::parse_plugin_format;
 
 #[derive(Debug)]
 pub struct DbPlugin {
@@ -27,7 +28,7 @@ impl AbletonDatabase {
             .map_err(|e| DatabaseError::ConnectionError(e.to_string()))?;
         Ok(Self { conn })
     }
-    
+
     pub fn get_database_plugins(&self) -> Result<Vec<(String, PluginFormat)>, DatabaseError> {
         let mut stmt = self.conn.prepare(
             "SELECT name, dev_identifier FROM plugins WHERE scanstate = 1 AND enabled = 1"
@@ -48,9 +49,9 @@ impl AbletonDatabase {
     }
 
     pub fn get_plugin_by_dev_identifier(
-        &self, 
+        &self,
         dev_identifier: &str
-    ) -> Result<Option<DbPlugin>, DatabaseError> 
+    ) -> Result<Option<DbPlugin>, DatabaseError>
     {
         let mut stmt = self.conn.prepare(
             "SELECT * FROM plugins WHERE dev_identifier = ?"
@@ -75,19 +76,5 @@ impl AbletonDatabase {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(DatabaseError::QueryError(e.to_string())),
         }
-    }
-}
-
-fn parse_plugin_format(dev_identifier: &str) -> Option<PluginFormat> {
-    if dev_identifier.starts_with("device:vst3:instr:") {
-        Some(PluginFormat::VST3Instrument)
-    } else if dev_identifier.starts_with("device:vst3:audiofx:") {
-        Some(PluginFormat::VST3AudioFx)
-    } else if dev_identifier.starts_with("device:vst:instr:") {
-        Some(PluginFormat::VST2Instrument)
-    } else if dev_identifier.starts_with("device:vst:audiofx:") {
-        Some(PluginFormat::VST2AudioFx)
-    } else {
-        None
     }
 }

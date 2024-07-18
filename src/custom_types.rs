@@ -333,35 +333,11 @@ impl AbletonVersion {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum PluginTagType {
-    VST3,
-    VST2,
-}
-
-impl PluginTagType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            PluginTagType::VST3 => "Vst3PluginInfo",
-            PluginTagType::VST2 => "VstPluginInfo",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "Vst3PluginInfo" => Some(PluginTagType::VST3),
-            "VstPluginInfo" => Some(PluginTagType::VST2),
-            _ => None,
-        }
-    }
-}
-
 impl Default for Id {
     fn default() -> Self {
         Id(0)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
