@@ -148,6 +148,8 @@ pub fn format_file_size(size: u64) -> String {
     formatted
 }
 
+
+
 pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
     info!("Attempting to extract gzipped data from: {:?}", file_path);
     trace!("Opening file for gzip decompression");
@@ -581,16 +583,16 @@ fn parse_plugin_info<R: BufRead>(source_context: &SourceContext, reader: &mut Re
         None => return Ok(None),
     };
     trace_fn!("parse_plugin_info", "Found dev_identifier: {:?}", dev_identifier);
-    let plugin_format = if dev_identifier.starts_with("device:vst3:instr:") {
-        PluginFormat::VST3Instrument
-    } else if dev_identifier.starts_with("device:vst3:audiofx:") {
-        PluginFormat::VST3AudioFx
-    } else if dev_identifier.starts_with("device:vst:instr:") {
-        PluginFormat::VST2Instrument
-    } else if dev_identifier.starts_with("device:vst:audiofx:") {
-        PluginFormat::VST2AudioFx
-    } else {
-        return Ok(None);
+    
+    let plugin_format = match parse_plugin_format(dev_identifier) {
+        Some(format) => {
+            trace_fn!("parse_plugin_info", "Successfully parsed plugin format: {:?}", format);
+            format
+        },
+        None => {
+            trace_fn!("parse_plugin_info", "Unable to determine plugin format for dev_identifier: {}", dev_identifier);
+            return Ok(None)
+        },
     };
 
     let mut buf = Vec::new();
@@ -619,14 +621,30 @@ fn parse_plugin_info<R: BufRead>(source_context: &SourceContext, reader: &mut Re
             _ => (),
         }
     }
-
     trace_fn!("parse_plugin_info", "Found plugin: {} ({:?})", name, plugin_format);
+    
     Ok(Some(PluginInfo {
         name,
         dev_identifier: dev_identifier.to_string(),
         plugin_format,
     }))
 }
+
+
+pub(crate) fn parse_plugin_format(dev_identifier: &str) -> Option<PluginFormat> {
+    if dev_identifier.starts_with("device:vst3:instr:") {
+        Some(PluginFormat::VST3Instrument)
+    } else if dev_identifier.starts_with("device:vst3:audiofx:") {
+        Some(PluginFormat::VST3AudioFx)
+    } else if dev_identifier.starts_with("device:vst:instr:") {
+        Some(PluginFormat::VST2Instrument)
+    } else if dev_identifier.starts_with("device:vst:audiofx:") {
+        Some(PluginFormat::VST2AudioFx)
+    } else {
+        None
+    }
+}
+
 
 //SAMPLES
 
