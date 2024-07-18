@@ -1,30 +1,26 @@
 use std::borrow::Cow;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
-use std::io::{BufRead, Cursor, Read};
+use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
-use std::str::{FromStr, from_utf8};
-use std::time::Instant;
+use std::str::{from_utf8, FromStr};
 
-use colored::*;
 use anyhow::Result;
 use chrono::{DateTime, Local};
+use colored::*;
 use crc32fast::Hasher;
-use elementtree::Element;
-use flate2::read::GzDecoder;
-use log::{info, debug, error, trace, warn};
-use quick_xml::events::{BytesStart, Event};
-use quick_xml::Reader;
 use encoding_rs::UTF_16LE;
+use flate2::read::GzDecoder;
+use log::{debug, error, info, trace, warn};
+use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
-use regex::Regex;
-use rusqlite::ffi::SQLITE_TXN_NONE;
+use quick_xml::Reader;
+
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::custom_types::{AbletonVersion, Plugin, PluginFormat, TimeSignature, XmlTag, PluginInfo};
-use crate::errors::{TimeSignatureError, XmlParseError, AttributeError, FileError, PluginError, SampleError, VersionError, LiveSetError, DatabaseError};
-
+use crate::custom_types::{AbletonVersion, Plugin, PluginFormat, PluginInfo, TimeSignature, XmlTag};
+use crate::errors::{AttributeError, DatabaseError, FileError, LiveSetError, PluginError, SampleError, TimeSignatureError, VersionError, XmlParseError};
 
 #[macro_export]
 macro_rules! trace_fn {
