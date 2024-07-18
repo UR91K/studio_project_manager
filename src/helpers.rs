@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::str::{FromStr, from_utf8};
 use std::time::Instant;
 
+use colored::*;
 use anyhow::Result;
 use chrono::{DateTime, Local};
 use crc32fast::Hasher;
@@ -17,10 +18,48 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use encoding_rs::UTF_16LE;
 use quick_xml::name::QName;
+use regex::Regex;
+use rusqlite::ffi::SQLITE_TXN_NONE;
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::custom_types::{AbletonVersion, Plugin, PluginFormat, TimeSignature, XmlTag, PluginInfo};
 use crate::errors::{TimeSignatureError, XmlParseError, AttributeError, FileError, PluginError, SampleError, VersionError, LiveSetError, DatabaseError};
+
+
+#[macro_export]
+macro_rules! trace_fn {
+    ($fn_name:expr, $($arg:tt)+) => {
+        log::trace!("[{}] {}", $fn_name.bright_blue().bold(), format!($($arg)+))
+    };
+}
+
+#[macro_export]
+macro_rules! debug_fn {
+    ($fn_name:expr, $($arg:tt)+) => {
+        log::debug!("[{}] {}", $fn_name.cyan().bold(), format!($($arg)+))
+    };
+}
+
+#[macro_export]
+macro_rules! info_fn {
+    ($fn_name:expr, $($arg:tt)+) => {
+        log::info!("[{}] {}", $fn_name.green().bold(), format!($($arg)+))
+    };
+}
+
+#[macro_export]
+macro_rules! warn_fn {
+    ($fn_name:expr, $($arg:tt)+) => {
+        log::warn!("[{}] {}", $fn_name.yellow().bold(), format!($($arg)+))
+    };
+}
+
+#[macro_export]
+macro_rules! error_fn {
+    ($fn_name:expr, $($arg:tt)+) => {
+        log::error!("[{}] {}", $fn_name.red().bold(), format!($($arg)+))
+    };
+}
 
 //ACTUAL HELPERS
 
@@ -123,9 +162,7 @@ pub fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * KB;
     const GB: u64 = 1024 * MB;
-
-    trace!("Formatting file size: {} bytes", size);
-
+    
     let formatted = if size < KB {
         format!("{} B", size)
     } else if size < MB {
@@ -135,8 +172,7 @@ pub fn format_file_size(size: u64) -> String {
     } else {
         format!("{:.2} GB", size as f64 / GB as f64)
     };
-
-    trace!("Formatted file size: {}", formatted);
+    
     formatted
 }
 
@@ -193,7 +229,7 @@ pub fn parse_xml_data(
     })?;
 
     let xml_slice = &xml_data_str[xml_start..];
-    trace!("XML start found at index: {}", xml_start);
+    // trace!("XML start found at index: {}", xml_start);
 
     let start_time_xml = Instant::now();
     let root = Element::from_reader(Cursor::new(xml_slice.as_bytes())).map_err(|err| {
@@ -283,6 +319,23 @@ pub fn find_tags(
     Ok(all_tags)
 }
 
+fn read_value<R: BufRead>(reader: &mut Reader<R>) -> Result<String, XmlParseError> {
+    let mut buf = Vec::new();
+    match reader.read_event_into(&mut buf)? {
+        Event::Text(e) => Ok(e.unescape().map_err(|_| XmlParseError::InvalidStructure)?.to_string()),
+        Event::Empty(e) | Event::Start(e) => {
+            for attr in e.attributes() {
+                let attr = attr.map_err(|e|XmlParseError::AttrError(e))?;
+                if attr.key.as_ref() == b"Value" {
+                    return Ok(attr.unescape_value().map_err(XmlParseError::QuickXmlError)?.to_string());
+                }
+            }
+            Err(XmlParseError::InvalidStructure)
+        },
+        _ => Err(XmlParseError::InvalidStructure),
+    }
+}
+
 pub fn find_attribute(
     tags: &[XmlTag], 
     tag_query: &str, 
@@ -322,7 +375,7 @@ pub fn find_empty_event(xml_data: &[u8], search_query: &str) -> Result<HashMap<S
             Ok(Event::Empty(ref event)) => {
                 let name = event.name().to_string_result()?;
 
-                trace!("Found empty event with name: {}", name);
+                // trace!("Found empty event with name: {}", name);
 
                 if name == search_query {
                     debug!("Empty event {} matches search query", name);
@@ -337,7 +390,10 @@ pub fn find_empty_event(xml_data: &[u8], search_query: &str) -> Result<HashMap<S
                 debug!("Reached end of XML data without finding the event");
                 return Err(XmlParseError::EventNotFound(search_query.to_string()));
             }
-            Err(error) => return Err(XmlParseError::QuickXmlError(error)),
+            Err(error) => {
+                debug!("Error while searching for empty event named {:?}: {:?}", search_query, error);
+                return Err(XmlParseError::QuickXmlError(error))
+            },
             _ => (),
         }
         buffer.clear();
@@ -387,133 +443,210 @@ pub fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, DatabaseE
 //PLUGINS
 
 pub fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginError> {
+    trace!("Starting find_all_plugins function");
     let plugin_infos = find_plugin_tags(xml_data)?;
+    debug!("Found {} plugin infos", plugin_infos.len());
 
     let config = CONFIG.as_ref().map_err(|e| PluginError::ConfigError(e.clone()))?;
     let db_dir = &config.live_database_dir;
-
-    let ableton_db = AbletonDatabase::new(
-        get_most_recent_db_file(db_dir)
-            .map_err(PluginError::DatabaseError)?
-    ).map_err(PluginError::DatabaseError)?;
+    trace!("Database directory: {:?}", db_dir);
     
+    let db_path = get_most_recent_db_file(&PathBuf::from(db_dir))
+        .map_err(PluginError::DatabaseError)?;
+    debug!("Using database file: {:?}", db_path);
+
+    let ableton_db = AbletonDatabase::new(db_path).map_err(PluginError::DatabaseError)?;
+
     let mut plugins = Vec::with_capacity(plugin_infos.len());
-    for info in plugin_infos {
+    for (index, info) in plugin_infos.iter().enumerate() {
+        trace!("Processing plugin info {}: {:?}", index, info.dev_identifier);
         let db_plugin = ableton_db.get_plugin_by_dev_identifier(&info.dev_identifier)?;
         let plugin = match db_plugin {
-            Some(db_plugin) => Plugin {
-                plugin_id: Some(db_plugin.plugin_id),
-                module_id: db_plugin.module_id,
-                dev_identifier: db_plugin.dev_identifier,
-                name: db_plugin.name,
-                vendor: db_plugin.vendor,
-                version: db_plugin.version,
-                sdk_version: db_plugin.sdk_version,
-                flags: db_plugin.flags,
-                scanstate: db_plugin.scanstate,
-                enabled: db_plugin.enabled,
-                plugin_format: info.plugin_format,
-                installed: true,
+            Some(db_plugin) => {
+                debug!("Found matching plugin {} {} on system, flagging as installed",
+                    db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
+                    db_plugin.name.green()
+                );
+                Plugin {
+                    plugin_id: Some(db_plugin.plugin_id),
+                    module_id: db_plugin.module_id,
+                    dev_identifier: db_plugin.dev_identifier,
+                    name: db_plugin.name,
+                    vendor: db_plugin.vendor,
+                    version: db_plugin.version,
+                    sdk_version: db_plugin.sdk_version,
+                    flags: db_plugin.flags,
+                    scanstate: db_plugin.scanstate,
+                    enabled: db_plugin.enabled,
+                    plugin_format: info.plugin_format,
+                    installed: true,
+                }
             },
-            None => Plugin {
-                plugin_id: None,
-                module_id: None,
-                dev_identifier: info.dev_identifier,
-                name: info.name,
-                vendor: None,
-                version: None,
-                sdk_version: None,
-                flags: None,
-                scanstate: None,
-                enabled: None,
-                plugin_format: info.plugin_format,
-                installed: false,
+            None => {
+                debug!("Plugin not found in database: {:?}", info);
+                Plugin {
+                    plugin_id: None,
+                    module_id: None,
+                    dev_identifier: info.dev_identifier.clone(),
+                    name: info.name.clone(),
+                    vendor: None,
+                    version: None,
+                    sdk_version: None,
+                    flags: None,
+                    scanstate: None,
+                    enabled: None,
+                    plugin_format: info.plugin_format,
+                    installed: false,
+                }
             },
         };
         plugins.push(plugin);
     }
 
+    debug!("Found {} plugins", plugins.len());
     Ok(plugins)
 }
 
+
+#[derive(Debug, Default, Clone)]
+struct SourceContext {
+    branch_device_id: Option<String>,
+}
+
+//TODO FIX PLUGINS NOT BEING FOUND. save logs to a file, check if parse_source_context ever works. etc
 pub fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseError> {
+    trace_fn!("find_plugin_tags", "Starting function");
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
 
     let mut buf = Vec::new();
     let mut plugin_info_tags = Vec::new();
-    let mut current_source_context: Option<(String, PluginFormat)> = None;
+    let mut current_source_context: Option<SourceContext> = None;
+    let mut depth = 0;
+    let mut in_plugin_desc = false;
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref event)) | Ok(Event::Empty(ref event)) => {
-
-                let name = event.name().to_string_result()?;
+            Ok(Event::Start(ref e)) => {
+                let name = e.name().to_string_result()?;
+                
+                depth += 1;
 
                 match name.as_str() {
+
                     "SourceContext" => {
-                        current_source_context = Some(parse_source_context(&mut reader)?);
+                        trace_fn!("find_plugin_tags", "Found SourceContext event");
+                        current_source_context = parse_source_context(&mut reader, &mut depth)?;
                     }
-                    "Vst3PluginInfo" | "VstPluginInfo" => {
+                    
+                    "PluginDesc" => {
+                        trace_fn!("find_plugin_tags", "Entered PluginDesc event");
+                        in_plugin_desc = true;
+                    }
+
+                    "VstPluginInfo" | "Vst3PluginInfo" if in_plugin_desc => {
+                        trace_fn!("find_plugin_tags", "Found PluginInfo event");
                         if let Some(source_context) = current_source_context.take() {
-                            let plugin_info = parse_plugin_info(
-                                &event, 
-                                &mut reader, 
-                                &source_context,
-                            )?;
-                            plugin_info_tags.push(plugin_info);
+                            if let Some(plugin_info) = parse_plugin_info(&source_context, &mut reader, &mut depth)? {
+                                debug_fn!("find_plugin_tags", "Found plugin: {:?}", plugin_info);
+                                plugin_info_tags.push(plugin_info);
+                            } else {
+                                trace_fn!("find_plugin_tags", "Plugin info parsed but not valid");
+                            }
+                        } else {
+                            trace_fn!("find_plugin_tags", "No valid SourceContext found for plugin");
                         }
                     }
                     _ => {}
                 }
             }
-            Ok(Event::Eof) => break,
-            Err(error) => return Err(XmlParseError::QuickXmlError(error)),
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    Ok(plugin_info_tags)
-}
-
-fn parse_source_context<R: BufRead>(
-    reader: &mut Reader<R>
-) -> Result<(String, PluginFormat), XmlParseError> 
-{
-    let mut buf:Vec<u8> = Vec::new();
-    let mut dev_identifier:String = String::new();
-
-    loop {
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(e) | Event::Empty(e) => {
+            Ok(Event::End(ref e)) => {
                 let name = e.name().to_string_result()?;
-                if name == "BranchDeviceId" {
-                    for attr in e.attributes() {
-                        let attr = attr?;
-                        if attr.key.as_ref().to_string_result()? == "Value" {
-                            dev_identifier = attr.decode_and_unescape_value(reader)
-                                .map_err(|e| XmlParseError::QuickXmlError(e))?
-                                .into_owned();
-                            break;
-                        }
-                    }
-                    if !dev_identifier.is_empty() {
-                        break;
-                    }
+                depth -= 1;
+
+                if name == "PluginDesc" {
+                    trace_fn!("find_plugin_tags", "Exited PluginDesc event");
+                    in_plugin_desc = false;
                 }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                trace_fn!("find_plugin_tags", "Error parsing XML: {:?}", e);
+                return Err(XmlParseError::QuickXmlError(e)) 
             },
-            Event::End(e) if e.name().as_ref() == b"SourceContext" => break,
-            Event::Eof => return Err(XmlParseError::InvalidStructure),
             _ => (),
         }
         buf.clear();
     }
 
-    if dev_identifier.is_empty() {
-        return Err(XmlParseError::InvalidStructure);
+    debug_fn!("find_plugin_tags", "Found {} plugin info tags", plugin_info_tags.len());
+    Ok(plugin_info_tags)
+}
+
+fn parse_source_context<R: BufRead>(reader: &mut Reader<R>, depth: &mut i32) -> Result<Option<SourceContext>, XmlParseError> {
+    trace_fn!("parse_source_context", "Starting function");
+    let mut buf = Vec::new();
+    let start_depth = *depth;
+    let mut in_value = false;
+    let mut in_branch_source_context = false;
+    let mut source_context = SourceContext::default();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                *depth += 1;
+                let name = e.name().to_string_result()?;
+                match name.as_str() {
+                    "Value" => in_value = true,
+                    "BranchSourceContext" if in_value => in_branch_source_context = true,
+                    _ => {}
+                }
+            }
+            Ok(Event::Empty(ref e)) if in_branch_source_context => {
+                let name = e.name().to_string_result()?;
+                if name == "BranchDeviceId" {
+                    let attributes = parse_event_attributes(e)?;
+                    if let Some(value) = attributes.get("Value") {
+                        trace_fn!("parse_source_context", "Found BranchDeviceId: {:?}", value);
+                        source_context.branch_device_id = Some(value.clone());
+                        break;
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                let name = e.name().to_string_result()?;
+                match name.as_str() {
+                    "Value" => in_value = false,
+                    "BranchSourceContext" => in_branch_source_context = false,
+                    "SourceContext" if *depth == start_depth => break,
+                    _ => {}
+                }
+                *depth -= 1;
+            }
+            Ok(Event::Eof) => return Err(XmlParseError::InvalidStructure),
+            Err(e) => return Err(XmlParseError::QuickXmlError(e)),
+            _ => (),
+        }
     }
 
+    if let Some(branch_device_id) = &source_context.branch_device_id {
+        trace_fn!("parse_source_context", "Found valid SourceContext with BranchDeviceId: {:?}", branch_device_id);
+        Ok(Some(source_context))
+    } else {
+        trace_fn!("parse_source_context", "No valid BranchDeviceId found");
+        Ok(None)
+    }
+}
+
+
+fn parse_plugin_info<R: BufRead>(source_context: &SourceContext, reader: &mut Reader<R>, depth: &mut i32) -> Result<Option<PluginInfo>, XmlParseError> {
+    trace_fn!("parse_plugin_info", "Starting function");
+
+    let dev_identifier = match &source_context.branch_device_id {
+        Some(id) => id,
+        None => return Ok(None),
+    };
+    trace_fn!("parse_plugin_info", "Found dev_identifier: {:?}", dev_identifier);
     let plugin_format = if dev_identifier.starts_with("device:vst3:instr:") {
         PluginFormat::VST3Instrument
     } else if dev_identifier.starts_with("device:vst3:audiofx:") {
@@ -523,64 +656,42 @@ fn parse_source_context<R: BufRead>(
     } else if dev_identifier.starts_with("device:vst:audiofx:") {
         PluginFormat::VST2AudioFx
     } else {
-        return Err(XmlParseError::UnknownPluginFormat(dev_identifier));
+        return Ok(None);
     };
 
-    Ok((dev_identifier, plugin_format))
-}
-
-fn parse_plugin_info<R: BufRead>(
-    start_event: &BytesStart,
-    reader: &mut Reader<R>,
-    source_context: &(String, PluginFormat),
-) -> Result<PluginInfo, XmlParseError> 
-{
-    let (dev_identifier, plugin_format) = source_context;
-    let mut name = String::new();
     let mut buf = Vec::new();
-
-    for attr in start_event.attributes() {
-        let attr = attr?;
-        if attr.key.as_ref() == b"Id" {
-            // You might want to store this ID if needed
-            break;
-        }
-    }
+    let mut name = String::new();
+    let start_depth = *depth;
 
     loop {
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(e) | Event::Empty(e) => {
-                if e.name().to_string_result()? == "Name" {
-                    for attr in e.attributes() {
-                        let attr = attr?;
-                        if attr.key.as_ref().to_string_result()? == "Value" {
-                            name = attr.decode_and_unescape_value(reader)
-                                .map_err(|e| XmlParseError::QuickXmlError(e))?
-                                .into_owned();
-                            break;
-                        }
-                    }
-                    if !name.is_empty() {
-                        break;
-                    }
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                *depth += 1;
+                let tag_name = e.name().to_string_result()?;
+                if matches!(tag_name.as_str(), "PlugName" | "Name") {
+                    trace_fn!("parse_plugin_info", "Found PlugName: {:?}", read_value(reader)?);
+
+                    name = read_value(reader)?;
                 }
-            },
-            Event::End(e) if e.name().as_ref() == b"Vst3PluginInfo" || e.name().as_ref() == b"VstPluginInfo" => break,
-            Event::Eof => return Err(XmlParseError::InvalidStructure),
+            }
+            Ok(Event::End(ref _e)) => {
+                *depth -= 1;
+                if *depth == start_depth {
+                    break;
+                }
+            }
+            Ok(Event::Eof) => return Err(XmlParseError::InvalidStructure),
+            Err(e) => return Err(XmlParseError::QuickXmlError(e)),
             _ => (),
         }
-        buf.clear();
     }
 
-    if name.is_empty() {
-        return Err(XmlParseError::InvalidStructure);
-    }
-
-    Ok(PluginInfo {
+    trace_fn!("parse_plugin_info", "Found plugin: {} ({:?})", name, plugin_format);
+    Ok(Some(PluginInfo {
         name,
-        dev_identifier: dev_identifier.clone(),
-        plugin_format: *plugin_format,
-    })
+        dev_identifier: dev_identifier.to_string(),
+        plugin_format,
+    }))
 }
 
 //SAMPLES
@@ -720,7 +831,7 @@ fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, SampleError> {
 
 pub fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetError> {
     debug!("Updating time signature");
-    trace!("XML data: {:?}", from_utf8(xml_data));
+    // trace!("XML data: {:?}", from_utf8(xml_data));
 
     let search_query = "EnumEvent";
 
