@@ -15,6 +15,7 @@ use log::{debug, error, info};
 use log::LevelFilter;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use toml::value::Time;
 use custom_types::{AbletonVersion,
                    Id,
                    KeySignature,
@@ -25,7 +26,7 @@ use custom_types::{AbletonVersion,
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::errors::{LiveSetError, XmlParseError};
-use crate::helpers::{decompress_gzip_file, load_version, find_all_plugins, format_file_size, load_file_hash, load_file_name, load_file_timestamps, parse_sample_paths, validate_ableton_file, load_time_signature, get_most_recent_db_file, StringResultExt};
+use crate::helpers::{decompress_gzip_file, load_version, find_all_plugins, format_file_size, load_file_hash, load_file_name, load_file_timestamps, parse_sample_paths, validate_ableton_file, load_time_signature, get_most_recent_db_file, StringResultExt, find_tags, find_attribute};
 
 mod custom_types;
 mod errors;
@@ -48,10 +49,10 @@ struct LiveSet {
 
     ableton_version: AbletonVersion,
     key_signature: Option<KeySignature>,
-    tempo: Option<f32>,
+    tempo: Option<f64>,
     time_signature: TimeSignature,
     estimated_duration: Option<chrono::Duration>,
-    furthest_bar: Option<u32>,
+    furthest_bar: Option<f64>,
 
     plugins: HashSet<Plugin>,
     samples: HashSet<Sample>,
@@ -87,12 +88,12 @@ impl LiveSet {
     fn new(file_path: PathBuf) -> Result<Self, LiveSetError> {
         validate_ableton_file(&file_path)?;
         
-        let file_name = load_file_name(&file_path)?;
+        let file_name:String = load_file_name(&file_path)?;
         let (modified_time, created_time) = load_file_timestamps(&file_path)?;
-        let file_hash = load_file_hash(&file_path)?;
-        let xml_data = decompress_gzip_file(&file_path)?;
-        let ableton_version = load_version(&xml_data)?;
-        let time_signature = load_time_signature(&xml_data)?;
+        let file_hash:String = load_file_hash(&file_path)?;
+        let xml_data:Vec<u8> = decompress_gzip_file(&file_path)?;
+        let ableton_version:AbletonVersion = load_version(&xml_data)?;
+        let time_signature:TimeSignature = load_time_signature(&xml_data)?;
         
         let mut live_set = LiveSet {
             id: Id::default(),
@@ -116,7 +117,10 @@ impl LiveSet {
         let samples = live_set.load_samples()?;
 
         let plugins = live_set.load_plugins()?;
-
+        
+        live_set.update_furthest_bar()?;
+        live_set.update_tempo()?;
+        
         Ok(Self {
             samples,
             plugins,
@@ -184,7 +188,7 @@ impl LiveSet {
         Ok(all_samples)
     }
 
-    pub fn find_furthest_bar(&self) -> Result<f64, LiveSetError> {
+    pub fn update_furthest_bar(&mut self) -> Result<(), LiveSetError> {
         let mut reader = Reader::from_reader(&self.xml_data[..]);
         reader.trim_text(true);
 
@@ -225,12 +229,101 @@ impl LiveSet {
         } else {
             largest_current_end_value / beats_per_bar
         };
+        
+        self.furthest_bar = Some(furthest_bar);
+        Ok(())
+    }
 
-        Ok(furthest_bar)
+    pub fn update_tempo(&mut self) -> Result<(), LiveSetError> {
+
+        if self.ableton_version.major < 8 ||
+            (self.ableton_version.major == 8 && self.ableton_version.minor < 2) {
+            return Ok(());
+        }
+
+        let previous_tempo:Option<f64> = self.tempo;
+
+        let tempo_value:f64 = if self.ableton_version.major >= 10 ||
+            (self.ableton_version.major == 9 && self.ableton_version.minor >= 7) {
+            self.find_post_10_tempo()?
+        } else {
+            self.find_pre_10_tempo()?
+        };
+
+        let new_tempo:f64 = ((tempo_value * 1_000_000.0) / 1_000_000.0).round();
+
+        if Some(new_tempo) != previous_tempo {
+            self.tempo = Some(new_tempo);
+            info_fn!("update_tempo", "{} ({:?}): updated tempo from {:?} to {}", 
+                  self.file_name, 
+                  self.id, 
+                  previous_tempo, 
+                  new_tempo);
+        }
+
+        Ok(())
+    }
+
+    fn find_post_10_tempo(&self) -> Result<f64, LiveSetError> {
+        let mut reader = Reader::from_reader(&self.xml_data[..]);
+        reader.trim_text(true);
+        let mut buf = Vec::new();
+        let mut in_tempo = false;
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    if e.name().as_ref().to_string_result()? == "Tempo" {
+                        in_tempo = true;
+                    }
+                }
+                Ok(Event::Empty(ref e)) if in_tempo => {
+                    if e.name().as_ref() == b"Manual" {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref().to_string_result()? == "Value" {
+                                return attr.value.as_ref()
+                                    .to_str_result()
+                                    .and_then(|s| s.parse::<f64>().map_err(|_| XmlParseError::InvalidStructure))
+                                    .map_err(LiveSetError::XmlError);
+                            }
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) if in_tempo => {
+                    if e.name().as_ref().to_string_result()? == "Tempo" {
+                        in_tempo = false;
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(LiveSetError::XmlError(XmlParseError::QuickXmlError(e))),
+                _ => (),
+            }
+            buf.clear();
+        }
+
+        Err(LiveSetError::XmlError(XmlParseError::EventNotFound("Tempo".to_string())))
+    }
+
+    fn find_pre_10_tempo(&self) -> Result<f64, LiveSetError> {
+        let search_queries = &["FloatEvent"];
+        let target_depth: u8 = 0;
+        let float_event_tags = find_tags(&self.xml_data, search_queries, target_depth)?;
+
+        if let Some(float_event_list) = float_event_tags.get("FloatEvent") {
+            for tags in float_event_list {
+                if !tags.is_empty() {
+                    if let Ok(value_str) = find_attribute(&tags[..], "FloatEvent", "Value") {
+                        return value_str.parse::<f64>()
+                            .map_err(|_| LiveSetError::XmlError(XmlParseError::InvalidStructure));
+                    }
+                }
+            }
+        }
+
+        Err(LiveSetError::XmlError(XmlParseError::EventNotFound("FloatEvent".to_string())))
     }
     
-    //TODO: Add furthest bar finding
-    //TODO: Add tempo finding
+    
     //TODO: Add duration estimation (based on furthest bar and tempo)
     //TODO: Add key signature finding
 
