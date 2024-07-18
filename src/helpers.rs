@@ -100,15 +100,6 @@ impl<'a> StringResultExt for Cow<'a, [u8]> {
     }
 }
 
-pub fn is_valid_xml(data: &[u8]) -> bool {
-    // Implement basic XML validation
-    // This could be as simple as checking for the presence of an XML declaration
-    // or as complex as parsing the entire document
-    from_utf8(data)
-        .map(|s| s.trim_start().starts_with("<?xml"))
-        .unwrap_or(false)
-}
-
 pub fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
     if !file_path.exists() {
         return Err(FileError::NotFound(file_path.to_path_buf()));
