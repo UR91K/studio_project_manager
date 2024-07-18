@@ -116,20 +116,18 @@ pub fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
     Ok(())
 }
 
-pub fn parse_encoded_value(value: &str) -> Result<i32, TimeSignatureError> {
-    trace!("Attempting to parse encoded value: '{}'", value);
-
-    i32::from_str(value)
-        .map(|parsed_value| {
-            debug!("Successfully parsed encoded value '{}' to {}", value, parsed_value);
-            parsed_value
-        })
-        .map_err(|e| {
-            error!("Failed to parse encoded value '{}': {}", value, e);
-            TimeSignatureError::ParseEncodedError(e)
-        })
-}
-
+/// Formats a file size in bytes to a human-readable string (B, KB, MB, or GB).
+///
+/// # Examples
+///
+/// ```
+/// use studio_project_manager::helpers::format_file_size;
+///
+/// assert_eq!(format_file_size(1023), "1023 B");
+/// assert_eq!(format_file_size(1024), "1.00 KB");
+/// assert_eq!(format_file_size(1_048_576), "1.00 MB");
+/// assert_eq!(format_file_size(1_073_741_824), "1.00 GB");
+/// ```
 pub fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * KB;
@@ -148,8 +146,18 @@ pub fn format_file_size(size: u64) -> String {
     formatted
 }
 
-
-
+/// Decompresses a gzip file and returns its contents as a byte vector.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// use studio_project_manager::helpers::decompress_gzip_file;
+///
+/// let file_path = Path::new("path/to/compressed/file.gz");
+/// let decompressed_data = decompress_gzip_file(&file_path).expect("Failed to decompress file");
+/// println!("Decompressed {} bytes", decompressed_data.len());
+/// ```
 pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
     info!("Attempting to extract gzipped data from: {:?}", file_path);
     trace!("Opening file for gzip decompression");
@@ -781,9 +789,9 @@ fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, SampleError> {
 
 //TIME SIGNATURE
 
+
 pub fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetError> {
     debug!("Updating time signature");
-    // trace!("XML data: {:?}", from_utf8(xml_data));
 
     let search_query = "EnumEvent";
 
@@ -803,7 +811,7 @@ pub fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetErro
     debug!("Found 'Value' attribute");
     trace!("Value: {}", value_attribute);
 
-    let encoded_value = parse_encoded_value(value_attribute)
+    let encoded_value = parse_encoded_time_signature(value_attribute)
         .map_err(LiveSetError::TimeSignatureError)?;
     debug!("Parsed encoded value: {}", encoded_value);
 
@@ -821,30 +829,49 @@ pub fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetErro
     Ok(time_signature)
 }
 
-//VERSION
-
-/// Extracts the Ableton version information from the given XML data.
-///
-/// This function parses the XML data of an Ableton Live project file to extract
-/// the version information. It looks for the "Ableton" tag and its "Creator" attribute.
-///
-/// # Arguments
-///
-/// * `xml_data` - A byte slice containing the XML data of the Ableton Live project file.
-///
-/// # Returns
-///
-/// * `Result<AbletonVersion, LiveSetError>` - The parsed Ableton version if successful,
-///   or an error if parsing fails.
+/// Parses an encoded time signature string into an i32 value.
 ///
 /// # Examples
 ///
 /// ```
-/// let xml_data = b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Ableton Creator=\"Ableton Live 11.0.12\">";
-/// let version = extract_version(xml_data).unwrap();
-/// assert_eq!(version.major, 11);
-/// assert_eq!(version.minor, 0);
-/// assert_eq!(version.patch, 12);
+/// use studio_project_manager::helpers::parse_encoded_time_signature;
+///
+/// let result = parse_encoded_time_signature("4").unwrap();
+/// assert_eq!(result, 4);
+///
+/// let error = parse_encoded_time_signature("invalid").unwrap_err();
+/// assert!(matches!(error, TimeSignatureError::ParseEncodedError(_)));
+/// ```
+pub fn parse_encoded_time_signature(value: &str) -> Result<i32, TimeSignatureError> {
+    trace!("Attempting to parse encoded time signature value: '{}'", value);
+
+    i32::from_str(value)
+        .map(|parsed_value| {
+            debug!("Successfully parsed encoded value '{}' to {}", value, parsed_value);
+            parsed_value
+        })
+        .map_err(|e| {
+            error!("Failed to parse encoded value '{}': {}", value, e);
+            TimeSignatureError::ParseEncodedError(e)
+        })
+}
+
+//VERSION
+
+/// Extracts the Ableton version from XML data.
+///
+/// # Examples
+///
+/// ```
+/// use studio_project_manager::helpers::load_version;
+///
+/// let xml_data = r#"<?xml version="1.0" encoding="UTF-8"?>
+/// <Ableton MajorVersion="5" MinorVersion="10" SchemaChangeCount="3" Creator="Ableton Live 11.0">"#.as_bytes();
+///
+/// let version = load_version(xml_data).expect("Failed to load version");
+/// assert_eq!(version.major_version, 5);
+/// assert_eq!(version.minor_version, 10);
+/// assert_eq!(version.schema_change_count, 3);
 /// ```
 pub fn load_version(xml_data: &[u8]) -> Result<AbletonVersion, VersionError> {
     let mut reader = Reader::from_reader(xml_data);
