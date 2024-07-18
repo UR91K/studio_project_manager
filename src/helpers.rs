@@ -59,7 +59,7 @@ macro_rules! error_fn {
 
 //ACTUAL HELPERS
 
-trait StringResultExt {
+pub (crate) trait StringResultExt {
     fn to_string_result(&self) -> Result<String, XmlParseError>;
     fn to_str_result(&self) -> Result<&str, XmlParseError>;
 }
@@ -100,7 +100,7 @@ impl<'a> StringResultExt for Cow<'a, [u8]> {
     }
 }
 
-pub fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
+pub (crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
     if !file_path.exists() {
         return Err(FileError::NotFound(file_path.to_path_buf()));
     }
@@ -128,7 +128,7 @@ pub fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
 /// assert_eq!(format_file_size(1_048_576), "1.00 MB");
 /// assert_eq!(format_file_size(1_073_741_824), "1.00 GB");
 /// ```
-pub fn format_file_size(size: u64) -> String {
+pub(crate) fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * KB;
     const GB: u64 = 1024 * MB;
@@ -158,7 +158,7 @@ pub fn format_file_size(size: u64) -> String {
 /// let decompressed_data = decompress_gzip_file(&file_path).expect("Failed to decompress file");
 /// println!("Decompressed {} bytes", decompressed_data.len());
 /// ```
-pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
+pub (crate)fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
     info!("Attempting to extract gzipped data from: {:?}", file_path);
     trace!("Opening file for gzip decompression");
 
@@ -190,7 +190,7 @@ pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
     Ok(decompressed_data)
 }
 
-pub fn find_tags(
+pub (crate) fn find_tags(
     xml_data: &[u8],
     search_queries: &[&str],
     target_depth: u8
@@ -280,7 +280,7 @@ fn read_value<R: BufRead>(reader: &mut Reader<R>) -> Result<String, XmlParseErro
     }
 }
 
-pub fn find_attribute(
+pub (crate) fn find_attribute(
     tags: &[XmlTag],
     tag_query: &str,
     attribute_query: &str
@@ -306,7 +306,7 @@ pub fn find_attribute(
     Err(AttributeError::NotFound(tag_query.to_string()))
 }
 
-pub fn find_empty_event(xml_data: &[u8], search_query: &str) -> Result<HashMap<String, String>, XmlParseError> {
+pub(crate) fn find_empty_event(xml_data: &[u8], search_query: &str) -> Result<HashMap<String, String>, XmlParseError> {
     debug!("Searching for empty event with query: {}", search_query);
 
     let mut reader = Reader::from_reader(xml_data);
@@ -357,7 +357,7 @@ fn parse_event_attributes(event: &BytesStart) -> Result<HashMap<String, String>,
 }
 
 
-pub fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, DatabaseError> {
+pub(crate) fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, DatabaseError> {
     fs::read_dir(directory)
         .map_err(|_| FileError::NotFound(directory.clone()))?
         .filter_map(|entry| {
@@ -386,28 +386,28 @@ pub fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, DatabaseE
 
 //PLUGINS
 
-pub fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginError> {
-    trace!("Starting find_all_plugins function");
+pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginError> {
+    trace_fn!("find_all_plugins", "Starting find_all_plugins function");
     let plugin_infos = find_plugin_tags(xml_data)?;
-    debug!("Found {} plugin infos", plugin_infos.len());
+    trace_fn!("find_all_plugins", "Found {} plugin infos", plugin_infos.len());
 
     let config = CONFIG.as_ref().map_err(|e| PluginError::ConfigError(e.clone()))?;
     let db_dir = &config.live_database_dir;
-    trace!("Database directory: {:?}", db_dir);
+    trace_fn!("find_all_plugins", "Database directory: {:?}", db_dir);
 
     let db_path = get_most_recent_db_file(&PathBuf::from(db_dir))
         .map_err(PluginError::DatabaseError)?;
-    debug!("Using database file: {:?}", db_path);
+    trace_fn!("find_all_plugins", "Using database file: {:?}", db_path);
 
     let ableton_db = AbletonDatabase::new(db_path).map_err(PluginError::DatabaseError)?;
 
     let mut plugins = Vec::with_capacity(plugin_infos.len());
     for (index, info) in plugin_infos.iter().enumerate() {
-        trace!("Processing plugin info {}: {:?}", index, info.dev_identifier);
+        trace_fn!("find_all_plugins", "Processing plugin info {}: {:?}", index, info.dev_identifier);
         let db_plugin = ableton_db.get_plugin_by_dev_identifier(&info.dev_identifier)?;
         let plugin = match db_plugin {
             Some(db_plugin) => {
-                debug!("Found matching plugin {} {} on system, flagging as installed",
+                debug_fn!("find_all_plugins", "Found plugin {} {} on system, flagging as installed",
                     db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
                     db_plugin.name.green()
                 );
@@ -457,7 +457,7 @@ struct SourceContext {
     branch_device_id: Option<String>,
 }
 
-pub fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseError> {
+pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseError> {
     trace_fn!("find_plugin_tags", "Starting function");
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
@@ -657,7 +657,7 @@ pub(crate) fn parse_plugin_format(dev_identifier: &str) -> Option<PluginFormat> 
 //SAMPLES
 
 
-pub fn find_sample_path_data(xml_data: &[u8]) -> Result<Vec<String>, XmlParseError> {
+pub(crate) fn find_sample_path_data(xml_data: &[u8]) -> Result<Vec<String>, XmlParseError> {
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
 
@@ -711,7 +711,7 @@ pub fn find_sample_path_data(xml_data: &[u8]) -> Result<Vec<String>, XmlParseErr
 }
 
 
-pub fn parse_sample_paths(xml_data: &[u8], major_version: u32) -> Result<HashMap<String, Vec<PathBuf>>, SampleError> {
+pub(crate) fn parse_sample_paths(xml_data: &[u8], major_version: u32) -> Result<HashMap<String, Vec<PathBuf>>, SampleError> {
     let mut sample_paths: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
     if major_version < 11 {
@@ -790,7 +790,7 @@ fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, SampleError> {
 //TIME SIGNATURE
 
 
-pub fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetError> {
+pub(crate) fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetError> {
     debug!("Updating time signature");
 
     let search_query = "EnumEvent";
@@ -842,7 +842,7 @@ pub fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetErro
 /// let error = parse_encoded_time_signature("invalid").unwrap_err();
 /// assert!(matches!(error, TimeSignatureError::ParseEncodedError(_)));
 /// ```
-pub fn parse_encoded_time_signature(value: &str) -> Result<i32, TimeSignatureError> {
+pub(crate) fn parse_encoded_time_signature(value: &str) -> Result<i32, TimeSignatureError> {
     trace!("Attempting to parse encoded time signature value: '{}'", value);
 
     i32::from_str(value)
@@ -873,7 +873,7 @@ pub fn parse_encoded_time_signature(value: &str) -> Result<i32, TimeSignatureErr
 /// assert_eq!(version.minor_version, 10);
 /// assert_eq!(version.schema_change_count, 3);
 /// ```
-pub fn load_version(xml_data: &[u8]) -> Result<AbletonVersion, VersionError> {
+pub(crate) fn load_version(xml_data: &[u8]) -> Result<AbletonVersion, VersionError> {
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
     let mut buf = Vec::new();
@@ -919,7 +919,7 @@ pub fn load_version(xml_data: &[u8]) -> Result<AbletonVersion, VersionError> {
 //METADATA
 
 
-pub fn load_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), FileError> {
+pub(crate) fn load_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), FileError> {
     let metadata = fs::metadata(file_path).map_err(|e| FileError::MetadataError {
         path: file_path.clone(),
         source: e,
@@ -940,7 +940,7 @@ pub fn load_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, Dat
 }
 
 
-pub fn load_file_hash(file_path: &PathBuf) -> Result<String, FileError> {
+pub(crate) fn load_file_hash(file_path: &PathBuf) -> Result<String, FileError> {
     let mut file = File::open(file_path).map_err(|e| FileError::HashingError {
         path: file_path.clone(),
         source: e,
@@ -969,7 +969,7 @@ pub fn load_file_hash(file_path: &PathBuf) -> Result<String, FileError> {
 }
 
 
-pub fn load_file_name(file_path: &PathBuf) -> Result<String, FileError> {
+pub(crate) fn load_file_name(file_path: &PathBuf) -> Result<String, FileError> {
     file_path
         .file_name()
         .ok_or_else(|| FileError::NameError("File name is not present".to_string()))?
