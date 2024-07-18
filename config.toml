@@ -1,0 +1,15 @@
+# config.toml
+
+# if you change this file while the program is running, you need to restart the program for changes to take effect.
+
+# I haven't added support for multiple project folders yet, so if you add multiple directories to the paths, only the first one will be scanned.
+
+paths = [
+    '{USER_HOME}\Documents\Projects\90s'
+]
+
+# use {USER_HOME} as a shortcut to your user folder
+
+database_path = '{USER_HOME}\Documents\ableton_manager\ableton_live_sets.db'
+
+live_database_dir = '{USER_HOME}\AppData\Local\Ableton\Live Database'

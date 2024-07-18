@@ -116,9 +116,6 @@ impl LiveSet {
 
         let plugins = live_set.load_plugins()?;
 
-
-
-
         Ok(Self {
             samples,
             plugins,
@@ -135,7 +132,7 @@ impl LiveSet {
         let config = CONFIG.as_ref().map_err(|e| LiveSetError::ConfigError(e.clone()))?;
         let db_dir = &config.live_database_dir;
         let ableton_db = AbletonDatabase::new(
-            get_most_recent_db_file(db_dir)
+            get_most_recent_db_file(&PathBuf::from(db_dir))
                 .map_err(LiveSetError::DatabaseError)?
         ).map_err(LiveSetError::DatabaseError)?;
         
@@ -224,7 +221,7 @@ impl LiveSet {
 
 fn main() {
     Builder::new()
-        .filter_level(LevelFilter::Debug)
+        .filter_level(LevelFilter::Trace)
         .init();
 
     let mut paths: Vec<PathBuf> = Vec::new();
