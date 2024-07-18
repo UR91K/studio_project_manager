@@ -143,26 +143,11 @@ pub fn parse_encoded_value(value: &str) -> Result<i32, TimeSignatureError> {
         })
 }
 
-pub fn validate_time_signature(value: i32) -> Result<i32, TimeSignatureError> {
-    trace!("Validating time signature value: {}", value);
-
-    const MIN_VALUE: i32 = 0;
-    const MAX_VALUE: i32 = 16777215; // 2^24 - 1
-
-    if value >= MIN_VALUE && value <= MAX_VALUE {
-        debug!("Time signature value {} is valid", value);
-        Ok(value)
-    } else {
-        error!("Invalid time signature value: {}. Valid range is {} to {}", value, MIN_VALUE, MAX_VALUE);
-        Err(TimeSignatureError::InvalidEncodedValue(value))
-    }
-}
-
 pub fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * KB;
     const GB: u64 = 1024 * MB;
-    
+
     let formatted = if size < KB {
         format!("{} B", size)
     } else if size < MB {
@@ -172,7 +157,7 @@ pub fn format_file_size(size: u64) -> String {
     } else {
         format!("{:.2} GB", size as f64 / GB as f64)
     };
-    
+
     formatted
 }
 
@@ -209,10 +194,10 @@ pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
 }
 
 pub fn find_tags(
-    xml_data: &[u8], 
-    search_queries: &[&str], 
+    xml_data: &[u8],
+    search_queries: &[&str],
     target_depth: u8
-) -> Result<HashMap<String,Vec<Vec<XmlTag>> >, XmlParseError> 
+) -> Result<HashMap<String,Vec<Vec<XmlTag>> >, XmlParseError>
 {
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
@@ -229,7 +214,7 @@ pub fn find_tags(
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref event)) => {
                 let name = event.name().to_string_result()?;
-                
+
                 if search_queries.contains(&name.as_str()) {
                     in_target_tag = true;
                     depth = 0;
@@ -258,7 +243,7 @@ pub fn find_tags(
                         });
                 }
             }
-            
+
             Ok(Event::End(ref event)) => {
                 let name = event.name().to_string_result()?;
                 if name == current_query {
@@ -299,10 +284,10 @@ fn read_value<R: BufRead>(reader: &mut Reader<R>) -> Result<String, XmlParseErro
 }
 
 pub fn find_attribute(
-    tags: &[XmlTag], 
-    tag_query: &str, 
+    tags: &[XmlTag],
+    tag_query: &str,
     attribute_query: &str
-) -> Result<String, AttributeError> 
+) -> Result<String, AttributeError>
 {
     trace!("Searching for attribute '{}' in tag '{}'", attribute_query, tag_query);
 
@@ -412,7 +397,7 @@ pub fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginError> {
     let config = CONFIG.as_ref().map_err(|e| PluginError::ConfigError(e.clone()))?;
     let db_dir = &config.live_database_dir;
     trace!("Database directory: {:?}", db_dir);
-    
+
     let db_path = get_most_recent_db_file(&PathBuf::from(db_dir))
         .map_err(PluginError::DatabaseError)?;
     debug!("Using database file: {:?}", db_path);
@@ -490,7 +475,7 @@ pub fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseErro
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let name = e.name().to_string_result()?;
-                
+
                 depth += 1;
 
                 match name.as_str() {
@@ -499,7 +484,7 @@ pub fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseErro
                         trace_fn!("find_plugin_tags", "Found SourceContext event");
                         current_source_context = parse_source_context(&mut reader, &mut depth)?;
                     }
-                    
+
                     "PluginDesc" => {
                         trace_fn!("find_plugin_tags", "Entered PluginDesc event");
                         in_plugin_desc = true;
@@ -533,7 +518,7 @@ pub fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseErro
             Ok(Event::Eof) => break,
             Err(e) => {
                 trace_fn!("find_plugin_tags", "Error parsing XML: {:?}", e);
-                return Err(XmlParseError::QuickXmlError(e)) 
+                return Err(XmlParseError::QuickXmlError(e))
             },
             _ => (),
         }
