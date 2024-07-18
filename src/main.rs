@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::{fs};
+use std::f32::NAN;
 use std::path::{PathBuf};
+use std::str::FromStr;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -11,9 +13,8 @@ use env_logger::Builder;
 
 use log::{debug, error, info};
 use log::LevelFilter;
-
-
-
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use custom_types::{AbletonVersion,
                    Id,
                    KeySignature,
@@ -23,8 +24,8 @@ use custom_types::{AbletonVersion,
 };
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::errors::LiveSetError;
-use crate::helpers::{decompress_gzip_file, load_version, find_all_plugins, format_file_size, load_file_hash, load_file_name, load_file_timestamps, parse_sample_paths, validate_ableton_file, load_time_signature, get_most_recent_db_file};
+use crate::errors::{LiveSetError, XmlParseError};
+use crate::helpers::{decompress_gzip_file, load_version, find_all_plugins, format_file_size, load_file_hash, load_file_name, load_file_timestamps, parse_sample_paths, validate_ableton_file, load_time_signature, get_most_recent_db_file, StringResultExt};
 
 mod custom_types;
 mod errors;
@@ -182,7 +183,7 @@ impl LiveSet {
 
         Ok(all_samples)
     }
-
+    
     
     //TODO: Add furthest bar finding
     //TODO: Add tempo finding
