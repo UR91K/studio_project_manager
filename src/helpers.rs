@@ -513,7 +513,6 @@ struct SourceContext {
     branch_device_id: Option<String>,
 }
 
-//TODO FIX PLUGINS NOT BEING FOUND. save logs to a file, check if parse_source_context ever works. etc
 pub fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseError> {
     trace_fn!("find_plugin_tags", "Starting function");
     let mut reader = Reader::from_reader(xml_data);
