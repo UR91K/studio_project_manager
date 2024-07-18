@@ -208,44 +208,6 @@ pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
     Ok(decompressed_data)
 }
 
-pub fn parse_xml_data(
-    xml_data: &[u8], 
-    file_name: &Option<String>, 
-    file_path: &Path
-) -> Result<Element, XmlParseError> 
-{
-    trace!("Starting XML parsing for file: {:?}", file_name);
-
-    let xml_data_str = from_utf8(xml_data).map_err(|err| {
-        let msg = format!("{:?}: Failed to convert decompressed data to UTF-8 string", file_name);
-        error!("{}: {}", msg, err);
-        XmlParseError::Utf8Error(err)
-    })?;
-
-    let xml_start = xml_data_str.find("<?xml").ok_or_else(|| {
-        let msg = format!("{:?}: No XML data found in decompressed file", file_name);
-        warn!("{}", msg);
-        XmlParseError::DataNotFound
-    })?;
-
-    let xml_slice = &xml_data_str[xml_start..];
-    // trace!("XML start found at index: {}", xml_start);
-
-    let start_time_xml = Instant::now();
-    let root = Element::from_reader(Cursor::new(xml_slice.as_bytes())).map_err(|err| {
-        let msg = format!("{:?}: {} is not a valid XML file", file_name, file_path.display());
-        error!("{}: {}", msg, err);
-        XmlParseError::ElementTreeError(err)
-    })?;
-
-    let duration = start_time_xml.elapsed();
-
-    debug!("XML Element created in {:.2?}", duration);
-
-    trace!("XML parsing completed successfully");
-    Ok(root)
-}
-
 pub fn find_tags(
     xml_data: &[u8], 
     search_queries: &[&str], 
@@ -581,6 +543,7 @@ pub fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseErro
     debug_fn!("find_plugin_tags", "Found {} plugin info tags", plugin_info_tags.len());
     Ok(plugin_info_tags)
 }
+
 
 fn parse_source_context<R: BufRead>(reader: &mut Reader<R>, depth: &mut i32) -> Result<Option<SourceContext>, XmlParseError> {
     trace_fn!("parse_source_context", "Starting function");
