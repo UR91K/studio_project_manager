@@ -183,7 +183,51 @@ impl LiveSet {
 
         Ok(all_samples)
     }
-    
+
+    pub fn find_furthest_bar(&self) -> Result<f64, LiveSetError> {
+        let mut reader = Reader::from_reader(&self.xml_data[..]);
+        reader.trim_text(true);
+
+        let mut buf = Vec::new();
+        let mut largest_current_end_value = f64::NAN;
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Empty(ref event)) | Ok(Event::Start(ref event)) => {
+                    let name = event.name().to_string_result()?;
+
+                    if name == "CurrentEnd" {
+                        for attr in event.attributes().flatten() {
+                            if attr.key.as_ref().to_string_result()? == "Value" {
+                                if let Ok(value_str) = std::str::from_utf8(&attr.value) {
+                                    if let Ok(value) = f64::from_str(value_str) {
+                                        largest_current_end_value = if largest_current_end_value.is_nan() {
+                                            value
+                                        } else {
+                                            largest_current_end_value.max(value)
+                                        };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(LiveSetError::XmlError(XmlParseError::QuickXmlError(e))),
+                _ => (),
+            }
+            buf.clear();
+        }
+
+        let beats_per_bar = self.time_signature.numerator as f64;
+        let furthest_bar = if largest_current_end_value.is_nan() {
+            0.0
+        } else {
+            largest_current_end_value / beats_per_bar
+        };
+
+        Ok(furthest_bar)
+    }
     
     //TODO: Add furthest bar finding
     //TODO: Add tempo finding
