@@ -470,8 +470,8 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                let name = e.name().to_string_result()?;
+            Ok(Event::Start(ref event)) => {
+                let name = event.name().to_string_result()?;
 
                 depth += 1;
 
@@ -503,8 +503,8 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
                     _ => {}
                 }
             }
-            Ok(Event::End(ref e)) => {
-                let name = e.name().to_string_result()?;
+            Ok(Event::End(ref event)) => {
+                let name = event.name().to_string_result()?;
                 depth -= 1;
 
                 if name == "PluginDesc" {
@@ -537,19 +537,19 @@ fn parse_source_context<R: BufRead>(reader: &mut Reader<R>, depth: &mut i32) -> 
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
+            Ok(Event::Start(ref event)) => {
                 *depth += 1;
-                let name = e.name().to_string_result()?;
+                let name = event.name().to_string_result()?;
                 match name.as_str() {
                     "Value" => in_value = true,
                     "BranchSourceContext" if in_value => in_branch_source_context = true,
                     _ => {}
                 }
             }
-            Ok(Event::Empty(ref e)) if in_branch_source_context => {
-                let name = e.name().to_string_result()?;
+            Ok(Event::Empty(ref event)) if in_branch_source_context => {
+                let name = event.name().to_string_result()?;
                 if name == "BranchDeviceId" {
-                    let attributes = parse_event_attributes(e)?;
+                    let attributes = parse_event_attributes(event)?;
                     if let Some(value) = attributes.get("Value") {
                         trace_fn!("parse_source_context", "Found BranchDeviceId: {:?}", value);
                         source_context.branch_device_id = Some(value.clone());
@@ -557,8 +557,8 @@ fn parse_source_context<R: BufRead>(reader: &mut Reader<R>, depth: &mut i32) -> 
                     }
                 }
             }
-            Ok(Event::End(ref e)) => {
-                let name = e.name().to_string_result()?;
+            Ok(Event::End(ref event)) => {
+                let name = event.name().to_string_result()?;
                 match name.as_str() {
                     "Value" => in_value = false,
                     "BranchSourceContext" => in_branch_source_context = false,
@@ -609,9 +609,9 @@ fn parse_plugin_info<R: BufRead>(source_context: &SourceContext, reader: &mut Re
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
+            Ok(Event::Start(ref event)) => {
                 *depth += 1;
-                let tag_name = e.name().to_string_result()?;
+                let tag_name = event.name().to_string_result()?;
                 if matches!(tag_name.as_str(), "PlugName" | "Name") {
                     trace_fn!("parse_plugin_info", "Found PlugName: {:?}", read_value(reader)?);
 
@@ -928,15 +928,15 @@ pub(crate) fn find_post_10_tempo(xml_data: &[u8]) -> Result<f64, TempoError> {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref event)) => {
-                if event.name().as_ref().to_string_result()? == "Tempo" {
+                if event.name().to_string_result()? == "Tempo" {
                     in_tempo = true;
                 }
             }
             
             Ok(Event::Empty(ref event)) if in_tempo => {
-                if event.name().as_ref().to_string_result()? == "Manual" {
+                if event.name().to_string_result()? == "Manual" {
                     for attr in event.attributes().flatten() {
-                        if attr.key.as_ref().to_string_result()? == "Value" {
+                        if attr.key.to_string_result()? == "Value" {
                             return attr.value.as_ref()
                                 .to_str_result()?
                                 .parse::<f64>()
@@ -947,7 +947,7 @@ pub(crate) fn find_post_10_tempo(xml_data: &[u8]) -> Result<f64, TempoError> {
             }
             
             Ok(Event::End(ref event)) if in_tempo => {
-                if event.name().as_ref().to_string_result()? == "Tempo" {
+                if event.name().to_string_result()? == "Tempo" {
                     in_tempo = false;
                 }
             }
