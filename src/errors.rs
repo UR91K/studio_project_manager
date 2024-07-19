@@ -252,6 +252,24 @@ impl From<toml::de::Error> for ConfigError {
 }
 
 #[derive(Error, Debug)]
+pub enum TempoError {
+    #[error("XML parsing error: {0}")]
+    XmlError(#[from] XmlParseError),
+
+    #[error("Tempo not found")]
+    TempoNotFound,
+
+    #[error("Invalid tempo value")]
+    InvalidTempoValue,
+}
+
+impl From<XmlParseError> for TempoError {
+    fn from(error: XmlParseError) -> Self {
+        TempoError::XmlError(error)
+    }
+}
+
+#[derive(Error, Debug)]
 pub enum LiveSetError {
     #[error("XML error: {0}")]
     XmlError(#[from] XmlParseError),
@@ -282,6 +300,9 @@ pub enum LiveSetError {
 
     #[error("Configuration error: {0}")]
     ConfigError(#[from] ConfigError),
+
+    #[error("Tempo error: {0}")]
+    TempoError(#[from] TempoError),
 }
 
 impl From<rusqlite::Error> for LiveSetError {

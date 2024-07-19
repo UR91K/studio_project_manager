@@ -26,7 +26,7 @@ use custom_types::{AbletonVersion,
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::errors::{LiveSetError, XmlParseError};
-use crate::helpers::{decompress_gzip_file, load_version, find_all_plugins, format_file_size, load_file_hash, load_file_name, load_file_timestamps, parse_sample_paths, validate_ableton_file, load_time_signature, get_most_recent_db_file, StringResultExt, find_tags, find_attribute};
+use crate::helpers::{decompress_gzip_file, load_version, find_all_plugins, format_file_size, load_file_hash, load_file_name, load_file_timestamps, parse_sample_paths, validate_ableton_file, load_time_signature, get_most_recent_db_file, StringResultExt, find_tags, find_attribute, find_post_10_tempo, find_pre_10_tempo};
 
 mod custom_types;
 mod errors;
@@ -245,9 +245,9 @@ impl LiveSet {
 
         let tempo_value:f64 = if self.ableton_version.major >= 10 ||
             (self.ableton_version.major == 9 && self.ableton_version.minor >= 7) {
-            self.find_post_10_tempo()?
+            find_post_10_tempo(&self.xml_data)?
         } else {
-            self.find_pre_10_tempo()?
+            find_pre_10_tempo(&self.xml_data)?
         };
 
         let new_tempo:f64 = ((tempo_value * 1_000_000.0) / 1_000_000.0).round();
@@ -263,66 +263,6 @@ impl LiveSet {
 
         Ok(())
     }
-
-    fn find_post_10_tempo(&self) -> Result<f64, LiveSetError> {
-        let mut reader = Reader::from_reader(&self.xml_data[..]);
-        reader.trim_text(true);
-        let mut buf = Vec::new();
-        let mut in_tempo = false;
-
-        loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(ref e)) => {
-                    if e.name().as_ref().to_string_result()? == "Tempo" {
-                        in_tempo = true;
-                    }
-                }
-                Ok(Event::Empty(ref e)) if in_tempo => {
-                    if e.name().as_ref() == b"Manual" {
-                        for attr in e.attributes().flatten() {
-                            if attr.key.as_ref().to_string_result()? == "Value" {
-                                return attr.value.as_ref()
-                                    .to_str_result()
-                                    .and_then(|s| s.parse::<f64>().map_err(|_| XmlParseError::InvalidStructure))
-                                    .map_err(LiveSetError::XmlError);
-                            }
-                        }
-                    }
-                }
-                Ok(Event::End(ref e)) if in_tempo => {
-                    if e.name().as_ref().to_string_result()? == "Tempo" {
-                        in_tempo = false;
-                    }
-                }
-                Ok(Event::Eof) => break,
-                Err(e) => return Err(LiveSetError::XmlError(XmlParseError::QuickXmlError(e))),
-                _ => (),
-            }
-            buf.clear();
-        }
-
-        Err(LiveSetError::XmlError(XmlParseError::EventNotFound("Tempo".to_string())))
-    }
-
-    fn find_pre_10_tempo(&self) -> Result<f64, LiveSetError> {
-        let search_queries = &["FloatEvent"];
-        let target_depth: u8 = 0;
-        let float_event_tags = find_tags(&self.xml_data, search_queries, target_depth)?;
-
-        if let Some(float_event_list) = float_event_tags.get("FloatEvent") {
-            for tags in float_event_list {
-                if !tags.is_empty() {
-                    if let Ok(value_str) = find_attribute(&tags[..], "FloatEvent", "Value") {
-                        return value_str.parse::<f64>()
-                            .map_err(|_| LiveSetError::XmlError(XmlParseError::InvalidStructure));
-                    }
-                }
-            }
-        }
-
-        Err(LiveSetError::XmlError(XmlParseError::EventNotFound("FloatEvent".to_string())))
-    }
-    
     
     //TODO: Add duration estimation (based on furthest bar and tempo)
     //TODO: Add key signature finding
