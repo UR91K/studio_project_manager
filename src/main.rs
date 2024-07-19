@@ -1,21 +1,18 @@
 use std::collections::HashSet;
-use std::{fs};
-use std::f32::NAN;
-use std::path::{PathBuf};
+use std::fs;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Instant;
 
 use anyhow::Result;
 use chrono::{DateTime, Local};
 use colored::*;
-
 use env_logger::Builder;
-
 use log::{debug, error, info};
 use log::LevelFilter;
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use toml::value::Time;
+
 use custom_types::{AbletonVersion,
                    Id,
                    KeySignature,
@@ -23,10 +20,25 @@ use custom_types::{AbletonVersion,
                    Sample,
                    TimeSignature,
 };
+
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::errors::{LiveSetError, XmlParseError};
-use crate::helpers::{decompress_gzip_file, load_version, find_all_plugins, format_file_size, load_file_hash, load_file_name, load_file_timestamps, parse_sample_paths, validate_ableton_file, load_time_signature, get_most_recent_db_file, StringResultExt, find_tags, find_attribute, find_post_10_tempo, find_pre_10_tempo};
+use crate::helpers::{decompress_gzip_file, 
+                     find_all_plugins, 
+                     find_post_10_tempo, 
+                     find_pre_10_tempo, 
+                     format_file_size, 
+                     get_most_recent_db_file, 
+                     load_file_hash, 
+                     load_file_name, 
+                     load_file_timestamps, 
+                     load_time_signature, 
+                     load_version, 
+                     parse_sample_paths, 
+                     StringResultExt, 
+                     validate_ableton_file
+};
 
 mod custom_types;
 mod errors;
