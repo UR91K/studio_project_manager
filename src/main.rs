@@ -1,3 +1,4 @@
+// /src/main.rs
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
