@@ -1,12 +1,12 @@
-use thiserror::Error;
-use std::path::PathBuf;
-use std::io;
-use std::str::Utf8Error;
+use elementtree::Error as ElementTreeError;
 use quick_xml::events::attributes::AttrError;
 use quick_xml::Error as QuickXmlError;
-use elementtree::Error as ElementTreeError;
 use rusqlite;
 use serde::de::Error;
+use std::io;
+use std::path::PathBuf;
+use std::str::Utf8Error;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum XmlParseError {
@@ -38,7 +38,7 @@ pub enum XmlParseError {
     MissingRequiredAttribute(String),
 
     #[error("Unknown plugin format: {0}")]
-    UnknownPluginFormat(String)
+    UnknownPluginFormat(String),
 }
 
 #[derive(Error, Debug)]
@@ -227,12 +227,12 @@ impl std::fmt::Display for ConfigError {
 impl Clone for ConfigError {
     fn clone(&self) -> Self {
         match self {
-            ConfigError::ReadError(e) => ConfigError::ReadError(
-                io::Error::new(e.kind(), e.to_string())
-            ),
-            ConfigError::ParseError(e) => ConfigError::ParseError(
-                toml::de::Error::custom(e.to_string())
-            ),
+            ConfigError::ReadError(e) => {
+                ConfigError::ReadError(io::Error::new(e.kind(), e.to_string()))
+            }
+            ConfigError::ParseError(e) => {
+                ConfigError::ParseError(toml::de::Error::custom(e.to_string()))
+            }
             ConfigError::HomeDirError => ConfigError::HomeDirError,
             ConfigError::InvalidPath(s) => ConfigError::InvalidPath(s.clone()),
         }
