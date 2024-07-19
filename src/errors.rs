@@ -263,12 +263,6 @@ pub enum TempoError {
     InvalidTempoValue,
 }
 
-impl From<XmlParseError> for TempoError {
-    fn from(error: XmlParseError) -> Self {
-        TempoError::XmlError(error)
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum LiveSetError {
     #[error("XML error: {0}")]
