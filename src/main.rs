@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -17,7 +16,7 @@ use custom_types::{AbletonVersion, Id, KeySignature, Plugin, Sample, TimeSignatu
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::errors::{LiveSetError, XmlParseError};
+use crate::errors::{AttributeError, LiveSetError, XmlParseError};
 use crate::helpers::{
     decompress_gzip_file, find_all_plugins, find_post_10_tempo, find_pre_10_tempo,
     format_file_size, get_most_recent_db_file, load_file_hash, load_file_name,
@@ -206,20 +205,21 @@ impl LiveSet {
                     let name = event.name().to_string_result()?;
 
                     if name == "CurrentEnd" {
-                        for attr in event.attributes().flatten() {
-                            if attr.key.as_ref().to_string_result()? == "Value" {
-                                if let Ok(value_str) = std::str::from_utf8(&attr.value) {
-                                    if let Ok(value) = f64::from_str(value_str) {
-                                        largest_current_end_value =
-                                            if largest_current_end_value.is_nan() {
-                                                value
-                                            } else {
-                                                largest_current_end_value.max(value)
-                                            };
-                                    }
-                                }
-                            }
-                        }
+                        largest_current_end_value = event.attributes().flatten()
+                            .find(|attr| attr.key.as_ref().to_string_result().ok() == Some("Value".to_string()))
+                            .ok_or(LiveSetError::AttributeError(AttributeError::ValueNotFound("CurrentEnd".to_string())))
+                            .and_then(|attr| String::from_utf8(attr.value.to_vec())
+                                .map_err(|e| LiveSetError::XmlError(XmlParseError::Utf8Error(e.utf8_error())))
+                            )
+                            .and_then(|value_str| value_str.parse::<f64>()
+                                .map_err(|e| LiveSetError::XmlError(XmlParseError::InvalidStructure))
+                            )
+                            .map(|value| if largest_current_end_value.is_nan() {
+                                value
+                            } else {
+                                largest_current_end_value.max(value)
+                            })
+                            .unwrap_or(largest_current_end_value);
                     }
                 }
                 Ok(Event::Eof) => break,
@@ -277,6 +277,9 @@ impl LiveSet {
     //TODO: Separate helpers.rs into modules and create a mod.rs file.
     //TODO: Add duration estimation (based on furthest bar and tempo)
     //TODO: Add key signature finding
+    
+    //TODO: Add fuzzy search function with levenshtein distance
+    //TODO: Create 5NF database and translation system
 
     #[allow(dead_code)]
     pub fn reload_if_changed(&mut self) -> Result<bool, LiveSetError> {
