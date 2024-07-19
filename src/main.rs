@@ -87,7 +87,7 @@ impl LiveSet {
     /// * Ableton version information cannot be parsed from the XML data
     fn new(file_path: PathBuf) -> Result<Self, LiveSetError> {
         validate_ableton_file(&file_path)?;
-        
+
         let file_name:String = load_file_name(&file_path)?;
         let (modified_time, created_time) = load_file_timestamps(&file_path)?;
         let file_hash:String = load_file_hash(&file_path)?;
@@ -117,10 +117,10 @@ impl LiveSet {
         let samples = live_set.load_samples()?;
 
         let plugins = live_set.load_plugins()?;
-        
+
         live_set.update_furthest_bar()?;
         live_set.update_tempo()?;
-        
+
         Ok(Self {
             samples,
             plugins,
@@ -229,7 +229,7 @@ impl LiveSet {
         } else {
             largest_current_end_value / beats_per_bar
         };
-        
+
         self.furthest_bar = Some(furthest_bar);
         Ok(())
     }
@@ -254,16 +254,17 @@ impl LiveSet {
 
         if Some(new_tempo) != previous_tempo {
             self.tempo = Some(new_tempo);
-            info_fn!("update_tempo", "{} ({:?}): updated tempo from {:?} to {}", 
-                  self.file_name, 
-                  self.id, 
-                  previous_tempo, 
+            info_fn!("update_tempo", "{} ({:?}): updated tempo from {:?} to {}",
+                  self.file_name,
+                  self.id,
+                  previous_tempo,
                   new_tempo);
         }
 
         Ok(())
     }
-    
+
+    //TODO: Separate helpers.rs into modules and create a mod.rs file.
     //TODO: Add duration estimation (based on furthest bar and tempo)
     //TODO: Add key signature finding
 
