@@ -1,8 +1,8 @@
 use crate::custom_types::PluginFormat;
-use crate::errors::DatabaseError;
-use crate::helpers::parse_plugin_format;
+use crate::error::DatabaseError;
 use rusqlite::{params, types::Type, Connection, Result as SqliteResult};
 use std::path::PathBuf;
+use crate::utils::plugins::parse_plugin_format;
 
 #[derive(Debug)]
 pub struct DbPlugin {

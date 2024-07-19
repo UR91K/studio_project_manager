@@ -3,7 +3,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use anyhow::Result;
 use chrono::{DateTime, Local};
 use colored::*;
 use env_logger::Builder;
@@ -16,19 +15,24 @@ use custom_types::{AbletonVersion, Id, KeySignature, Plugin, Sample, TimeSignatu
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::errors::{AttributeError, LiveSetError, XmlParseError};
-use crate::helpers::{
-    decompress_gzip_file, find_all_plugins, find_post_10_tempo, find_pre_10_tempo,
-    format_file_size, get_most_recent_db_file, load_file_hash, load_file_name,
-    load_file_timestamps, load_time_signature, load_version, parse_sample_paths,
-    validate_ableton_file, StringResultExt,
+use crate::error::{AttributeError, LiveSetError, XmlParseError};
+
+use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamps};
+use crate::utils::plugins::{find_all_plugins, get_most_recent_db_file};
+use crate::utils::samples::parse_sample_paths;
+use crate::utils::tempo::{find_post_10_tempo, find_pre_10_tempo};
+use crate::utils::time_signature::load_time_signature;
+use crate::utils::version::load_version;
+use crate::utils::{
+    decompress_gzip_file, format_file_size, validate_ableton_file, StringResultExt,
 };
 
 mod ableton_db;
 mod config;
 mod custom_types;
-mod errors;
-mod helpers;
+mod error;
+
+mod utils;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -205,19 +209,32 @@ impl LiveSet {
                     let name = event.name().to_string_result()?;
 
                     if name == "CurrentEnd" {
-                        largest_current_end_value = event.attributes().flatten()
-                            .find(|attr| attr.key.as_ref().to_string_result().ok() == Some("Value".to_string()))
-                            .ok_or(LiveSetError::AttributeError(AttributeError::ValueNotFound("CurrentEnd".to_string())))
-                            .and_then(|attr| String::from_utf8(attr.value.to_vec())
-                                .map_err(|e| LiveSetError::XmlError(XmlParseError::Utf8Error(e.utf8_error())))
-                            )
-                            .and_then(|value_str| value_str.parse::<f64>()
-                                .map_err(|e| LiveSetError::XmlError(XmlParseError::InvalidStructure))
-                            )
-                            .map(|value| if largest_current_end_value.is_nan() {
-                                value
-                            } else {
-                                largest_current_end_value.max(value)
+                        largest_current_end_value = event
+                            .attributes()
+                            .flatten()
+                            .find(|attr| {
+                                attr.key.as_ref().to_string_result().ok()
+                                    == Some("Value".to_string())
+                            })
+                            .ok_or(LiveSetError::AttributeError(AttributeError::ValueNotFound(
+                                "CurrentEnd".to_string(),
+                            )))
+                            .and_then(|attr| {
+                                String::from_utf8(attr.value.to_vec()).map_err(|e| {
+                                    LiveSetError::XmlError(XmlParseError::Utf8Error(e.utf8_error()))
+                                })
+                            })
+                            .and_then(|value_str| {
+                                value_str.parse::<f64>().map_err(|_e| {
+                                    LiveSetError::XmlError(XmlParseError::InvalidStructure)
+                                })
+                            })
+                            .map(|value| {
+                                if largest_current_end_value.is_nan() {
+                                    value
+                                } else {
+                                    largest_current_end_value.max(value)
+                                }
                             })
                             .unwrap_or(largest_current_end_value);
                     }
@@ -274,10 +291,9 @@ impl LiveSet {
         Ok(())
     }
 
-    //TODO: Separate helpers.rs into modules and create a mod.rs file.
     //TODO: Add duration estimation (based on furthest bar and tempo)
     //TODO: Add key signature finding
-    
+
     //TODO: Add fuzzy search function with levenshtein distance
     //TODO: Create 5NF database and translation system
 
