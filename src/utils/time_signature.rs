@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use log::{debug, error, info, trace};
 
-use crate::custom_types::TimeSignature;
 use crate::error::{LiveSetError, TimeSignatureError, XmlParseError};
+use crate::models::TimeSignature;
 use crate::utils::xml_parsing::find_empty_event;
 
 pub(crate) fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetError> {

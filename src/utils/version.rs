@@ -4,8 +4,8 @@ use log::debug;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
-use crate::custom_types::AbletonVersion;
 use crate::error::{VersionError, XmlParseError};
+use crate::models::AbletonVersion;
 
 /// Extracts the Ableton version from XML data.
 ///

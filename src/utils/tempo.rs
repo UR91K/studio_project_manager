@@ -2,8 +2,8 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 
 use crate::error::{TempoError, XmlParseError};
-use crate::utils::StringResultExt;
 use crate::utils::xml_parsing::{find_attribute, find_tags};
+use crate::utils::StringResultExt;
 
 pub(crate) fn find_post_10_tempo(xml_data: &[u8]) -> Result<f64, TempoError> {
     let mut reader = Reader::from_reader(xml_data);

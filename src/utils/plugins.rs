@@ -9,11 +9,11 @@ use quick_xml::Reader;
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::custom_types::{Plugin, PluginFormat, PluginInfo};
 use crate::error::{DatabaseError, FileError, PluginError, XmlParseError};
+use crate::models::{Plugin, PluginFormat, PluginInfo};
+use crate::utils::xml_parsing::{parse_event_attributes, read_value};
 use crate::utils::StringResultExt;
 use crate::{debug_fn, trace_fn};
-use crate::utils::xml_parsing::{parse_event_attributes, read_value};
 
 pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginError> {
     trace_fn!("find_all_plugins", "Starting find_all_plugins function");
