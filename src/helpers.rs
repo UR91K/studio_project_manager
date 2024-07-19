@@ -19,8 +19,13 @@ use quick_xml::Reader;
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::custom_types::{AbletonVersion, Plugin, PluginFormat, PluginInfo, TimeSignature, XmlTag};
-use crate::errors::{AttributeError, DatabaseError, FileError, LiveSetError, PluginError, SampleError, TempoError, TimeSignatureError, VersionError, XmlParseError};
+use crate::custom_types::{
+    AbletonVersion, Plugin, PluginFormat, PluginInfo, TimeSignature, XmlTag,
+};
+use crate::errors::{
+    AttributeError, DatabaseError, FileError, LiveSetError, PluginError, SampleError, TempoError,
+    TimeSignatureError, VersionError, XmlParseError,
+};
 
 #[macro_export]
 macro_rules! trace_fn {
@@ -59,7 +64,7 @@ macro_rules! error_fn {
 
 //ACTUAL HELPERS
 
-pub (crate) trait StringResultExt {
+pub(crate) trait StringResultExt {
     fn to_string_result(&self) -> Result<String, XmlParseError>;
     fn to_str_result(&self) -> Result<&str, XmlParseError>;
 }
@@ -88,8 +93,7 @@ impl StringResultExt for &[u8] {
 
 impl<'a> StringResultExt for Cow<'a, [u8]> {
     fn to_string_result(&self) -> Result<String, XmlParseError> {
-        String::from_utf8(self.to_vec())
-            .map_err(|e| XmlParseError::Utf8Error(e.utf8_error()))
+        String::from_utf8(self.to_vec()).map_err(|e| XmlParseError::Utf8Error(e.utf8_error()))
     }
 
     fn to_str_result(&self) -> Result<&str, XmlParseError> {
@@ -100,7 +104,7 @@ impl<'a> StringResultExt for Cow<'a, [u8]> {
     }
 }
 
-pub (crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
+pub(crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
     if !file_path.exists() {
         return Err(FileError::NotFound(file_path.to_path_buf()));
     }
@@ -158,12 +162,15 @@ pub(crate) fn format_file_size(size: u64) -> String {
 /// let decompressed_data = decompress_gzip_file(&file_path).expect("Failed to decompress file");
 /// println!("Decompressed {} bytes", decompressed_data.len());
 /// ```
-pub (crate)fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
+pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
     info!("Attempting to extract gzipped data from: {:?}", file_path);
     trace!("Opening file for gzip decompression");
 
     let file = File::open(file_path).map_err(|error| {
-        error!("Failed to open file for gzip decompression: {:?}", file_path);
+        error!(
+            "Failed to open file for gzip decompression: {:?}",
+            file_path
+        );
         FileError::GzipDecompressionError {
             path: file_path.to_path_buf(),
             source: error,
@@ -175,27 +182,31 @@ pub (crate)fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileErro
     let mut decompressed_data = Vec::new();
 
     trace!("Beginning decompression of gzipped data");
-    gzip_decoder.read_to_end(&mut decompressed_data).map_err(|error| {
-        error!("Failed to decompress gzipped data from: {:?}", file_path);
-        FileError::GzipDecompressionError {
-            path: file_path.to_path_buf(),
-            source: error,
-        }
-    })?;
+    gzip_decoder
+        .read_to_end(&mut decompressed_data)
+        .map_err(|error| {
+            error!("Failed to decompress gzipped data from: {:?}", file_path);
+            FileError::GzipDecompressionError {
+                path: file_path.to_path_buf(),
+                source: error,
+            }
+        })?;
 
     let decompressed_size = decompressed_data.len();
-    info!("Successfully decompressed {} bytes from: {:?}", decompressed_size, file_path);
+    info!(
+        "Successfully decompressed {} bytes from: {:?}",
+        decompressed_size, file_path
+    );
     debug!("Decompressed data size: {} bytes", decompressed_size);
 
     Ok(decompressed_data)
 }
 
-pub (crate) fn find_tags(
+pub(crate) fn find_tags(
     xml_data: &[u8],
     search_queries: &[&str],
-    target_depth: u8
-) -> Result<HashMap<String,Vec<Vec<XmlTag>> >, XmlParseError>
-{
+    target_depth: u8,
+) -> Result<HashMap<String, Vec<Vec<XmlTag>>>, XmlParseError> {
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
 
@@ -232,12 +243,10 @@ pub (crate) fn find_tags(
                         let value = attr.value.to_string_result()?;
                         attributes.push((key, value));
                     }
-                    current_tags.get_mut(&current_query)
+                    current_tags
+                        .get_mut(&current_query)
                         .ok_or(XmlParseError::InvalidStructure)?
-                        .push(XmlTag {
-                            name,
-                            attributes,
-                        });
+                        .push(XmlTag { name, attributes });
                 }
             }
 
@@ -245,9 +254,12 @@ pub (crate) fn find_tags(
                 let name = event.name().to_string_result()?;
                 if name == current_query {
                     in_target_tag = false;
-                    all_tags.entry(current_query.clone()).or_default()
+                    all_tags
+                        .entry(current_query.clone())
+                        .or_default()
                         .push(current_tags[&current_query].clone());
-                    current_tags.get_mut(&current_query)
+                    current_tags
+                        .get_mut(&current_query)
                         .ok_or(XmlParseError::InvalidStructure)?
                         .clear();
                 } else if in_target_tag {
@@ -266,38 +278,53 @@ pub (crate) fn find_tags(
 fn read_value<R: BufRead>(reader: &mut Reader<R>) -> Result<String, XmlParseError> {
     let mut buf = Vec::new();
     match reader.read_event_into(&mut buf)? {
-        Event::Text(e) => Ok(e.unescape().map_err(|_| XmlParseError::InvalidStructure)?.to_string()),
+        Event::Text(e) => Ok(e
+            .unescape()
+            .map_err(|_| XmlParseError::InvalidStructure)?
+            .to_string()),
         Event::Empty(e) | Event::Start(e) => {
             for attr in e.attributes() {
-                let attr = attr.map_err(|e|XmlParseError::AttrError(e))?;
+                let attr = attr.map_err(|e| XmlParseError::AttrError(e))?;
                 if attr.key.as_ref() == b"Value" {
-                    return Ok(attr.unescape_value().map_err(XmlParseError::QuickXmlError)?.to_string());
+                    return Ok(attr
+                        .unescape_value()
+                        .map_err(XmlParseError::QuickXmlError)?
+                        .to_string());
                 }
             }
             Err(XmlParseError::InvalidStructure)
-        },
+        }
         _ => Err(XmlParseError::InvalidStructure),
     }
 }
 
-pub (crate) fn find_attribute(
+pub(crate) fn find_attribute(
     tags: &[XmlTag],
     tag_query: &str,
-    attribute_query: &str
-) -> Result<String, AttributeError>
-{
-    trace!("Searching for attribute '{}' in tag '{}'", attribute_query, tag_query);
+    attribute_query: &str,
+) -> Result<String, AttributeError> {
+    trace!(
+        "Searching for attribute '{}' in tag '{}'",
+        attribute_query,
+        tag_query
+    );
 
     for tag in tags {
         if tag.name == tag_query {
             debug!("Found matching tag: '{}'", tag_query);
             for (key, value) in &tag.attributes {
                 if key == attribute_query {
-                    debug!("Found attribute '{}' with value '{}'", attribute_query, value);
+                    debug!(
+                        "Found attribute '{}' with value '{}'",
+                        attribute_query, value
+                    );
                     return Ok(value.clone());
                 }
             }
-            debug!("Attribute '{}' not found in tag '{}'", attribute_query, tag_query);
+            debug!(
+                "Attribute '{}' not found in tag '{}'",
+                attribute_query, tag_query
+            );
             return Err(AttributeError::ValueNotFound(attribute_query.to_string()));
         }
     }
@@ -306,7 +333,10 @@ pub (crate) fn find_attribute(
     Err(AttributeError::NotFound(tag_query.to_string()))
 }
 
-pub(crate) fn find_empty_event(xml_data: &[u8], search_query: &str) -> Result<HashMap<String, String>, XmlParseError> {
+pub(crate) fn find_empty_event(
+    xml_data: &[u8],
+    search_query: &str,
+) -> Result<HashMap<String, String>, XmlParseError> {
     debug!("Searching for empty event with query: {}", search_query);
 
     let mut reader = Reader::from_reader(xml_data);
@@ -335,9 +365,12 @@ pub(crate) fn find_empty_event(xml_data: &[u8], search_query: &str) -> Result<Ha
                 return Err(XmlParseError::EventNotFound(search_query.to_string()));
             }
             Err(error) => {
-                debug!("Error while searching for empty event named {:?}: {:?}", search_query, error);
-                return Err(XmlParseError::QuickXmlError(error))
-            },
+                debug!(
+                    "Error while searching for empty event named {:?}: {:?}",
+                    search_query, error
+                );
+                return Err(XmlParseError::QuickXmlError(error));
+            }
             _ => (),
         }
         buffer.clear();
@@ -356,7 +389,6 @@ fn parse_event_attributes(event: &BytesStart) -> Result<HashMap<String, String>,
     Ok(attributes)
 }
 
-
 pub(crate) fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, DatabaseError> {
     fs::read_dir(directory)
         .map_err(|_| FileError::NotFound(directory.clone()))?
@@ -364,7 +396,9 @@ pub(crate) fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, Da
             let entry = entry.ok()?;
             let path = entry.path();
             if path.extension().and_then(|ext| ext.to_str()) == Some("db") {
-                entry.metadata().ok()
+                entry
+                    .metadata()
+                    .ok()
                     .and_then(|meta| meta.modified().ok())
                     .map(|modified| (path, modified))
             } else {
@@ -389,25 +423,38 @@ pub(crate) fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, Da
 pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginError> {
     trace_fn!("find_all_plugins", "Starting find_all_plugins function");
     let plugin_infos = find_plugin_tags(xml_data)?;
-    trace_fn!("find_all_plugins", "Found {} plugin infos", plugin_infos.len());
+    trace_fn!(
+        "find_all_plugins",
+        "Found {} plugin infos",
+        plugin_infos.len()
+    );
 
-    let config = CONFIG.as_ref().map_err(|e| PluginError::ConfigError(e.clone()))?;
+    let config = CONFIG
+        .as_ref()
+        .map_err(|e| PluginError::ConfigError(e.clone()))?;
     let db_dir = &config.live_database_dir;
     trace_fn!("find_all_plugins", "Database directory: {:?}", db_dir);
 
-    let db_path = get_most_recent_db_file(&PathBuf::from(db_dir))
-        .map_err(PluginError::DatabaseError)?;
+    let db_path =
+        get_most_recent_db_file(&PathBuf::from(db_dir)).map_err(PluginError::DatabaseError)?;
     trace_fn!("find_all_plugins", "Using database file: {:?}", db_path);
 
     let ableton_db = AbletonDatabase::new(db_path).map_err(PluginError::DatabaseError)?;
 
     let mut plugins = Vec::with_capacity(plugin_infos.len());
     for (index, info) in plugin_infos.iter().enumerate() {
-        trace_fn!("find_all_plugins", "Processing plugin info {}: {:?}", index, info.dev_identifier);
+        trace_fn!(
+            "find_all_plugins",
+            "Processing plugin info {}: {:?}",
+            index,
+            info.dev_identifier
+        );
         let db_plugin = ableton_db.get_plugin_by_dev_identifier(&info.dev_identifier)?;
         let plugin = match db_plugin {
             Some(db_plugin) => {
-                debug_fn!("find_all_plugins", "Found plugin {} {} on system, flagging as installed",
+                debug_fn!(
+                    "find_all_plugins",
+                    "Found plugin {} {} on system, flagging as installed",
                     db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
                     db_plugin.name.green()
                 );
@@ -425,7 +472,7 @@ pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginErr
                     plugin_format: info.plugin_format,
                     installed: true,
                 }
-            },
+            }
             None => {
                 debug!("Plugin not found in database: {:?}", info);
                 Plugin {
@@ -442,7 +489,7 @@ pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginErr
                     plugin_format: info.plugin_format,
                     installed: false,
                 }
-            },
+            }
         };
         plugins.push(plugin);
     }
@@ -450,7 +497,6 @@ pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginErr
     debug!("Found {} plugins", plugins.len());
     Ok(plugins)
 }
-
 
 #[derive(Debug, Default, Clone)]
 struct SourceContext {
@@ -476,7 +522,6 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
                 depth += 1;
 
                 match name.as_str() {
-
                     "SourceContext" => {
                         trace_fn!("find_plugin_tags", "Found SourceContext event");
                         current_source_context = parse_source_context(&mut reader, &mut depth)?;
@@ -490,14 +535,19 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
                     "VstPluginInfo" | "Vst3PluginInfo" if in_plugin_desc => {
                         trace_fn!("find_plugin_tags", "Found PluginInfo event");
                         if let Some(source_context) = current_source_context.take() {
-                            if let Some(plugin_info) = parse_plugin_info(&source_context, &mut reader, &mut depth)? {
+                            if let Some(plugin_info) =
+                                parse_plugin_info(&source_context, &mut reader, &mut depth)?
+                            {
                                 debug_fn!("find_plugin_tags", "Found plugin: {:?}", plugin_info);
                                 plugin_info_tags.push(plugin_info);
                             } else {
                                 trace_fn!("find_plugin_tags", "Plugin info parsed but not valid");
                             }
                         } else {
-                            trace_fn!("find_plugin_tags", "No valid SourceContext found for plugin");
+                            trace_fn!(
+                                "find_plugin_tags",
+                                "No valid SourceContext found for plugin"
+                            );
                         }
                     }
                     _ => {}
@@ -515,19 +565,25 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
             Ok(Event::Eof) => break,
             Err(e) => {
                 trace_fn!("find_plugin_tags", "Error parsing XML: {:?}", e);
-                return Err(XmlParseError::QuickXmlError(e))
-            },
+                return Err(XmlParseError::QuickXmlError(e));
+            }
             _ => (),
         }
         buf.clear();
     }
 
-    debug_fn!("find_plugin_tags", "Found {} plugin info tags", plugin_info_tags.len());
+    debug_fn!(
+        "find_plugin_tags",
+        "Found {} plugin info tags",
+        plugin_info_tags.len()
+    );
     Ok(plugin_info_tags)
 }
 
-
-fn parse_source_context<R: BufRead>(reader: &mut Reader<R>, depth: &mut i32) -> Result<Option<SourceContext>, XmlParseError> {
+fn parse_source_context<R: BufRead>(
+    reader: &mut Reader<R>,
+    depth: &mut i32,
+) -> Result<Option<SourceContext>, XmlParseError> {
     trace_fn!("parse_source_context", "Starting function");
     let mut buf = Vec::new();
     let start_depth = *depth;
@@ -574,7 +630,11 @@ fn parse_source_context<R: BufRead>(reader: &mut Reader<R>, depth: &mut i32) -> 
     }
 
     if let Some(branch_device_id) = &source_context.branch_device_id {
-        trace_fn!("parse_source_context", "Found valid SourceContext with BranchDeviceId: {:?}", branch_device_id);
+        trace_fn!(
+            "parse_source_context",
+            "Found valid SourceContext with BranchDeviceId: {:?}",
+            branch_device_id
+        );
         Ok(Some(source_context))
     } else {
         trace_fn!("parse_source_context", "No valid BranchDeviceId found");
@@ -582,25 +642,40 @@ fn parse_source_context<R: BufRead>(reader: &mut Reader<R>, depth: &mut i32) -> 
     }
 }
 
-
-fn parse_plugin_info<R: BufRead>(source_context: &SourceContext, reader: &mut Reader<R>, depth: &mut i32) -> Result<Option<PluginInfo>, XmlParseError> {
+fn parse_plugin_info<R: BufRead>(
+    source_context: &SourceContext,
+    reader: &mut Reader<R>,
+    depth: &mut i32,
+) -> Result<Option<PluginInfo>, XmlParseError> {
     trace_fn!("parse_plugin_info", "Starting function");
 
     let dev_identifier = match &source_context.branch_device_id {
         Some(id) => id,
         None => return Ok(None),
     };
-    trace_fn!("parse_plugin_info", "Found dev_identifier: {:?}", dev_identifier);
-    
+    trace_fn!(
+        "parse_plugin_info",
+        "Found dev_identifier: {:?}",
+        dev_identifier
+    );
+
     let plugin_format = match parse_plugin_format(dev_identifier) {
         Some(format) => {
-            trace_fn!("parse_plugin_info", "Successfully parsed plugin format: {:?}", format);
+            trace_fn!(
+                "parse_plugin_info",
+                "Successfully parsed plugin format: {:?}",
+                format
+            );
             format
-        },
+        }
         None => {
-            trace_fn!("parse_plugin_info", "Unable to determine plugin format for dev_identifier: {}", dev_identifier);
-            return Ok(None)
-        },
+            trace_fn!(
+                "parse_plugin_info",
+                "Unable to determine plugin format for dev_identifier: {}",
+                dev_identifier
+            );
+            return Ok(None);
+        }
     };
 
     let mut buf = Vec::new();
@@ -613,7 +688,11 @@ fn parse_plugin_info<R: BufRead>(source_context: &SourceContext, reader: &mut Re
                 *depth += 1;
                 let tag_name = event.name().to_string_result()?;
                 if matches!(tag_name.as_str(), "PlugName" | "Name") {
-                    trace_fn!("parse_plugin_info", "Found PlugName: {:?}", read_value(reader)?);
+                    trace_fn!(
+                        "parse_plugin_info",
+                        "Found PlugName: {:?}",
+                        read_value(reader)?
+                    );
 
                     name = read_value(reader)?;
                 }
@@ -629,15 +708,19 @@ fn parse_plugin_info<R: BufRead>(source_context: &SourceContext, reader: &mut Re
             _ => (),
         }
     }
-    trace_fn!("parse_plugin_info", "Found plugin: {} ({:?})", name, plugin_format);
-    
+    trace_fn!(
+        "parse_plugin_info",
+        "Found plugin: {} ({:?})",
+        name,
+        plugin_format
+    );
+
     Ok(Some(PluginInfo {
         name,
         dev_identifier: dev_identifier.to_string(),
         plugin_format,
     }))
 }
-
 
 pub(crate) fn parse_plugin_format(dev_identifier: &str) -> Option<PluginFormat> {
     if dev_identifier.starts_with("device:vst3:instr:") {
@@ -653,9 +736,7 @@ pub(crate) fn parse_plugin_format(dev_identifier: &str) -> Option<PluginFormat> 
     }
 }
 
-
 //SAMPLES
-
 
 pub(crate) fn find_sample_path_data(xml_data: &[u8]) -> Result<Vec<String>, XmlParseError> {
     let mut reader = Reader::from_reader(xml_data);
@@ -710,8 +791,10 @@ pub(crate) fn find_sample_path_data(xml_data: &[u8]) -> Result<Vec<String>, XmlP
     Ok(data_list)
 }
 
-
-pub(crate) fn parse_sample_paths(xml_data: &[u8], major_version: u32) -> Result<HashMap<String, Vec<PathBuf>>, SampleError> {
+pub(crate) fn parse_sample_paths(
+    xml_data: &[u8],
+    major_version: u32,
+) -> Result<HashMap<String, Vec<PathBuf>>, SampleError> {
     let mut sample_paths: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
     if major_version < 11 {
@@ -723,11 +806,11 @@ pub(crate) fn parse_sample_paths(xml_data: &[u8], major_version: u32) -> Result<
                 Ok(path) => {
                     debug!("Successfully decoded sample path {}: {:?}", index, path);
                     decoded_paths.push(path);
-                },
+                }
                 Err(e) => {
                     warn!("Failed to decode sample path {}: {:?}", index, e);
                     return Err(e);
-                },
+                }
             }
         }
         debug!("Found {} samples for version < 11", decoded_paths.len());
@@ -745,15 +828,15 @@ pub(crate) fn parse_sample_paths(xml_data: &[u8], major_version: u32) -> Result<
                     Ok(path) => {
                         debug!("Found sample path {} for '{}': {:?}", index, query, path);
                         paths.push(PathBuf::from(path));
-                    },
+                    }
                     Err(AttributeError::NotFound(_)) => {
                         warn!("Expected 'Path' tag not found for sample {} in '{}'. This may indicate an unexpected XML structure.", index, query);
                         continue;
-                    },
+                    }
                     Err(AttributeError::ValueNotFound(_)) => {
                         warn!("'Path' tag found for sample {} in '{}', but 'Value' attribute is missing. This may indicate corrupted or unexpected sample data.", index, query);
                         continue;
-                    },
+                    }
                 }
             }
             debug!("Found {} samples for '{}'", paths.len(), query);
@@ -765,12 +848,10 @@ pub(crate) fn parse_sample_paths(xml_data: &[u8], major_version: u32) -> Result<
     Ok(sample_paths)
 }
 
-
 fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, SampleError> {
     let abs_hash_path = abs_hash_path.replace("\\t", "").replace("\\n", "");
 
-    let byte_data = hex::decode(&abs_hash_path)
-        .map_err(SampleError::HexDecodeError)?;
+    let byte_data = hex::decode(&abs_hash_path).map_err(SampleError::HexDecodeError)?;
 
     let (cow, _, had_errors) = UTF_16LE.decode(&byte_data);
     if had_errors {
@@ -780,50 +861,49 @@ fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, SampleError> {
     let path_string = cow.replace("\u{0}", "");
     let path = PathBuf::from(path_string);
 
-    path.canonicalize().map_err(|e| SampleError::PathProcessingError(format!(
-        "Failed to canonicalize path: {}",
-        e
-    )))
+    path.canonicalize().map_err(|e| {
+        SampleError::PathProcessingError(format!("Failed to canonicalize path: {}", e))
+    })
 }
 
-
 //TIME SIGNATURE
-
 
 pub(crate) fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, LiveSetError> {
     debug!("Updating time signature");
 
     let search_query = "EnumEvent";
 
-    let event_attributes = find_empty_event(xml_data, search_query)
-        .map_err(|e| match e {
-            XmlParseError::EventNotFound(_) => LiveSetError::TimeSignatureError(TimeSignatureError::EnumEventNotFound),
-            _ => LiveSetError::XmlError(e),
-        })?;
+    let event_attributes = find_empty_event(xml_data, search_query).map_err(|e| match e {
+        XmlParseError::EventNotFound(_) => {
+            LiveSetError::TimeSignatureError(TimeSignatureError::EnumEventNotFound)
+        }
+        _ => LiveSetError::XmlError(e),
+    })?;
 
     debug!("Found time signature enum event");
     trace!("Attributes: {:?}", event_attributes);
 
     let value_attribute = event_attributes
         .get("Value")
-        .ok_or(LiveSetError::TimeSignatureError(TimeSignatureError::ValueAttributeNotFound))?;
+        .ok_or(LiveSetError::TimeSignatureError(
+            TimeSignatureError::ValueAttributeNotFound,
+        ))?;
 
     debug!("Found 'Value' attribute");
     trace!("Value: {}", value_attribute);
 
-    let encoded_value = parse_encoded_time_signature(value_attribute)
-        .map_err(LiveSetError::TimeSignatureError)?;
+    let encoded_value =
+        parse_encoded_time_signature(value_attribute).map_err(LiveSetError::TimeSignatureError)?;
     debug!("Parsed encoded value: {}", encoded_value);
 
-    let time_signature = TimeSignature::from_encoded(encoded_value)
-        .map_err(LiveSetError::TimeSignatureError)?;
+    let time_signature =
+        TimeSignature::from_encoded(encoded_value).map_err(LiveSetError::TimeSignatureError)?;
 
     debug!("Decoded time signature: {:?}", time_signature);
 
     info!(
         "Time signature updated: {}/{}",
-        time_signature.numerator,
-        time_signature.denominator
+        time_signature.numerator, time_signature.denominator
     );
 
     Ok(time_signature)
@@ -843,11 +923,17 @@ pub(crate) fn load_time_signature(xml_data: &[u8]) -> Result<TimeSignature, Live
 /// assert!(matches!(error, TimeSignatureError::ParseEncodedError(_)));
 /// ```
 pub(crate) fn parse_encoded_time_signature(value: &str) -> Result<i32, TimeSignatureError> {
-    trace!("Attempting to parse encoded time signature value: '{}'", value);
+    trace!(
+        "Attempting to parse encoded time signature value: '{}'",
+        value
+    );
 
     i32::from_str(value)
         .map(|parsed_value| {
-            debug!("Successfully parsed encoded value '{}' to {}", value, parsed_value);
+            debug!(
+                "Successfully parsed encoded value '{}' to {}",
+                value, parsed_value
+            );
             parsed_value
         })
         .map_err(|e| {
@@ -886,9 +972,10 @@ pub(crate) fn load_version(xml_data: &[u8]) -> Result<AbletonVersion, VersionErr
                 let name_str = from_utf8(name.as_ref())?;
 
                 if name_str != "Ableton" {
-                    return Err(VersionError::InvalidFileStructure(
-                        format!("First element is '{}', expected 'Ableton'", name_str)
-                    ));
+                    return Err(VersionError::InvalidFileStructure(format!(
+                        "First element is '{}', expected 'Ableton'",
+                        name_str
+                    )));
                 }
                 debug!("Found Ableton tag, attributes:");
                 for attr_result in event.attributes() {
@@ -907,7 +994,7 @@ pub(crate) fn load_version(xml_data: &[u8]) -> Result<AbletonVersion, VersionErr
             }
             Ok(Event::Eof) => {
                 return Err(VersionError::InvalidFileStructure(
-                    "Reached end of file without finding Ableton tag".into()
+                    "Reached end of file without finding Ableton tag".into(),
                 ));
             }
             Ok(_) => continue,
@@ -917,7 +1004,6 @@ pub(crate) fn load_version(xml_data: &[u8]) -> Result<AbletonVersion, VersionErr
 }
 
 // TEMPO
-
 
 pub(crate) fn find_post_10_tempo(xml_data: &[u8]) -> Result<f64, TempoError> {
     let mut reader = Reader::from_reader(xml_data);
@@ -932,12 +1018,14 @@ pub(crate) fn find_post_10_tempo(xml_data: &[u8]) -> Result<f64, TempoError> {
                     in_tempo = true;
                 }
             }
-            
+
             Ok(Event::Empty(ref event)) if in_tempo => {
                 if event.name().to_string_result()? == "Manual" {
                     for attr in event.attributes().flatten() {
                         if attr.key.to_string_result()? == "Value" {
-                            return attr.value.as_ref()
+                            return attr
+                                .value
+                                .as_ref()
                                 .to_str_result()?
                                 .parse::<f64>()
                                 .map_err(|_| TempoError::InvalidTempoValue);
@@ -945,13 +1033,13 @@ pub(crate) fn find_post_10_tempo(xml_data: &[u8]) -> Result<f64, TempoError> {
                     }
                 }
             }
-            
+
             Ok(Event::End(ref event)) if in_tempo => {
                 if event.name().to_string_result()? == "Tempo" {
                     in_tempo = false;
                 }
             }
-            
+
             Ok(Event::Eof) => break,
             Err(error) => return Err(TempoError::XmlError(XmlParseError::QuickXmlError(error))),
             _ => (),
@@ -971,7 +1059,8 @@ pub(crate) fn find_pre_10_tempo(xml_data: &[u8]) -> Result<f64, TempoError> {
         for tags in float_event_list {
             if !tags.is_empty() {
                 if let Ok(value_str) = find_attribute(&tags[..], "FloatEvent", "Value") {
-                    return value_str.parse::<f64>()
+                    return value_str
+                        .parse::<f64>()
                         .map_err(|_| TempoError::InvalidTempoValue);
                 }
             }
@@ -981,30 +1070,31 @@ pub(crate) fn find_pre_10_tempo(xml_data: &[u8]) -> Result<f64, TempoError> {
     Err(TempoError::TempoNotFound)
 }
 
-
 //METADATA
 
-
-pub(crate) fn load_file_timestamps(file_path: &PathBuf) -> Result<(DateTime<Local>, DateTime<Local>), FileError> {
+pub(crate) fn load_file_timestamps(
+    file_path: &PathBuf,
+) -> Result<(DateTime<Local>, DateTime<Local>), FileError> {
     let metadata = fs::metadata(file_path).map_err(|e| FileError::MetadataError {
         path: file_path.clone(),
         source: e,
     })?;
 
-    let modified_time = metadata.modified()
+    let modified_time = metadata
+        .modified()
         .map(DateTime::<Local>::from)
         .map_err(|e| FileError::MetadataError {
             path: file_path.clone(),
             source: e,
         })?;
 
-    let created_time = metadata.created()
+    let created_time = metadata
+        .created()
         .map(DateTime::<Local>::from)
         .unwrap_or_else(|_| Local::now());
 
     Ok((modified_time, created_time))
 }
-
 
 pub(crate) fn load_file_hash(file_path: &PathBuf) -> Result<String, FileError> {
     let mut file = File::open(file_path).map_err(|e| FileError::HashingError {
@@ -1016,10 +1106,12 @@ pub(crate) fn load_file_hash(file_path: &PathBuf) -> Result<String, FileError> {
     let mut buffer = [0; 1024];
 
     loop {
-        let bytes_read = file.read(&mut buffer).map_err(|e| FileError::HashingError {
-            path: file_path.clone(),
-            source: e,
-        })?;
+        let bytes_read = file
+            .read(&mut buffer)
+            .map_err(|e| FileError::HashingError {
+                path: file_path.clone(),
+                source: e,
+            })?;
 
         if bytes_read == 0 {
             break;
@@ -1033,7 +1125,6 @@ pub(crate) fn load_file_hash(file_path: &PathBuf) -> Result<String, FileError> {
 
     Ok(hash_string)
 }
-
 
 pub(crate) fn load_file_name(file_path: &PathBuf) -> Result<String, FileError> {
     file_path

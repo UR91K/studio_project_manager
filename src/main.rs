@@ -8,43 +8,28 @@ use anyhow::Result;
 use chrono::{DateTime, Local};
 use colored::*;
 use env_logger::Builder;
-use log::{debug, error, info};
 use log::LevelFilter;
+use log::{debug, error, info};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
-use custom_types::{AbletonVersion,
-                   Id,
-                   KeySignature,
-                   Plugin,
-                   Sample,
-                   TimeSignature,
-};
+use custom_types::{AbletonVersion, Id, KeySignature, Plugin, Sample, TimeSignature};
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::errors::{LiveSetError, XmlParseError};
-use crate::helpers::{decompress_gzip_file, 
-                     find_all_plugins, 
-                     find_post_10_tempo, 
-                     find_pre_10_tempo, 
-                     format_file_size, 
-                     get_most_recent_db_file, 
-                     load_file_hash, 
-                     load_file_name, 
-                     load_file_timestamps, 
-                     load_time_signature, 
-                     load_version, 
-                     parse_sample_paths, 
-                     StringResultExt, 
-                     validate_ableton_file
+use crate::helpers::{
+    decompress_gzip_file, find_all_plugins, find_post_10_tempo, find_pre_10_tempo,
+    format_file_size, get_most_recent_db_file, load_file_hash, load_file_name,
+    load_file_timestamps, load_time_signature, load_version, parse_sample_paths,
+    validate_ableton_file, StringResultExt,
 };
 
+mod ableton_db;
+mod config;
 mod custom_types;
 mod errors;
 mod helpers;
-mod ableton_db;
-mod config;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -100,13 +85,13 @@ impl LiveSet {
     fn new(file_path: PathBuf) -> Result<Self, LiveSetError> {
         validate_ableton_file(&file_path)?;
 
-        let file_name:String = load_file_name(&file_path)?;
+        let file_name: String = load_file_name(&file_path)?;
         let (modified_time, created_time) = load_file_timestamps(&file_path)?;
-        let file_hash:String = load_file_hash(&file_path)?;
-        let xml_data:Vec<u8> = decompress_gzip_file(&file_path)?;
-        let ableton_version:AbletonVersion = load_version(&xml_data)?;
-        let time_signature:TimeSignature = load_time_signature(&xml_data)?;
-        
+        let file_hash: String = load_file_hash(&file_path)?;
+        let xml_data: Vec<u8> = decompress_gzip_file(&file_path)?;
+        let ableton_version: AbletonVersion = load_version(&xml_data)?;
+        let time_signature: TimeSignature = load_time_signature(&xml_data)?;
+
         let mut live_set = LiveSet {
             id: Id::default(),
             file_path,
@@ -143,30 +128,33 @@ impl LiveSet {
     pub fn load_plugins(&mut self) -> Result<HashSet<Plugin>, LiveSetError> {
         Ok(find_all_plugins(&self.xml_data)?.into_iter().collect())
     }
-    
+
     #[allow(dead_code)]
     pub fn rescan_plugins(&mut self) -> Result<(), LiveSetError> {
-        let config = CONFIG.as_ref().map_err(|e| LiveSetError::ConfigError(e.clone()))?;
+        let config = CONFIG
+            .as_ref()
+            .map_err(|e| LiveSetError::ConfigError(e.clone()))?;
         let db_dir = &config.live_database_dir;
         let ableton_db = AbletonDatabase::new(
-            get_most_recent_db_file(&PathBuf::from(db_dir))
-                .map_err(LiveSetError::DatabaseError)?
-        ).map_err(LiveSetError::DatabaseError)?;
-        
+            get_most_recent_db_file(&PathBuf::from(db_dir)).map_err(LiveSetError::DatabaseError)?,
+        )
+        .map_err(LiveSetError::DatabaseError)?;
+
         let mut updated_plugins = HashSet::new();
-        
+
         for plugin in self.plugins.iter() {
             let mut updated_plugin = plugin.clone();
-            updated_plugin.rescan(&ableton_db)
+            updated_plugin
+                .rescan(&ableton_db)
                 .map_err(|e| LiveSetError::DatabaseError(e))?;
             updated_plugins.insert(updated_plugin);
         }
-        
+
         self.plugins = updated_plugins;
 
         Ok(())
     }
-    
+
     pub fn load_samples(&self) -> Result<HashSet<Sample>, LiveSetError> {
         #[cfg(debug_assertions)]
         let start_time = Instant::now();
@@ -178,7 +166,10 @@ impl LiveSet {
             for path in paths {
                 let sample = Sample::new(
                     Id::default(), //TODO: generate unique IDs
-                    path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+                    path.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned(),
                     path,
                 );
                 all_samples.insert(sample);
@@ -186,13 +177,15 @@ impl LiveSet {
         }
 
         #[cfg(debug_assertions)]
-        debug!("{}: found {} sample(s) in {:.2} ms",
+        debug!(
+            "{}: found {} sample(s) in {:.2} ms",
             self.file_name.bold().purple(),
             all_samples.len(),
             start_time.elapsed().as_secs_f64() * 1000.0
         );
 
-        info!("{}: found {} sample(s)",
+        info!(
+            "{}: found {} sample(s)",
             self.file_name.bold().purple(),
             all_samples.len()
         );
@@ -217,11 +210,12 @@ impl LiveSet {
                             if attr.key.as_ref().to_string_result()? == "Value" {
                                 if let Ok(value_str) = std::str::from_utf8(&attr.value) {
                                     if let Ok(value) = f64::from_str(value_str) {
-                                        largest_current_end_value = if largest_current_end_value.is_nan() {
-                                            value
-                                        } else {
-                                            largest_current_end_value.max(value)
-                                        };
+                                        largest_current_end_value =
+                                            if largest_current_end_value.is_nan() {
+                                                value
+                                            } else {
+                                                largest_current_end_value.max(value)
+                                            };
                                     }
                                 }
                             }
@@ -247,30 +241,34 @@ impl LiveSet {
     }
 
     pub fn update_tempo(&mut self) -> Result<(), LiveSetError> {
-
-        if self.ableton_version.major < 8 ||
-            (self.ableton_version.major == 8 && self.ableton_version.minor < 2) {
+        if self.ableton_version.major < 8
+            || (self.ableton_version.major == 8 && self.ableton_version.minor < 2)
+        {
             return Ok(());
         }
 
-        let previous_tempo:Option<f64> = self.tempo;
+        let previous_tempo: Option<f64> = self.tempo;
 
-        let tempo_value:f64 = if self.ableton_version.major >= 10 ||
-            (self.ableton_version.major == 9 && self.ableton_version.minor >= 7) {
+        let tempo_value: f64 = if self.ableton_version.major >= 10
+            || (self.ableton_version.major == 9 && self.ableton_version.minor >= 7)
+        {
             find_post_10_tempo(&self.xml_data)?
         } else {
             find_pre_10_tempo(&self.xml_data)?
         };
 
-        let new_tempo:f64 = ((tempo_value * 1_000_000.0) / 1_000_000.0).round();
+        let new_tempo: f64 = ((tempo_value * 1_000_000.0) / 1_000_000.0).round();
 
         if Some(new_tempo) != previous_tempo {
             self.tempo = Some(new_tempo);
-            info_fn!("update_tempo", "{} ({:?}): updated tempo from {:?} to {}",
-                  self.file_name,
-                  self.id,
-                  previous_tempo,
-                  new_tempo);
+            info_fn!(
+                "update_tempo",
+                "{} ({:?}): updated tempo from {:?} to {}",
+                self.file_name,
+                self.id,
+                previous_tempo,
+                new_tempo
+            );
         }
 
         Ok(())
@@ -290,7 +288,7 @@ impl LiveSet {
             let (modified_time, created_time) = load_file_timestamps(&self.file_path)?;
             let ableton_version = load_version(&xml_data)?;
             let time_signature = load_time_signature(&xml_data)?;
-            
+
             self.file_name = file_name;
             self.xml_data = xml_data;
             self.file_hash = current_hash;
@@ -299,7 +297,7 @@ impl LiveSet {
             self.last_scan_timestamp = Local::now();
             self.ableton_version = ableton_version;
             self.time_signature = time_signature;
-            
+
             self.samples = self.load_samples()?;
             self.plugins = self.load_plugins()?;
 
@@ -311,17 +309,23 @@ impl LiveSet {
 }
 
 fn main() {
-    Builder::new()
-        .filter_level(LevelFilter::Trace)
-        .init();
+    Builder::new().filter_level(LevelFilter::Trace).init();
 
     let mut paths: Vec<PathBuf> = Vec::new();
     // TEST DATA:
-    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\rodent beats\RODENT 4 Project\RODENT 4 ver 2.als")); // max size
-    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\Beats Project\a lot on my mind 130 Live11.als")); // mean size
+    paths.push(PathBuf::from(
+        r"C:\Users\judee\Documents\Projects\Beats\rodent beats\RODENT 4 Project\RODENT 4 ver 2.als",
+    )); // max size
+    paths.push(PathBuf::from(
+        r"C:\Users\judee\Documents\Projects\Beats\Beats Project\a lot on my mind 130 Live11.als",
+    )); // mean size
     paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\rust mastering\dp tekno 19 master Project\dp tekno 19 master.als")); // mode size
-    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\Beats Project\SET 120.als")); // median size
-    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\tape\white tape b Project\white tape b.als")); // min size
+    paths.push(PathBuf::from(
+        r"C:\Users\judee\Documents\Projects\Beats\Beats Project\SET 120.als",
+    )); // median size
+    paths.push(PathBuf::from(
+        r"C:\Users\judee\Documents\Projects\tape\white tape b Project\white tape b.als",
+    )); // min size
     for path in &paths {
         let start_time = Instant::now();
         let live_set_result = LiveSet::new(path.to_path_buf());
