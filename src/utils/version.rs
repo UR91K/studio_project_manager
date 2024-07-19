@@ -1,3 +1,5 @@
+// /src/utils/version.rs
+
 use std::str::from_utf8;
 
 use log::debug;
