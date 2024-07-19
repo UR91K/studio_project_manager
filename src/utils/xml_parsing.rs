@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use std::io::BufRead;
-use std::str::from_utf8;
+use crate::error::{AttributeError, XmlParseError};
+use crate::models::XmlTag;
+use crate::utils::StringResultExt;
 use log::{debug, trace};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
-use crate::custom_types::XmlTag;
-use crate::error::{AttributeError, XmlParseError};
-use crate::utils::StringResultExt;
+use std::collections::HashMap;
+use std::io::BufRead;
+use std::str::from_utf8;
 
 pub(crate) fn find_tags(
     xml_data: &[u8],
