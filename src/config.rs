@@ -1,4 +1,4 @@
-use crate::errors::ConfigError;
+use crate::error::ConfigError;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::path::PathBuf;

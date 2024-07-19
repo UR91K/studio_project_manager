@@ -12,8 +12,8 @@ use quick_xml::name::QName;
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::errors::{DatabaseError, SampleError, TimeSignatureError, VersionError};
-use crate::helpers::get_most_recent_db_file;
+use crate::error::{DatabaseError, SampleError, TimeSignatureError, VersionError};
+use crate::utils::plugins::get_most_recent_db_file;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Id(u64);
