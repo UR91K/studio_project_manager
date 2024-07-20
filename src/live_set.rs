@@ -167,18 +167,17 @@ impl LiveSet {
             }
         }
 
-        #[cfg(debug_assertions)]
-        debug!(
-            "{}: found {} sample(s) in {:.2} ms",
+        
+        info!(
+            "{}: Total samples after deduplication: {}",
             self.file_name.bold().purple(),
             all_samples.len(),
-            start_time.elapsed().as_secs_f64() * 1000.0
+            
         );
-
-        info!(
-            "{}: found {} sample(s)",
-            self.file_name.bold().purple(),
-            all_samples.len()
+        #[cfg(debug_assertions)]
+        debug!(
+            "Finished collecting samples in {:.2} ms.", 
+            start_time.elapsed().as_secs_f64() * 1000.0
         );
 
         Ok(all_samples)
@@ -311,6 +310,43 @@ impl LiveSet {
             Ok(true)
         } else {
             Ok(false)
+        }
+    }
+}
+
+
+
+impl LiveSet {
+    pub(crate) fn log_info(&self) {
+        info!("LiveSet Information:");
+        info!("ID: {:?}", self.id);
+        info!("File Path: {:?}", self.file_path);
+        info!("File Name: {}", self.file_name);
+        info!("File Hash: {}", self.file_hash);
+        info!("Created Time: {}", self.created_time);
+        info!("Modified Time: {}", self.modified_time);
+        info!("Last Scan Timestamp: {}", self.last_scan_timestamp);
+        info!("Ableton Version: {}", self.ableton_version);
+        info!("Key Signature: {:?}", self.key_signature);
+        info!("Tempo: {:?} BPM", self.tempo);
+        info!("Time Signature: {}/{}", self.time_signature.numerator, self.time_signature.denominator);
+        info!("Estimated Duration: {:?}", self.estimated_duration);
+        info!("Furthest Bar: {:?}", self.furthest_bar);
+        info!("Number of Plugins: {}", self.plugins.len());
+        info!("Number of Samples: {}", self.samples.len());
+        
+        if !self.plugins.is_empty() {
+            info!("Plugins:");
+            for plugin in &self.plugins {
+                info!("  - {} ({})", plugin.name, if plugin.installed { "Installed" } else { "Not Installed" });
+            }
+        }
+
+        if !self.samples.is_empty() {
+            info!("Samples:");
+            for sample in &self.samples {
+                info!("  - {} ({})", sample.name, if sample.is_present { "Present" } else { "Missing" });
+            }
         }
     }
 }
