@@ -2,7 +2,6 @@
 
 //TODO deduplicate vst plugins before checking database
 //TODO avoid processing duplicated plugins in the first place
-//TODO
 
 use colored::*;
 use log::{debug, trace};
