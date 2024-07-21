@@ -167,16 +167,16 @@ impl LiveSet {
             }
         }
 
-        
+
         info!(
             "{}: Total samples after deduplication: {}",
             self.file_name.bold().purple(),
             all_samples.len(),
-            
+
         );
         #[cfg(debug_assertions)]
         debug!(
-            "Finished collecting samples in {:.2} ms.", 
+            "Finished collecting samples in {:.2} ms.",
             start_time.elapsed().as_secs_f64() * 1000.0
         );
 
@@ -334,7 +334,7 @@ impl LiveSet {
         info!("Furthest Bar: {:?}", self.furthest_bar);
         info!("Number of Plugins: {}", self.plugins.len());
         info!("Number of Samples: {}", self.samples.len());
-        
+
         if !self.plugins.is_empty() {
             info!("Plugins:");
             for plugin in &self.plugins {

@@ -83,28 +83,7 @@ pub(crate) fn find_tags(
     Ok(all_tags)
 }
 
-pub(crate) fn read_value<R: BufRead>(reader: &mut Reader<R>) -> Result<String, XmlParseError> {
-    let mut buf = Vec::new();
-    match reader.read_event_into(&mut buf)? {
-        Event::Text(e) => Ok(e
-            .unescape()
-            .map_err(|_| XmlParseError::InvalidStructure)?
-            .to_string()),
-        Event::Empty(e) | Event::Start(e) => {
-            for attr in e.attributes() {
-                let attr = attr.map_err(|e| XmlParseError::AttrError(e))?;
-                if attr.key.as_ref() == b"Value" {
-                    return Ok(attr
-                        .unescape_value()
-                        .map_err(XmlParseError::QuickXmlError)?
-                        .to_string());
-                }
-            }
-            Err(XmlParseError::InvalidStructure)
-        }
-        _ => Err(XmlParseError::InvalidStructure),
-    }
-}
+
 
 pub(crate) fn find_attribute(
     tags: &[XmlTag],
@@ -190,11 +169,21 @@ pub(crate) fn parse_event_attributes(
 ) -> Result<HashMap<String, String>, XmlParseError> {
     let mut attributes = HashMap::new();
     for attribute_result in event.attributes() {
-        let attribute = attribute_result.map_err(XmlParseError::AttrError)?;
-        let key = from_utf8(attribute.key.as_ref()).map_err(XmlParseError::Utf8Error)?;
-        let value = from_utf8(&attribute.value).map_err(XmlParseError::Utf8Error)?;
+        let attribute = attribute_result?;
+        let key = attribute.key.to_string_result()?;
+        let value = attribute.value.to_string_result()?;
         debug!("Found attribute: {} = {}", key, value);
         attributes.insert(key.to_string(), value.to_string());
     }
     Ok(attributes)
+}
+
+pub(crate) fn get_value_as_string_result(event: &BytesStart) -> Result<Option<String>, XmlParseError> {
+    for attribute_result in event.attributes() {
+        let attribute = attribute_result?;
+        if attribute.key.as_ref() == b"Value" {
+            return Ok(Some(attribute.value.to_string_result()?));
+        }
+    }
+    Ok(None)
 }

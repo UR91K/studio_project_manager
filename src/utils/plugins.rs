@@ -1,24 +1,108 @@
 // /src/utils/plugins.rs
 
+//TODO deduplicate vst plugins before checking database
+//TODO avoid processing duplicated plugins in the first place
+//TODO
+
+use colored::*;
+use log::{debug, trace};
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use std::fs;
 use std::io::BufRead;
 use std::path::PathBuf;
-
-use colored::*;
-use log::debug;
-use quick_xml::events::Event;
-use quick_xml::Reader;
+use std::sync::Arc;
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::error::{DatabaseError, FileError, PluginError, XmlParseError};
 use crate::models::{Plugin, PluginFormat, PluginInfo};
-use crate::utils::xml_parsing::{parse_event_attributes, read_value};
-use crate::utils::StringResultExt;
-use crate::{debug_fn, trace_fn};
+use crate::utils::xml_parsing::{get_value_as_string_result};
+use crate::utils::{EventExt, StringResultExt};
+use crate::{debug_fn, error_fn, trace_fn, warn_fn};
+
+// LINE TRACKER FOR DEBUGGING
+
+#[derive(Clone)]
+struct LineTrackingBuffer {
+    data: Arc<Vec<u8>>,
+    current_line: usize,
+    current_position: usize,
+}
+
+impl LineTrackingBuffer {
+    fn new(data: Vec<u8>) -> Self {
+        Self {
+            data: Arc::new(data),
+            current_line: 1,
+            current_position: 0,
+        }
+    }
+
+    fn get_line_number(&mut self, byte_position: usize) -> usize {
+        while self.current_position < byte_position && self.current_position < self.data.len() {
+            if self.data[self.current_position] == b'\n' {
+                self.current_line += 1;
+            }
+            self.current_position += 1;
+        }
+        self.current_line
+    }
+
+    fn update_position(&mut self, byte_position: usize) {
+        self.get_line_number(byte_position);
+    }
+}
+
+// PLUGIN SPECIFIC HELPERS
+
+pub(crate) fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, DatabaseError> {
+    fs::read_dir(directory)
+        .map_err(|_| FileError::NotFound(directory.clone()))?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("db") {
+                entry
+                    .metadata()
+                    .ok()
+                    .and_then(|meta| meta.modified().ok())
+                    .map(|modified| (path, modified))
+            } else {
+                None
+            }
+        })
+        .max_by_key(|(_, modified)| *modified)
+        .map(|(path, _)| path)
+        .ok_or_else(|| FileError::NotFound(directory.clone()))
+        .and_then(|path| {
+            if path.is_file() {
+                Ok(path)
+            } else {
+                Err(FileError::NotAFile(path))
+            }
+        })
+        .map_err(DatabaseError::FileError)
+}
+
+pub(crate) fn parse_plugin_format(dev_identifier: &str) -> Option<PluginFormat> {
+    if dev_identifier.starts_with("device:vst3:instr:") {
+        Some(PluginFormat::VST3Instrument)
+    } else if dev_identifier.starts_with("device:vst3:audiofx:") {
+        Some(PluginFormat::VST3AudioFx)
+    } else if dev_identifier.starts_with("device:vst:instr:") {
+        Some(PluginFormat::VST2Instrument)
+    } else if dev_identifier.starts_with("device:vst:audiofx:") {
+        Some(PluginFormat::VST2AudioFx)
+    } else {
+        None
+    }
+}
+
+// PARENT FUNCTION
 
 pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginError> {
-    trace_fn!("find_all_plugins", "Starting find_all_plugins function");
+    debug_fn!("find_all_plugins", "{}", "Starting function".bold().purple());
     let plugin_infos = find_plugin_tags(xml_data)?;
     trace_fn!(
         "find_all_plugins",
@@ -43,7 +127,7 @@ pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginErr
         trace_fn!(
             "find_all_plugins",
             "Processing plugin info {}: {:?}",
-            index,
+            index + 1,
             info.dev_identifier
         );
         let db_plugin = ableton_db.get_plugin_by_dev_identifier(&info.dev_identifier)?;
@@ -95,103 +179,108 @@ pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginErr
     Ok(plugins)
 }
 
-#[derive(Debug, Default, Clone)]
-struct SourceContext {
-    branch_device_id: Option<String>,
-}
-
-pub(crate) fn get_most_recent_db_file(directory: &PathBuf) -> Result<PathBuf, DatabaseError> {
-    fs::read_dir(directory)
-        .map_err(|_| FileError::NotFound(directory.clone()))?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) == Some("db") {
-                entry
-                    .metadata()
-                    .ok()
-                    .and_then(|meta| meta.modified().ok())
-                    .map(|modified| (path, modified))
-            } else {
-                None
-            }
-        })
-        .max_by_key(|(_, modified)| *modified)
-        .map(|(path, _)| path)
-        .ok_or_else(|| FileError::NotFound(directory.clone()))
-        .and_then(|path| {
-            if path.is_file() {
-                Ok(path)
-            } else {
-                Err(FileError::NotAFile(path))
-            }
-        })
-        .map_err(DatabaseError::FileError)
-}
+// XML PARSING
 
 pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseError> {
-    trace_fn!("find_plugin_tags", "Starting function");
+    trace_fn!("find_plugin_tags", "{}", "Starting function".bold().purple());
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
 
     let mut buf = Vec::new();
     let mut plugin_info_tags = Vec::new();
-    let mut current_source_context: Option<SourceContext> = None;
     let mut depth = 0;
-    let mut in_plugin_desc = false;
+    let mut current_branch_info: Option<String> = None;
+    let mut in_source_context = false;
+    let mut line_tracker = LineTrackingBuffer::new(xml_data.to_vec());
 
     loop {
+        let mut byte_pos = reader.buffer_position();
+        let line = line_tracker.get_line_number(byte_pos);
+
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref event)) => {
                 let name = event.name().to_string_result()?;
-
                 depth += 1;
 
                 match name.as_str() {
                     "SourceContext" => {
-                        trace_fn!("find_plugin_tags", "Found SourceContext event");
-                        current_source_context = parse_source_context(&mut reader, &mut depth)?;
+                        // trace_fn!("find_plugin_tags", "Found SourceContext at line {}", line);
+                        in_source_context = true;
+                    }
+
+                    "BranchSourceContext" => {
+                        trace_fn!(
+                            "find_plugin_tags",
+                            "[{}] Found BranchSourceContext event",
+                            line.to_string().yellow()
+                        );
+
+                        if in_source_context {
+                            trace_fn!(
+                                "find_plugin_tags",
+                                "[{}] In SourceContext, parsing BranchSourceContext",
+                                line.to_string().yellow()
+                            );
+                            current_branch_info = parse_branch_source_context(
+                                &mut reader,
+                                &mut depth,
+                                &mut byte_pos,
+                                &mut line_tracker,
+                            )?;
+                        }
                     }
 
                     "PluginDesc" => {
-                        trace_fn!("find_plugin_tags", "Entered PluginDesc event");
-                        in_plugin_desc = true;
-                    }
-
-                    "VstPluginInfo" | "Vst3PluginInfo" if in_plugin_desc => {
-                        trace_fn!("find_plugin_tags", "Found PluginInfo event");
-                        if let Some(source_context) = current_source_context.take() {
-                            if let Some(plugin_info) =
-                                parse_plugin_info(&source_context, &mut reader, &mut depth)?
-                            {
-                                debug_fn!("find_plugin_tags", "Found plugin: {:?}", plugin_info);
-                                plugin_info_tags.push(plugin_info);
-                            } else {
-                                trace_fn!("find_plugin_tags", "Plugin info parsed but not valid");
-                            }
-                        } else {
+                        if let Some(device_id) = current_branch_info.take() {
                             trace_fn!(
                                 "find_plugin_tags",
-                                "No valid SourceContext found for plugin"
+                                "[{}] Found PluginDesc, parsing...",
+                                line.to_string().yellow()
                             );
+
+                            if let Some(plugin_info) = parse_plugin_desc(
+                                &mut reader,
+                                &mut depth,
+                                device_id,
+                                &mut byte_pos,
+                                &mut line_tracker,
+                            )? {
+                                debug_fn!(
+                                    "find_plugin_tags",
+                                    "[{}] Found plugin: {}",
+                                    line.to_string().yellow(),
+                                    plugin_info
+                                );
+                                plugin_info_tags.push(plugin_info);
+                            }
                         }
                     }
+
                     _ => {}
                 }
             }
             Ok(Event::End(ref event)) => {
                 let name = event.name().to_string_result()?;
-                depth -= 1;
-
-                if name == "PluginDesc" {
-                    trace_fn!("find_plugin_tags", "Exited PluginDesc event");
-                    in_plugin_desc = false;
+                if name == "SourceContext" {
+                    // trace_fn!("find_plugin_tags", "Exited SourceContext at line {}", line);
+                    in_source_context = false;
                 }
+                if name == "PluginDesc" {
+                    // trace_fn!("find_plugin_tags", "Exited PluginDesc at line {}", line);
+                }
+                depth -= 1;
             }
+
             Ok(Event::Eof) => break,
-            Err(e) => {
-                trace_fn!("find_plugin_tags", "Error parsing XML: {:?}", e);
-                return Err(XmlParseError::QuickXmlError(e));
+
+            Err(error) => {
+                trace_fn!(
+                    "find_plugin_tags",
+                    "[{}] Error parsing XML: {:?}",
+                    line.to_string().yellow(),
+                    error
+                );
+                return Err(XmlParseError::QuickXmlError(error));
             }
             _ => (),
         }
@@ -206,158 +295,239 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
     Ok(plugin_info_tags)
 }
 
-fn parse_source_context<R: BufRead>(
+fn parse_branch_source_context<R: BufRead>(
     reader: &mut Reader<R>,
     depth: &mut i32,
-) -> Result<Option<SourceContext>, XmlParseError> {
-    trace_fn!("parse_source_context", "Starting function");
+    byte_pos: &mut usize,
+    line_tracker: &mut LineTrackingBuffer,
+) -> Result<Option<String>, XmlParseError> {
+    let mut line = line_tracker.get_line_number(*byte_pos);
+    trace_fn!(
+        "parse_branch_source_context",
+        "[{}] {}, depth: {}",
+        line.to_string().yellow(),
+        "Starting function".bold().purple(),
+        depth.to_string().red()
+    );
+
     let mut buf = Vec::new();
-    let start_depth = *depth;
-    let mut in_value = false;
-    let mut in_branch_source_context = false;
-    let mut source_context = SourceContext::default();
+    let mut browser_content_path = true;
+    let mut branch_device_id = None;
+    let mut read_count = 0;
 
     loop {
+        *byte_pos = reader.buffer_position();
+        line = line_tracker.get_line_number(*byte_pos);
+
+        if read_count > 2 && !browser_content_path {
+            trace_fn!(
+                "parse_branch_source_context",
+                "[{}] No BrowserContentPath found within first 2 reads; returning early",
+                line.to_string().yellow()
+            );
+            return Ok(None);
+        }
+
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref event)) => {
+            Ok(Event::Start(ref _event)) => {
+                read_count += 1;
                 *depth += 1;
+            }
+
+            Ok(Event::Empty(ref event)) => {
+                read_count += 1;
+
                 let name = event.name().to_string_result()?;
                 match name.as_str() {
-                    "Value" => in_value = true,
-                    "BranchSourceContext" if in_value => in_branch_source_context = true,
+                    "BrowserContentPath" => {
+                        trace_fn!(
+                            "parse_branch_source_context",
+                            "[{}] Found BrowserContentPath",
+                            line.to_string().yellow()
+                        );
+                        browser_content_path = true;
+                    }
+
+                    "BranchDeviceId" => {
+                        branch_device_id = event.get_value_as_string_result()?;
+                        trace_fn!(
+                            "parse_branch_source_context",
+                            "[{}] Found BranchDeviceId: {}",
+                            line.to_string().yellow(),
+                            branch_device_id.as_deref().unwrap_or("None")
+                        );
+                        break;
+                    }
+
                     _ => {}
                 }
             }
-            Ok(Event::Empty(ref event)) if in_branch_source_context => {
+
+            Ok(Event::End(ref _event)) => {
+                *depth -= 1;
+                // warn_fn!(
+                //     "parse_branch_source_context",
+                //     "Found unexpected End event {}",
+                //     line
+                // );
+                break;
+            }
+
+            Ok(Event::Eof) => {
+                warn_fn!(
+                    "parse_branch_source_context",
+                    "[{}] EOF reached",
+                    line.to_string().yellow()
+                );
+                return Err(XmlParseError::InvalidStructure);
+            }
+
+            Err(e) => {
+                error_fn!(
+                    "parse_branch_source_context",
+                    "[{}] Error parsing XML: {:?}",
+                    line,
+                    e
+                );
+                return Err(XmlParseError::QuickXmlError(e));
+            }
+
+            _ => (),
+        }
+    }
+
+    *byte_pos = reader.buffer_position();
+    line_tracker.update_position(*byte_pos);
+
+    if !browser_content_path {
+        trace_fn!("parse_branch_source_context", "Missing BrowserContentPath");
+        return Ok(None);
+    }
+
+    let Some(device_id) = branch_device_id else {
+        // trace_fn!("parse_branch_source_context", "Missing BranchDeviceId");
+        return Ok(None);
+    };
+
+    if !device_id.starts_with("device:vst:") && !device_id.starts_with("device:vst3:") {
+        trace_fn!("parse_branch_source_context", "Not a VST/VST3 plugin");
+        return Ok(None);
+    }
+
+    let vst_type = if device_id.contains("vst3:") {
+        "VST 3"
+    } else if device_id.contains("vst:") {
+        "VST 2"
+    } else {
+        ""
+    };
+
+    trace_fn!(
+        "parse_branch_source_context",
+        "[{}] Found valid {} plugin info",
+        line.to_string().yellow(),
+        vst_type,
+    );
+    Ok(Some(device_id))
+}
+
+fn parse_plugin_desc<R: BufRead>(
+    reader: &mut Reader<R>,
+    depth: &mut i32,
+    device_id: String,
+    byte_pos: &mut usize,
+    line_tracker: &mut LineTrackingBuffer,
+) -> Result<Option<PluginInfo>, XmlParseError> {
+    let mut line = line_tracker.get_line_number(*byte_pos);
+    trace_fn!(
+        "parse_plugin_desc", 
+        "[{}] Starting function", 
+        line.to_string().yellow()
+    );
+
+    let mut buf = Vec::new();
+    let start_depth = *depth;
+    // trace!("start depth: {}", start_depth);
+    let mut plugin_name = None;
+
+    loop {
+        *byte_pos = reader.buffer_position();
+        line = line_tracker.get_line_number(*byte_pos);
+
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(ref _event) => {
+                *depth += 1;
+            }
+
+            Event::Empty(ref event) => {
                 let name = event.name().to_string_result()?;
-                if name == "BranchDeviceId" {
-                    let attributes = parse_event_attributes(event)?;
-                    if let Some(value) = attributes.get("Value") {
-                        trace_fn!("parse_source_context", "Found BranchDeviceId: {:?}", value);
-                        source_context.branch_device_id = Some(value.clone());
+                // if line < 50000 {
+                //     trace!(
+                //         "Found empty event, name: {:?}, line: {}, depth: {}",
+                //         name,
+                //         line,
+                //         depth
+                //     );
+                // }
+
+                if (name == "PlugName" || name == "Name") && *depth == start_depth + 1 {
+                    if let Some(value) = get_value_as_string_result(event)? {
+                        plugin_name = Some(value);
+
+                        trace_fn!(
+                            "parse_plugin_desc",
+                            "[{}] Found plugin name: {}",
+                            line.to_string().yellow(),
+                            plugin_name.as_deref().unwrap_or("None"),
+                        );
                         break;
                     }
                 }
             }
-            Ok(Event::End(ref event)) => {
-                let name = event.name().to_string_result()?;
-                match name.as_str() {
-                    "Value" => in_value = false,
-                    "BranchSourceContext" => in_branch_source_context = false,
-                    "SourceContext" if *depth == start_depth => break,
-                    _ => {}
-                }
+
+            Event::End(ref _event) => {
                 *depth -= 1;
+                // warn_fn!("parse_plugin_desc", "[{}] Found unexpected end tag in PluginDesc; could indicate failure to parse plugin name", line);
+                // break;
             }
-            Ok(Event::Eof) => return Err(XmlParseError::InvalidStructure),
-            Err(e) => return Err(XmlParseError::QuickXmlError(e)),
+
+            Event::Eof => {
+                error_fn!(
+                    "parse_plugin_desc",
+                    "Found unexpected end of file while parsing"
+                );
+                return Err(XmlParseError::InvalidStructure);
+            }
+
             _ => (),
         }
     }
 
-    if let Some(branch_device_id) = &source_context.branch_device_id {
+    *byte_pos = reader.buffer_position();
+    line_tracker.update_position(*byte_pos);
+
+    if let Some(name) = plugin_name {
+        let plugin_format = parse_plugin_format(&device_id)
+            .ok_or_else(|| XmlParseError::UnknownPluginFormat(device_id.clone()))?;
+
+        let plugin_info = Some(PluginInfo {
+            name,
+            dev_identifier: device_id,
+            plugin_format,
+        });
         trace_fn!(
-            "parse_source_context",
-            "Found valid SourceContext with BranchDeviceId: {:?}",
-            branch_device_id
+            "parse_plugin_desc",
+            "[{}] Successfully collected plugin info: {}",
+            line.to_string().yellow(),
+            match &plugin_info {
+                Some(info) => info.to_string(),
+                None => "No plugin info available".to_string(),
+            }
         );
-        Ok(Some(source_context))
+
+        Ok(plugin_info)
     } else {
-        trace_fn!("parse_source_context", "No valid BranchDeviceId found");
+        warn_fn!("parse_plugin_desc", "Missing plugin name");
         Ok(None)
-    }
-}
-
-fn parse_plugin_info<R: BufRead>(
-    source_context: &SourceContext,
-    reader: &mut Reader<R>,
-    depth: &mut i32,
-) -> Result<Option<PluginInfo>, XmlParseError> {
-    trace_fn!("parse_plugin_info", "Starting function");
-
-    let dev_identifier = match &source_context.branch_device_id {
-        Some(id) => id,
-        None => return Ok(None),
-    };
-    trace_fn!(
-        "parse_plugin_info",
-        "Found dev_identifier: {:?}",
-        dev_identifier
-    );
-
-    let plugin_format = match parse_plugin_format(dev_identifier) {
-        Some(format) => {
-            trace_fn!(
-                "parse_plugin_info",
-                "Successfully parsed plugin format: {:?}",
-                format
-            );
-            format
-        }
-        None => {
-            trace_fn!(
-                "parse_plugin_info",
-                "Unable to determine plugin format for dev_identifier: {}",
-                dev_identifier
-            );
-            return Ok(None);
-        }
-    };
-
-    let mut buf = Vec::new();
-    let mut name = String::new();
-    let start_depth = *depth;
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref event)) => {
-                *depth += 1;
-                let tag_name = event.name().to_string_result()?;
-                if matches!(tag_name.as_str(), "PlugName" | "Name") {
-                    trace_fn!(
-                        "parse_plugin_info",
-                        "Found PlugName: {:?}",
-                        read_value(reader)?
-                    );
-
-                    name = read_value(reader)?;
-                }
-            }
-            Ok(Event::End(ref _e)) => {
-                *depth -= 1;
-                if *depth == start_depth {
-                    break;
-                }
-            }
-            Ok(Event::Eof) => return Err(XmlParseError::InvalidStructure),
-            Err(e) => return Err(XmlParseError::QuickXmlError(e)),
-            _ => (),
-        }
-    }
-    trace_fn!(
-        "parse_plugin_info",
-        "Found plugin: {} ({:?})",
-        name,
-        plugin_format
-    );
-
-    Ok(Some(PluginInfo {
-        name,
-        dev_identifier: dev_identifier.to_string(),
-        plugin_format,
-    }))
-}
-
-pub(crate) fn parse_plugin_format(dev_identifier: &str) -> Option<PluginFormat> {
-    if dev_identifier.starts_with("device:vst3:instr:") {
-        Some(PluginFormat::VST3Instrument)
-    } else if dev_identifier.starts_with("device:vst3:audiofx:") {
-        Some(PluginFormat::VST3AudioFx)
-    } else if dev_identifier.starts_with("device:vst:instr:") {
-        Some(PluginFormat::VST2Instrument)
-    } else if dev_identifier.starts_with("device:vst:audiofx:") {
-        Some(PluginFormat::VST2AudioFx)
-    } else {
-        None
     }
 }
