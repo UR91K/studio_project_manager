@@ -1,12 +1,15 @@
 // /src/utils.rs
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::str::from_utf8;
-
+use std::sync::Mutex;
 use flate2::read::GzDecoder;
+
 use log::{debug, error, info, trace};
+use once_cell::sync::Lazy;
+use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
 
 use crate::error::{FileError, XmlParseError};
@@ -54,6 +57,13 @@ macro_rules! error_fn {
     };
 }
 
+#[macro_export]
+macro_rules! trace_with_line {
+    ($fn_name:expr, $line:expr, $($arg:tt)+) => {
+        log::trace!("[{}] At line {} in xml data: {}", $fn_name.bright_blue().bold(), $line, format!($($arg)+))
+    };
+}
+
 pub(crate) trait StringResultExt {
     fn to_string_result(&self) -> Result<String, XmlParseError>;
     fn to_str_result(&self) -> Result<&str, XmlParseError>;
@@ -91,6 +101,31 @@ impl<'a> StringResultExt for Cow<'a, [u8]> {
             Cow::Borrowed(bytes) => from_utf8(bytes).map_err(XmlParseError::Utf8Error),
             Cow::Owned(vec) => from_utf8(vec).map_err(XmlParseError::Utf8Error),
         }
+    }
+}
+
+pub trait EventExt {
+    fn get_value_as_string_result(&self) -> Result<Option<String>, XmlParseError>;
+}
+
+impl<'a> EventExt for Event<'a> {
+    fn get_value_as_string_result(&self) -> Result<Option<String>, XmlParseError> {
+        match self {
+            Event::Empty(e) | Event::Start(e) => e.get_value_as_string_result(),
+            _ => Ok(None),
+        }
+    }
+}
+
+impl<'a> EventExt for BytesStart<'a> {
+    fn get_value_as_string_result(&self) -> Result<Option<String>, XmlParseError> {
+        for attribute_result in self.attributes() {
+            let attribute = attribute_result.map_err(XmlParseError::AttrError)?;
+            if attribute.key == QName(b"Value") {
+                return Ok(Some(attribute.value.to_string_result()?));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -191,3 +226,36 @@ pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileErro
 
     Ok(decompressed_data)
 }
+
+static LINE_CACHE: Lazy<Mutex<Vec<(usize, usize)>>> = Lazy::new(|| Mutex::new(Vec::new()));
+
+pub(crate) fn get_line_number(file_path: &Path, byte_position: usize) -> std::io::Result<usize> {
+    let mut cache = LINE_CACHE.lock().unwrap();
+
+    if cache.is_empty() {
+        let file = File::open(file_path)?;
+        let reader = BufReader::new(file);
+
+        let mut line_number = 1;
+        let mut current_position = 0;
+
+        for line in reader.lines() {
+            let line_length = line?.len() + 1; // +1 for the newline character
+            current_position += line_length;
+            cache.push((current_position, line_number));
+            line_number += 1;
+        }
+    }
+
+    match cache.binary_search_by(|&(pos, _)| pos.cmp(&byte_position)) {
+        Ok(index) => Ok(cache[index].1),
+        Err(index) => {
+            if index == 0 {
+                Ok(1)
+            } else {
+                Ok(cache[index - 1].1 + 1)
+            }
+        }
+    }
+}
+

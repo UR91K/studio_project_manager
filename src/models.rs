@@ -105,6 +105,17 @@ pub(crate) enum PluginFormat {
     VST3AudioFx,
 }
 
+impl fmt::Display for PluginFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PluginFormat::VST2Instrument => write!(f, "VST2 Instrument"),
+            PluginFormat::VST2AudioFx => write!(f, "VST2 Effect"),
+            PluginFormat::VST3Instrument => write!(f, "VST3 Instrument"),
+            PluginFormat::VST3AudioFx => write!(f, "VST3 Effect"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Plugin {
     pub(crate) plugin_id: Option<i32>,
@@ -126,6 +137,12 @@ pub(crate) struct PluginInfo {
     pub(crate) name: String,
     pub(crate) dev_identifier: String,
     pub(crate) plugin_format: PluginFormat,
+}
+
+impl fmt::Display for PluginInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.plugin_format, self.name)
+    }
 }
 
 // Plugin implementations
