@@ -5,6 +5,7 @@ use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::str::from_utf8;
 use std::sync::Mutex;
+use chrono::Duration;
 use flate2::read::GzDecoder;
 
 use log::{debug, error, info, trace};
@@ -259,3 +260,16 @@ pub(crate) fn get_line_number(file_path: &Path, byte_position: usize) -> std::io
     }
 }
 
+pub(crate) fn format_duration(duration: &Duration) -> String {
+    let total_seconds = duration.num_seconds();
+    let milliseconds = duration.num_milliseconds() % 1000;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+
+    if hours > 0 {
+        format!("{}h {}m {}.{:03}s", hours, minutes, seconds, milliseconds)
+    } else {
+        format!("{}m {}.{:03}s", minutes, seconds, milliseconds)
+    }
+}

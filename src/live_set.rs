@@ -3,9 +3,9 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Duration, Local};
 use colored::Colorize;
-use log::{debug, info};
+use log::{debug, error, info};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
@@ -20,7 +20,7 @@ use crate::utils::samples::parse_sample_paths;
 use crate::utils::tempo::{find_post_10_tempo, find_pre_10_tempo};
 use crate::utils::time_signature::load_time_signature;
 use crate::utils::version::load_version;
-use crate::utils::{decompress_gzip_file, validate_ableton_file, StringResultExt};
+use crate::utils::{decompress_gzip_file, validate_ableton_file, StringResultExt, format_duration};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -108,7 +108,8 @@ impl LiveSet {
 
         live_set.update_furthest_bar()?;
         live_set.update_tempo()?;
-
+        live_set.calculate_duration()?;
+        
         Ok(Self {
             samples,
             plugins,
@@ -117,7 +118,7 @@ impl LiveSet {
     }
 
     pub fn load_plugins(&mut self) -> Result<HashSet<Plugin>, LiveSetError> {
-        Ok(find_all_plugins(&self.xml_data)?.into_iter().collect())
+        Ok(find_all_plugins(&self.xml_data)?.into_values().collect())
     }
 
     #[allow(dead_code)]
@@ -278,6 +279,46 @@ impl LiveSet {
         Ok(())
     }
 
+    pub fn calculate_duration(&mut self) -> Result<(), LiveSetError> {
+        if self.tempo.is_none() || self.furthest_bar.is_none() {
+            error!(
+                "Unable to calculate duration for '{}' (ID: {:?}): missing tempo or furthest bar",
+                self.file_name, self.id
+            );
+            return Ok(());
+        }
+
+        let tempo = self.tempo.unwrap();
+        let furthest_bar = self.furthest_bar.unwrap();
+
+        if tempo == 0.0 {
+            error!(
+                "Unable to calculate duration for '{}' (ID: {:?}): tempo is zero",
+                self.file_name, self.id
+            );
+            return Ok(());
+        }
+
+        let beats_per_bar = self.time_signature.numerator as f64;
+        let duration_seconds = (furthest_bar * beats_per_bar * 60.0) / tempo;
+
+        // Convert to milliseconds for higher precision
+        let duration_ms = (duration_seconds * 1000.0).round() as i64;
+        let new_duration = Duration::milliseconds(duration_ms);
+
+        if Some(new_duration) != self.estimated_duration {
+            self.estimated_duration = Some(new_duration);
+            info!(
+                "calculate_duration: {} ({:?}): updated duration to {}",
+                self.file_name,
+                self.id,
+                format_duration(&new_duration)
+            );
+        }
+
+        Ok(())
+    }
+
     //TODO: Add duration estimation (based on furthest bar and tempo)
     //TODO: Add key signature finding
 
@@ -329,8 +370,16 @@ impl LiveSet {
         info!("Ableton Version: {}", self.ableton_version);
         info!("Key Signature: {:?}", self.key_signature);
         info!("Tempo: {:?} BPM", self.tempo);
-        info!("Time Signature: {}/{}", self.time_signature.numerator, self.time_signature.denominator);
-        info!("Estimated Duration: {:?}", self.estimated_duration);
+        info!(
+            "Time Signature: {}/{}",
+            self.time_signature.numerator, self.time_signature.denominator
+        );
+        info!(
+            "Estimated Duration: {}",
+            self.estimated_duration
+                .as_ref()
+                .map_or_else(|| "Not calculated".to_string(), format_duration)
+        );
         info!("Furthest Bar: {:?}", self.furthest_bar);
         info!("Number of Plugins: {}", self.plugins.len());
         info!("Number of Samples: {}", self.samples.len());
@@ -338,15 +387,28 @@ impl LiveSet {
         if !self.plugins.is_empty() {
             info!("Plugins:");
             for plugin in &self.plugins {
-                info!("  - {} ({})", plugin.name, if plugin.installed { "Installed" } else { "Not Installed" });
+                info!(
+                    "  - {} ({})",
+                    plugin.name,
+                    if plugin.installed {
+                        "Installed"
+                    } else {
+                        "Not Installed"
+                    }
+                );
             }
         }
 
         if !self.samples.is_empty() {
             info!("Samples:");
             for sample in &self.samples {
-                info!("  - {} ({})", sample.name, if sample.is_present { "Present" } else { "Missing" });
+                info!(
+                    "  - {} ({})",
+                    sample.name,
+                    if sample.is_present { "Present" } else { "Missing" }
+                );
             }
         }
     }
 }
+
