@@ -655,6 +655,7 @@ dependencies = [
  "lazy_static",
  "log",
  "once_cell",
+ "parking_lot",
  "quick-xml",
  "regex",
  "rusqlite",

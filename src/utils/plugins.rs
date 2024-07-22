@@ -3,6 +3,7 @@
 //TODO deduplicate vst plugins before checking database
 //TODO avoid processing duplicated plugins in the first place
 
+use std::collections::{HashMap, HashSet};
 use colored::*;
 use log::{debug, trace};
 use quick_xml::events::Event;
@@ -100,9 +101,9 @@ pub(crate) fn parse_plugin_format(dev_identifier: &str) -> Option<PluginFormat> 
 
 // PARENT FUNCTION
 
-pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginError> {
+pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<HashMap<String, Plugin>, PluginError> {
     debug_fn!("find_all_plugins", "{}", "Starting function".bold().purple());
-    let plugin_infos = find_plugin_tags(xml_data)?;
+    let plugin_infos: HashMap<String, PluginInfo> = find_plugin_tags(xml_data)?;
     trace_fn!(
         "find_all_plugins",
         "Found {} plugin infos",
@@ -120,32 +121,32 @@ pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginErr
     trace_fn!("find_all_plugins", "Using database file: {:?}", db_path);
 
     let ableton_db = AbletonDatabase::new(db_path).map_err(PluginError::DatabaseError)?;
-
-    let mut plugins = Vec::with_capacity(plugin_infos.len());
-    for (index, info) in plugin_infos.iter().enumerate() {
+    
+    let mut unique_plugins: HashMap<String, Plugin> = HashMap::new();
+    
+    for (dev_identifier, info) in plugin_infos.iter() {
         trace_fn!(
-            "find_all_plugins",
-            "Processing plugin info {}: {:?}",
-            index + 1,
-            info.dev_identifier
-        );
-        let db_plugin = ableton_db.get_plugin_by_dev_identifier(&info.dev_identifier)?;
+        "find_all_plugins",
+        "Processing plugin info: {:?}",
+        dev_identifier
+    );
+        let db_plugin = ableton_db.get_plugin_by_dev_identifier(dev_identifier)?;
         let plugin = match db_plugin {
             Some(db_plugin) => {
                 debug_fn!(
-                    "find_all_plugins",
-                    "Found plugin {} {} on system, flagging as installed",
-                    db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
-                    db_plugin.name.green()
-                );
+                "find_all_plugins",
+                "Found plugin {} {} on system, flagging as installed",
+                db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
+                db_plugin.name.green()
+            );
                 Plugin {
                     plugin_id: Some(db_plugin.plugin_id),
                     module_id: db_plugin.module_id,
-                    dev_identifier: db_plugin.dev_identifier,
-                    name: db_plugin.name,
-                    vendor: db_plugin.vendor,
-                    version: db_plugin.version,
-                    sdk_version: db_plugin.sdk_version,
+                    dev_identifier: db_plugin.dev_identifier.clone(),
+                    name: db_plugin.name.clone(),
+                    vendor: db_plugin.vendor.clone(),
+                    version: db_plugin.version.clone(),
+                    sdk_version: db_plugin.sdk_version.clone(),
                     flags: db_plugin.flags,
                     scanstate: db_plugin.scanstate,
                     enabled: db_plugin.enabled,
@@ -158,7 +159,7 @@ pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginErr
                 Plugin {
                     plugin_id: None,
                     module_id: None,
-                    dev_identifier: info.dev_identifier.clone(),
+                    dev_identifier: dev_identifier.clone(),
                     name: info.name.clone(),
                     vendor: None,
                     version: None,
@@ -171,22 +172,32 @@ pub(crate) fn find_all_plugins(xml_data: &[u8]) -> Result<Vec<Plugin>, PluginErr
                 }
             }
         };
-        plugins.push(plugin);
+        unique_plugins
+            .entry(plugin.dev_identifier.clone())
+            .and_modify(|existing| {
+                if existing.plugin_id.is_none() && plugin.plugin_id.is_some() {
+                    *existing = plugin.clone();
+                }
+            })
+            .or_insert(plugin);
     }
-
-    debug!("Found {} plugins", plugins.len());
-    Ok(plugins)
+    
+    debug!("Found {} plugins", unique_plugins.len());
+    
+    Ok(unique_plugins)
 }
 
 // XML PARSING
 
-pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlParseError> {
+pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<HashMap<String, PluginInfo>, XmlParseError> {
     trace_fn!("find_plugin_tags", "{}", "Starting function".bold().purple());
     let mut reader = Reader::from_reader(xml_data);
     reader.trim_text(true);
 
     let mut buf = Vec::new();
-    let mut plugin_info_tags = Vec::new();
+    let mut plugin_info_tags: HashMap<String, PluginInfo> = HashMap::new();
+    let dev_identifiers: Arc<parking_lot::RwLock<HashMap<String, ()>>> = Arc::new(parking_lot::RwLock::new(HashMap::new()));
+    
     let mut depth = 0;
     let mut current_branch_info: Option<String> = None;
     let mut in_source_context = false;
@@ -225,6 +236,7 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
                                 &mut depth,
                                 &mut byte_pos,
                                 &mut line_tracker,
+                                &dev_identifiers,
                             )?;
                         }
                     }
@@ -240,7 +252,7 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
                             if let Some(plugin_info) = parse_plugin_desc(
                                 &mut reader,
                                 &mut depth,
-                                device_id,
+                                device_id.clone(),
                                 &mut byte_pos,
                                 &mut line_tracker,
                             )? {
@@ -250,7 +262,7 @@ pub(crate) fn find_plugin_tags(xml_data: &[u8]) -> Result<Vec<PluginInfo>, XmlPa
                                     line.to_string().yellow(),
                                     plugin_info
                                 );
-                                plugin_info_tags.push(plugin_info);
+                                plugin_info_tags.insert(device_id, plugin_info);
                             }
                         }
                     }
@@ -299,7 +311,9 @@ fn parse_branch_source_context<R: BufRead>(
     depth: &mut i32,
     byte_pos: &mut usize,
     line_tracker: &mut LineTrackingBuffer,
+    dev_identifiers: &Arc<parking_lot::RwLock<HashMap<String, ()>>>,
 ) -> Result<Option<String>, XmlParseError> {
+    
     let mut line = line_tracker.get_line_number(*byte_pos);
     trace_fn!(
         "parse_branch_source_context",
@@ -338,6 +352,25 @@ fn parse_branch_source_context<R: BufRead>(
 
                 let name = event.name().to_string_result()?;
                 match name.as_str() {
+                    "BranchDeviceId" => {
+                        if let Some(device_id) = event.get_value_as_string_result()? {
+                            let mut identifiers = dev_identifiers.write();
+                            if identifiers.contains_key(&device_id) {
+                                trace_fn!(
+                                "parse_branch_source_context",
+                                "[{}] Duplicate device ID found: {}",
+                                line.to_string().yellow(),
+                                device_id
+                            );
+                                return Ok(None);
+                            } else {
+                                identifiers.insert(device_id.clone(), ());
+                                branch_device_id = Some(device_id);
+                            }
+                        }
+                        break;
+                    }
+                    
                     "BrowserContentPath" => {
                         trace_fn!(
                             "parse_branch_source_context",
@@ -346,18 +379,7 @@ fn parse_branch_source_context<R: BufRead>(
                         );
                         browser_content_path = true;
                     }
-
-                    "BranchDeviceId" => {
-                        branch_device_id = event.get_value_as_string_result()?;
-                        trace_fn!(
-                            "parse_branch_source_context",
-                            "[{}] Found BranchDeviceId: {}",
-                            line.to_string().yellow(),
-                            branch_device_id.as_deref().unwrap_or("None")
-                        );
-                        break;
-                    }
-
+                    
                     _ => {}
                 }
             }

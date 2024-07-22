@@ -20,17 +20,18 @@ mod models;
 mod live_set;
 mod utils;
 mod backup;
+mod main_scan;
 
 fn main() {
-    Builder::new().filter_level(LevelFilter::Trace).init();
+    Builder::new().filter_level(LevelFilter::Info).init();
 
     let mut paths: Vec<PathBuf> = Vec::new();
     // TEST DATA:
-    // paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\rodent beats\RODENT 4 Project\RODENT 4 ver 2.als", )); // max size
-    // paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\Beats Project\a lot on my mind 130 Live11.als", )); // mean size
-    // paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\rust mastering\dp tekno 19 master Project\dp tekno 19 master.als")); // mode size
-    // paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\Beats Project\SET 120.als", )); // median size
-    // paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\tape\white tape b Project\white tape b.als", )); // min size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\rodent beats\RODENT 4 Project\RODENT 4 ver 2.als", )); // max size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\Beats Project\a lot on my mind 130 Live11.als", )); // mean size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\rust mastering\dp tekno 19 master Project\dp tekno 19 master.als")); // mode size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\Beats\Beats Project\SET 120.als", )); // median size
+    paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\tape\white tape b Project\white tape b.als", )); // min size
     paths.push(PathBuf::from(r"C:\Users\judee\Documents\Projects\test_projects_dir\duplicated plugins test Project\duplicated plugins test.als", )); // min size
     for path in &paths {
         let start_time = Instant::now();
