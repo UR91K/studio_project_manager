@@ -1,4 +1,5 @@
-// /src/error.rs
+#![allow(dead_code)]
+
 use elementtree::Error as ElementTreeError;
 use quick_xml::events::attributes::AttrError;
 use quick_xml::Error as QuickXmlError;

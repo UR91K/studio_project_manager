@@ -1,7 +1,6 @@
-// /src/utils.rs
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::str::from_utf8;
 use std::sync::Mutex;
@@ -26,35 +25,50 @@ pub mod xml_parsing;
 #[macro_export]
 macro_rules! trace_fn {
     ($fn_name:expr, $($arg:tt)+) => {
-        log::trace!("[{}] {}", $fn_name.bright_blue().bold(), format!($($arg)+))
+        {
+            use colored::Colorize;
+            log::trace!("[{}] {}", $fn_name.to_string().bright_blue().bold(), format!($($arg)+))
+        }
     };
 }
 
 #[macro_export]
 macro_rules! debug_fn {
     ($fn_name:expr, $($arg:tt)+) => {
-        log::debug!("[{}] {}", $fn_name.cyan().bold(), format!($($arg)+))
+        {
+            use colored::Colorize;
+            log::debug!("[{}] {}", $fn_name.to_string().cyan().bold(), format!($($arg)+))
+        }
     };
 }
 
 #[macro_export]
 macro_rules! info_fn {
     ($fn_name:expr, $($arg:tt)+) => {
-        log::info!("[{}] {}", $fn_name.green().bold(), format!($($arg)+))
+        {
+            use colored::Colorize;
+            log::info!("[{}] {}", $fn_name.to_string().green().bold(), format!($($arg)+))
+        }
     };
 }
 
 #[macro_export]
 macro_rules! warn_fn {
     ($fn_name:expr, $($arg:tt)+) => {
-        log::warn!("[{}] {}", $fn_name.yellow().bold(), format!($($arg)+))
+        {
+            use colored::Colorize;
+            log::warn!("[{}] {}", $fn_name.to_string().yellow().bold(), format!($($arg)+))
+        }
     };
 }
 
 #[macro_export]
 macro_rules! error_fn {
     ($fn_name:expr, $($arg:tt)+) => {
-        log::error!("[{}] {}", $fn_name.red().bold(), format!($($arg)+))
+        {
+            use colored::Colorize;
+            log::error!("[{}] {}", $fn_name.to_string().red().bold(), format!($($arg)+))
+        }
     };
 }
 
@@ -230,6 +244,8 @@ pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileErro
 
 static LINE_CACHE: Lazy<Mutex<Vec<(usize, usize)>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
+//TODO possibly delete this if we find it is no longer needed 
+#[allow(dead_code)]
 pub(crate) fn get_line_number(file_path: &Path, byte_position: usize) -> std::io::Result<usize> {
     let mut cache = LINE_CACHE.lock().unwrap();
 

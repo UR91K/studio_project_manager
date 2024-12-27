@@ -1,7 +1,6 @@
-// /src/utils/plugins.rs
+use std::collections::HashMap;
 
-use std::collections::{HashMap, HashSet};
-use colored::*;
+#[allow(unused_imports)]
 use log::{debug, trace};
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -14,7 +13,7 @@ use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::error::{DatabaseError, FileError, PluginError, XmlParseError};
 use crate::models::{Plugin, PluginFormat, PluginInfo};
-use crate::utils::xml_parsing::{get_value_as_string_result};
+use crate::utils::xml_parsing::get_value_as_string_result;
 use crate::utils::{EventExt, StringResultExt};
 use crate::{debug_fn, error_fn, trace_fn, warn_fn};
 
@@ -466,7 +465,7 @@ fn parse_plugin_desc<R: BufRead>(
     let mut buf = Vec::new();
     let start_depth = *depth;
     // trace!("start depth: {}", start_depth);
-    let mut plugin_name = None;
+    let plugin_name;
 
     loop {
         *byte_pos = reader.buffer_position();
