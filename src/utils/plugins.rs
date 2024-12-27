@@ -1,8 +1,5 @@
 // /src/utils/plugins.rs
 
-//TODO deduplicate vst plugins before checking database
-//TODO avoid processing duplicated plugins in the first place
-
 use std::collections::{HashMap, HashSet};
 use colored::*;
 use log::{debug, trace};
@@ -24,14 +21,14 @@ use crate::{debug_fn, error_fn, trace_fn, warn_fn};
 // LINE TRACKER FOR DEBUGGING
 
 #[derive(Clone)]
-struct LineTrackingBuffer {
+pub (crate) struct LineTrackingBuffer {
     data: Arc<Vec<u8>>,
     current_line: usize,
     current_position: usize,
 }
 
 impl LineTrackingBuffer {
-    fn new(data: Vec<u8>) -> Self {
+    pub (crate) fn new(data: Vec<u8>) -> Self {
         Self {
             data: Arc::new(data),
             current_line: 1,
@@ -39,7 +36,7 @@ impl LineTrackingBuffer {
         }
     }
 
-    fn get_line_number(&mut self, byte_position: usize) -> usize {
+    pub (crate) fn get_line_number(&mut self, byte_position: usize) -> usize {
         while self.current_position < byte_position && self.current_position < self.data.len() {
             if self.data[self.current_position] == b'\n' {
                 self.current_line += 1;
@@ -49,7 +46,7 @@ impl LineTrackingBuffer {
         self.current_line
     }
 
-    fn update_position(&mut self, byte_position: usize) {
+    pub (crate) fn update_position(&mut self, byte_position: usize) {
         self.get_line_number(byte_position);
     }
 }
