@@ -25,6 +25,7 @@ use crate::utils::{decompress_gzip_file, validate_ableton_file, StringResultExt,
 use crate::utils::xml_parsing::get_value_as_string_result;
 
 // Define a new struct to hold the scanned data
+#[allow(dead_code)]
 pub struct LiveSetData {
     ableton_version: AbletonVersion,
     time_signature: TimeSignature,
@@ -35,6 +36,7 @@ pub struct LiveSetData {
     // Add other fields as needed
 }
 
+#[allow(dead_code)]
 impl LiveSetData {
     // Constructor with required fields
     fn new(ableton_version: AbletonVersion, time_signature: TimeSignature) -> Self {
@@ -49,6 +51,7 @@ impl LiveSetData {
     }
 }
 
+#[allow(dead_code)]
 pub struct ScanOptions {
     pub scan_plugins: bool,
     pub scan_samples: bool,
@@ -81,6 +84,7 @@ impl Default for ScanOptions {
     }
 }
 
+#[allow(dead_code)]
 impl ScanOptions {
     pub fn new() -> Self {
         Default::default()
@@ -432,7 +436,7 @@ impl LiveSet {
             Ok(false)
         }
     }
-    
+    #[allow(dead_code, unused_variables)]
     pub fn scan(&mut self, options: &ScanOptions) -> Result<(), LiveSetError> {
         let mut reader = Reader::from_reader(&self.xml_data[..]);
         reader.trim_text(true);
@@ -519,7 +523,7 @@ impl LiveSet {
 
         Ok(())
     }
-    
+    #[allow(dead_code)]
     fn handle_branch_source_context(
         &self,
         reader: &mut Reader<&[u8]>,
@@ -654,6 +658,8 @@ impl LiveSet {
         Ok(Some(device_id))
     }
 
+
+    #[allow(dead_code, unused_variables)]
     fn handle_plugin_desc(
         &self,
         reader: &mut Reader<&[u8]>,
@@ -669,7 +675,7 @@ impl LiveSet {
         );
 
         let mut buf = Vec::new();
-        let mut plugin_name = None;
+        let plugin_name;
         let mut depth = 0;
 
         loop {
@@ -746,7 +752,7 @@ impl LiveSet {
             Ok(None)
         }
     }
-
+    #[allow(dead_code)]
     fn process_plugin_infos(&mut self, plugin_infos: HashMap<String, PluginInfo>) -> Result<(), LiveSetError> {
         debug_fn!("process_plugin_infos", "{}", "Starting function".bold().purple());
         trace_fn!(
@@ -835,12 +841,12 @@ impl LiveSet {
 
         Ok(())
     }
-
+    #[allow(dead_code)]
     fn estimate_duration(&mut self) -> Result<(), LiveSetError> {
         // Implementation for estimating duration
         unimplemented!()
     }
-
+    #[allow(dead_code)]
     fn calculate_furthest_bar(&mut self) -> Result<(), LiveSetError> {
         // Implementation for calculating furthest bar
         unimplemented!()

@@ -1,16 +1,14 @@
-// /src/utils/samples.rs
-
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::str::from_utf8;
 
-use encoding_rs::UTF_16LE;
+#[allow(unused_imports)]
 use log::{debug, error, trace, warn};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
+#[allow(unused_imports)]
 use crate::error::{AttributeError, SampleError, XmlParseError};
-use crate::error_fn;
 use crate::utils::xml_parsing::{find_attribute, find_tags};
 
 pub(crate) fn find_sample_path_data(xml_data: &[u8]) -> Result<Vec<String>, XmlParseError> {

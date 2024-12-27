@@ -26,6 +26,7 @@ pub(crate) struct XmlTag {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct AbletonVersion {
     pub(crate) major: u32,
     pub(crate) minor: u32,
@@ -34,6 +35,7 @@ pub(crate) struct AbletonVersion {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub(crate) enum Scale {
     Empty,
     Major,
@@ -73,6 +75,7 @@ pub(crate) enum Scale {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub(crate) enum Tonic {
     Empty,
     C,
@@ -90,6 +93,7 @@ pub(crate) enum Tonic {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct KeySignature {
     pub(crate) tonic: Tonic,
     pub(crate) scale: Scale,
@@ -133,6 +137,7 @@ pub struct Plugin {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct PluginInfo {
     pub(crate) name: String,
     pub(crate) dev_identifier: String,
@@ -147,6 +152,7 @@ impl fmt::Display for PluginInfo {
 
 // Plugin implementations
 
+#[allow(unused_variables)]
 static INSTALLED_PLUGINS: Lazy<Arc<Result<HashSet<(String, PluginFormat)>, DatabaseError>>> =
     Lazy::new(|| {
         Arc::new({
@@ -165,6 +171,7 @@ static INSTALLED_PLUGINS: Lazy<Arc<Result<HashSet<(String, PluginFormat)>, Datab
         })
     });
 
+    #[allow(dead_code)]
 pub fn get_installed_plugins() -> Arc<Result<HashSet<(String, PluginFormat)>, DatabaseError>> {
     INSTALLED_PLUGINS.clone()
 }
@@ -199,6 +206,7 @@ pub(crate) struct Sample {
     pub(crate) is_present: bool,
 }
 
+#[allow(dead_code)]
 impl Sample {
     pub(crate) fn new(id: Id, name: String, path: PathBuf) -> Self {
         let is_present = path.exists();
