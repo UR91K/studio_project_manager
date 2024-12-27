@@ -1,4 +1,3 @@
-// /src/main.rs
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -20,7 +19,7 @@ mod models;
 mod live_set;
 mod utils;
 mod backup;
-mod main_scan;
+mod scan;
 
 fn main() {
     Builder::new().filter_level(LevelFilter::Info).init();

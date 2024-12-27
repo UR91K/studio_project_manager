@@ -1,6 +1,7 @@
 // /src/live_set.rs
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 
 use chrono::{DateTime, Duration, Local};
@@ -12,15 +13,93 @@ use quick_xml::Reader;
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::error::{AttributeError, LiveSetError, XmlParseError};
-use crate::info_fn;
-use crate::models::{AbletonVersion, Id, KeySignature, Plugin, Sample, TimeSignature};
+use crate::{debug_fn, error_fn, info_fn, trace_fn, warn_fn};
+use crate::models::{AbletonVersion, Id, KeySignature, Plugin, PluginInfo, Sample, TimeSignature};
 use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamps};
-use crate::utils::plugins::{find_all_plugins, get_most_recent_db_file};
+use crate::utils::plugins::{find_all_plugins, get_most_recent_db_file, LineTrackingBuffer, parse_plugin_format};
 use crate::utils::samples::parse_sample_paths;
 use crate::utils::tempo::{find_post_10_tempo, find_pre_10_tempo};
 use crate::utils::time_signature::load_time_signature;
 use crate::utils::version::load_version;
-use crate::utils::{decompress_gzip_file, validate_ableton_file, StringResultExt, format_duration};
+use crate::utils::{decompress_gzip_file, validate_ableton_file, StringResultExt, format_duration, EventExt};
+use crate::utils::xml_parsing::get_value_as_string_result;
+
+// Define a new struct to hold the scanned data
+pub struct LiveSetData {
+    ableton_version: AbletonVersion,
+    time_signature: TimeSignature,
+    plugins: HashSet<Plugin>,
+    samples: HashSet<Sample>,
+    tempo: Option<f64>,
+    furthest_bar: Option<f64>,
+    // Add other fields as needed
+}
+
+impl LiveSetData {
+    // Constructor with required fields
+    fn new(ableton_version: AbletonVersion, time_signature: TimeSignature) -> Self {
+        Self {
+            ableton_version,
+            time_signature,
+            plugins: HashSet::new(),
+            samples: HashSet::new(),
+            tempo: None,
+            furthest_bar: None,
+        }
+    }
+}
+
+pub struct ScanOptions {
+    pub scan_plugins: bool,
+    pub scan_samples: bool,
+    pub scan_tempo: bool,
+    pub scan_time_signature: bool,
+    pub scan_midi: bool,
+    pub scan_audio: bool,
+    pub scan_automation: bool,
+    pub scan_return_tracks: bool,
+    pub scan_master_track: bool,
+    pub estimate_duration: bool,
+    pub calculate_furthest_bar: bool,
+}
+
+impl Default for ScanOptions {
+    fn default() -> Self {
+        ScanOptions {
+            scan_plugins: true,
+            scan_samples: true,
+            scan_tempo: true,
+            scan_time_signature: true,
+            scan_midi: true,
+            scan_audio: true,
+            scan_automation: true,
+            scan_return_tracks: true,
+            scan_master_track: true,
+            estimate_duration: true,
+            calculate_furthest_bar: true,
+        }
+    }
+}
+
+impl ScanOptions {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn plugins_only() -> Self {
+        ScanOptions {
+            scan_plugins: true,
+            ..Default::default()
+        }
+    }
+
+    pub fn samples_only() -> Self {
+        ScanOptions {
+            scan_samples: true,
+            ..Default::default()
+        }
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -353,7 +432,422 @@ impl LiveSet {
             Ok(false)
         }
     }
+    
+    pub fn scan(&mut self, options: &ScanOptions) -> Result<(), LiveSetError> {
+        let mut reader = Reader::from_reader(&self.xml_data[..]);
+        reader.trim_text(true);
+        let mut buf = Vec::new();
+
+        let mut in_source_context = false;
+        let mut current_branch_info: Option<String> = None;
+        let mut plugin_infos: HashMap<String, PluginInfo> = HashMap::new();
+        let dev_identifiers: Arc<parking_lot::RwLock<HashMap<String, ()>>> = Arc::new(parking_lot::RwLock::new(HashMap::new()));
+
+        let mut line_tracker = LineTrackingBuffer::new(self.xml_data.clone());
+
+        loop {
+            let mut byte_pos = reader.buffer_position();
+            let line = line_tracker.get_line_number(byte_pos);
+            
+            
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    match e.name().to_str_result()? {
+                        //PLUGIN
+                        "SourceContext" if options.scan_plugins => {
+                            in_source_context = true;
+                        },
+                        "BranchSourceContext" if in_source_context && options.scan_plugins => {
+                            current_branch_info = self.handle_branch_source_context(
+                                &mut reader,
+                                &mut byte_pos,
+                                &mut line_tracker,
+                                &dev_identifiers,
+                            )?;
+                        },
+                        "PluginDesc" if in_source_context && options.scan_plugins => {
+                            if let Some(device_id) = current_branch_info.take() {
+                                if let Some(plugin_info) = self.handle_plugin_desc(
+                                    &mut reader,
+                                    device_id.clone(),
+                                    &mut byte_pos,
+                                    &mut line_tracker,
+                                )? {
+                                    plugin_infos.insert(device_id, plugin_info);
+                                }
+                            }
+                        },
+                        
+                        //
+                        _ => {}
+                    }
+                },
+                Ok(Event::Empty(ref e)) => {
+                    match e.name().to_string_result()? {
+                        _ => {}
+                    }
+                },
+                Ok(Event::End(ref e)) => {
+                    match e.name().to_str_result()? {
+                        //PLUGIN
+                        "SourceContext" => {
+                            in_source_context = false;
+                        },
+                        
+                        
+                        _ => {}
+                    }
+                },
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(LiveSetError::XmlError(XmlParseError::QuickXmlError(e))),
+                _ => {},
+            }
+            buf.clear();
+        }
+
+        if options.scan_plugins {
+            self.process_plugin_infos(plugin_infos)?;
+        }
+        
+        if options.estimate_duration {
+            self.estimate_duration()?;
+        }
+
+        if options.calculate_furthest_bar {
+            self.calculate_furthest_bar()?;
+        }
+
+        Ok(())
+    }
+    
+    fn handle_branch_source_context(
+        &self,
+        reader: &mut Reader<&[u8]>,
+        byte_pos: &mut usize,
+        line_tracker: &mut LineTrackingBuffer,
+        dev_identifiers: &Arc<parking_lot::RwLock<HashMap<String, ()>>>,
+    ) -> Result<Option<String>, LiveSetError> {
+        // Adapt the logic from parse_branch_source_context
+        let mut line = line_tracker.get_line_number(*byte_pos);
+        trace_fn!(
+            "handle_branch_source_context",
+            "[{}] Starting function",
+            line.to_string().yellow()
+        );
+
+        let mut buf = Vec::new();
+        let mut browser_content_path = false;
+        let mut branch_device_id = None;
+        let mut read_count = 0;
+
+        loop {
+            *byte_pos = reader.buffer_position();
+            line = line_tracker.get_line_number(*byte_pos);
+
+            if read_count > 2 && !browser_content_path {
+                trace_fn!(
+                    "handle_branch_source_context",
+                    "[{}] No BrowserContentPath found within first 2 reads; returning early",
+                    line.to_string().yellow()
+                );
+                return Ok(None);
+            }
+
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Empty(ref event)) => {
+                    read_count += 1;
+
+                    let name = event.name().to_string_result()
+                        .map_err(|e| LiveSetError::XmlError(e))?;
+                    match name.as_str() {
+                        "BranchDeviceId" => {
+                            if let Some(device_id) = event.get_value_as_string_result()
+                                .map_err(|e| LiveSetError::XmlError(e))? {
+                                let mut identifiers = dev_identifiers.write();
+                                if identifiers.contains_key(&device_id) {
+                                    trace_fn!(
+                                        "handle_branch_source_context",
+                                        "[{}] Duplicate device ID found: {}",
+                                        line.to_string().yellow(),
+                                        device_id
+                                    );
+                                    return Ok(None);
+                                } else {
+                                    identifiers.insert(device_id.clone(), ());
+                                    branch_device_id = Some(device_id);
+                                }
+                            }
+                            break;
+                        }
+
+                        "BrowserContentPath" => {
+                            trace_fn!(
+                                "handle_branch_source_context",
+                                "[{}] Found BrowserContentPath",
+                                line.to_string().yellow()
+                            );
+                            browser_content_path = true;
+                        }
+
+                        _ => {}
+                    }
+                }
+
+                Ok(Event::End(_)) => {
+                    break;
+                }
+
+                Ok(Event::Eof) => {
+                    warn_fn!(
+                        "handle_branch_source_context",
+                        "[{}] EOF reached",
+                        line.to_string().yellow()
+                    );
+                    return Err(LiveSetError::XmlError(XmlParseError::InvalidStructure));
+                }
+
+                Err(e) => {
+                    error_fn!(
+                        "handle_branch_source_context",
+                        "[{}] Error parsing XML: {:?}",
+                        line,
+                        e
+                    );
+                    return Err(LiveSetError::XmlError(XmlParseError::QuickXmlError(e)));
+                }
+
+                _ => (),
+            }
+        }
+
+        *byte_pos = reader.buffer_position();
+        line_tracker.update_position(*byte_pos);
+
+        if !browser_content_path {
+            trace_fn!("handle_branch_source_context", "Missing BrowserContentPath");
+            return Ok(None);
+        }
+
+        let Some(device_id) = branch_device_id else {
+            return Ok(None);
+        };
+
+        if !device_id.starts_with("device:vst:") && !device_id.starts_with("device:vst3:") {
+            trace_fn!("handle_branch_source_context", "Not a VST/VST3 plugin");
+            return Ok(None);
+        }
+
+        let vst_type = if device_id.contains("vst3:") {
+            "VST 3"
+        } else if device_id.contains("vst:") {
+            "VST 2"
+        } else {
+            ""
+        };
+
+        trace_fn!(
+            "handle_branch_source_context",
+            "[{}] Found valid {} plugin info",
+            line.to_string().yellow(),
+            vst_type,
+        );
+        Ok(Some(device_id))
+    }
+
+    fn handle_plugin_desc(
+        &self,
+        reader: &mut Reader<&[u8]>,
+        device_id: String,
+        byte_pos: &mut usize,
+        line_tracker: &mut LineTrackingBuffer,
+    ) -> Result<Option<PluginInfo>, LiveSetError> {
+        let mut line = line_tracker.get_line_number(*byte_pos);
+        trace_fn!(
+            "handle_plugin_desc", 
+            "[{}] Starting function", 
+            line.to_string().yellow()
+        );
+
+        let mut buf = Vec::new();
+        let mut plugin_name = None;
+        let mut depth = 0;
+
+        loop {
+            *byte_pos = reader.buffer_position();
+            line = line_tracker.get_line_number(*byte_pos);
+
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref _event)) => {
+                    depth += 1;
+                }
+
+                Ok(Event::Empty(ref event)) => {
+                    let name = event.name().to_string_result()
+                        .map_err(|e| LiveSetError::XmlError(e))?;
+
+                    if (name == "PlugName" || name == "Name") && depth == 1 {
+                        if let Some(value) = get_value_as_string_result(event)
+                            .map_err(|e| LiveSetError::XmlError(e))? {
+                            plugin_name = Some(value);
+
+                            trace_fn!(
+                                "handle_plugin_desc",
+                                "[{}] Found plugin name: {}",
+                                line.to_string().yellow(),
+                                plugin_name.as_deref().unwrap_or("None"),
+                            );
+                            break;
+                        }
+                    }
+                }
+
+                Ok(Event::End(ref _event)) => {
+                    depth -= 1;
+                }
+
+                Ok(Event::Eof) => {
+                    error_fn!(
+                        "handle_plugin_desc",
+                        "Found unexpected end of file while parsing"
+                    );
+                    return Err(LiveSetError::XmlError(XmlParseError::InvalidStructure));
+                }
+
+                Err(e) => {
+                    return Err(LiveSetError::XmlError(XmlParseError::QuickXmlError(e)));
+                }
+
+                _ => (),
+            }
+        }
+
+        *byte_pos = reader.buffer_position();
+        line_tracker.update_position(*byte_pos);
+
+        if let Some(name) = plugin_name {
+            let plugin_format = parse_plugin_format(&device_id)
+                .ok_or_else(|| LiveSetError::XmlError(XmlParseError::UnknownPluginFormat(device_id.clone())))?;
+
+            let plugin_info = Some(PluginInfo {
+                name,
+                dev_identifier: device_id,
+                plugin_format,
+            });
+            trace_fn!(
+                "handle_plugin_desc",
+                "[{}] Successfully collected plugin info: {}",
+                line.to_string().yellow(),
+                plugin_info.as_ref().map_or("No plugin info available".to_string(), |info| info.to_string())
+            );
+
+            Ok(plugin_info)
+        } else {
+            warn_fn!("handle_plugin_desc", "Missing plugin name");
+            Ok(None)
+        }
+    }
+
+    fn process_plugin_infos(&mut self, plugin_infos: HashMap<String, PluginInfo>) -> Result<(), LiveSetError> {
+        debug_fn!("process_plugin_infos", "{}", "Starting function".bold().purple());
+        trace_fn!(
+            "process_plugin_infos",
+            "Processing {} plugin infos",
+            plugin_infos.len()
+        );
+
+        let config = CONFIG
+            .as_ref()
+            .map_err(|e| LiveSetError::ConfigError(e.clone()))?;
+        let db_dir = &config.live_database_dir;
+        trace_fn!("process_plugin_infos", "Database directory: {:?}", db_dir);
+
+        let db_path = get_most_recent_db_file(&PathBuf::from(db_dir))
+            .map_err(|e| LiveSetError::DatabaseError(e))?;
+        trace_fn!("process_plugin_infos", "Using database file: {:?}", db_path);
+
+        let ableton_db = AbletonDatabase::new(db_path)
+            .map_err(|e| LiveSetError::DatabaseError(e))?;
+
+        let mut unique_plugins: HashMap<String, Plugin> = HashMap::new();
+
+        for (dev_identifier, info) in plugin_infos.iter() {
+            trace_fn!(
+                "process_plugin_infos",
+                "Processing plugin info: {:?}",
+                dev_identifier
+            );
+            let db_plugin = ableton_db.get_plugin_by_dev_identifier(dev_identifier)
+                .map_err(|e| LiveSetError::DatabaseError(e))?;
+            let plugin = match db_plugin {
+                Some(db_plugin) => {
+                    debug_fn!(
+                        "process_plugin_infos",
+                        "Found plugin {} {} on system, flagging as installed",
+                        db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
+                        db_plugin.name.green()
+                    );
+                    Plugin {
+                        plugin_id: Some(db_plugin.plugin_id),
+                        module_id: db_plugin.module_id,
+                        dev_identifier: db_plugin.dev_identifier.clone(),
+                        name: db_plugin.name.clone(),
+                        vendor: db_plugin.vendor.clone(),
+                        version: db_plugin.version.clone(),
+                        sdk_version: db_plugin.sdk_version.clone(),
+                        flags: db_plugin.flags,
+                        scanstate: db_plugin.scanstate,
+                        enabled: db_plugin.enabled,
+                        plugin_format: info.plugin_format,
+                        installed: true,
+                    }
+                }
+                None => {
+                    debug!("Plugin not found in database: {:?}", info);
+                    Plugin {
+                        plugin_id: None,
+                        module_id: None,
+                        dev_identifier: dev_identifier.clone(),
+                        name: info.name.clone(),
+                        vendor: None,
+                        version: None,
+                        sdk_version: None,
+                        flags: None,
+                        scanstate: None,
+                        enabled: None,
+                        plugin_format: info.plugin_format,
+                        installed: false,
+                    }
+                }
+            };
+            unique_plugins
+                .entry(plugin.dev_identifier.clone())
+                .and_modify(|existing| {
+                    if existing.plugin_id.is_none() && plugin.plugin_id.is_some() {
+                        *existing = plugin.clone();
+                    }
+                })
+                .or_insert(plugin);
+        }
+
+        debug!("Found {} plugins", unique_plugins.len());
+        
+        self.plugins = unique_plugins.into_values().collect();
+
+        Ok(())
+    }
+
+    fn estimate_duration(&mut self) -> Result<(), LiveSetError> {
+        // Implementation for estimating duration
+        unimplemented!()
+    }
+
+    fn calculate_furthest_bar(&mut self) -> Result<(), LiveSetError> {
+        // Implementation for calculating furthest bar
+        unimplemented!()
+    }
 }
+
+
 
 
 
