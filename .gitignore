@@ -1,4 +1,4 @@
 /target
-/white tape b.xml
-/SET 120.xml
-/.idea/inspectionProfiles/Project_Default.xml
+*.xml
+*.als
+test_data/new_age Project/
