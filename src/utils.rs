@@ -17,9 +17,7 @@ use crate::error::{FileError, XmlParseError};
 pub mod metadata;
 pub mod plugins;
 pub mod samples;
-pub mod tempo;
 pub mod time_signature;
-pub mod version;
 pub mod xml_parsing;
 
 #[macro_export]

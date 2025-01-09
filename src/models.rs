@@ -25,13 +25,54 @@ pub(crate) struct XmlTag {
     pub(crate) attributes: Vec<(String, String)>,
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub(crate) struct AbletonVersion {
-    pub(crate) major: u32,
-    pub(crate) minor: u32,
-    pub(crate) patch: u32,
-    pub(crate) beta: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AbletonVersion {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+    pub beta: bool,
+}
+
+impl Default for AbletonVersion {
+    fn default() -> Self {
+        Self {
+            major: 0,
+            minor: 0,
+            patch: 0,
+            beta: false,
+        }
+    }
+}
+
+impl PartialOrd for AbletonVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        // Compare major versions first
+        match self.major.cmp(&other.major) {
+            std::cmp::Ordering::Equal => {
+                // If major versions are equal, compare minor versions
+                match self.minor.cmp(&other.minor) {
+                    std::cmp::Ordering::Equal => {
+                        // If minor versions are equal, compare patch versions
+                        match self.patch.cmp(&other.patch) {
+                            std::cmp::Ordering::Equal => {
+                                // If all version numbers are equal, non-beta is greater than beta
+                                Some((!self.beta).cmp(&(!other.beta)))
+                            }
+                            ord => Some(ord),
+                        }
+                    }
+                    ord => Some(ord),
+                }
+            }
+            ord => Some(ord),
+        }
+    }
+}
+
+impl Ord for AbletonVersion {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -265,7 +306,7 @@ impl Sample {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TimeSignature {
     pub(crate) numerator: u8,
     pub(crate) denominator: u8,
@@ -299,6 +340,15 @@ impl TimeSignature {
     fn decode_denominator(encoded_value: i32) -> u8 {
         let multiple = encoded_value / 99 + 1;
         2_u8.pow((multiple - 1) as u32)
+    }
+}
+
+impl Default for TimeSignature {
+    fn default() -> Self {
+        Self {
+            numerator: 4,
+            denominator: 4,
+        }
     }
 }
 

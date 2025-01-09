@@ -265,11 +265,23 @@ pub enum TempoError {
     InvalidTempoValue,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LiveSetError {
     #[error("XML error: {0}")]
     XmlError(#[from] XmlParseError),
-
+    
+    #[error("Invalid version format: {0}")]
+    InvalidVersion(String),
+    
+    #[error("Unsupported Ableton Live version: {0}")]
+    UnsupportedVersion(u32),
+    
+    #[error("Missing version in Live set file")]
+    MissingVersion,
+    
+    #[error("Tempo error: {0}")]
+    TempoError(#[from] TempoError),
+    
     #[error("Time signature error: {0}")]
     TimeSignatureError(#[from] TimeSignatureError),
 
@@ -297,18 +309,12 @@ pub enum LiveSetError {
     #[error("Configuration error: {0}")]
     ConfigError(#[from] ConfigError),
 
-    #[error("Tempo error: {0}")]
-    TempoError(#[from] TempoError),
+    #[error("Invalid project: {0}")]
+    InvalidProject(String),
 }
 
-impl From<rusqlite::Error> for LiveSetError {
-    fn from(err: rusqlite::Error) -> Self {
-        LiveSetError::DatabaseError(DatabaseError::SqliteError(err))
-    }
-}
-
-impl DatabaseError {
-    pub fn to_live_set_error(self) -> LiveSetError {
-        LiveSetError::DatabaseError(self)
+impl From<quick_xml::Error> for LiveSetError {
+    fn from(err: quick_xml::Error) -> Self {
+        LiveSetError::XmlError(XmlParseError::QuickXmlError(err))
     }
 }
