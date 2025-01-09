@@ -15,11 +15,10 @@ mod ableton_db;
 mod config;
 mod error;
 mod models;
-
+pub mod scan;
 mod live_set;
 mod utils;
 mod backup;
-mod scan;
 
 fn main() {
     Builder::new().filter_level(LevelFilter::Info).init();

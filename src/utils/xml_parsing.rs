@@ -6,6 +6,8 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use std::collections::HashMap;
 
+//TODO: probably remove this file once the new scanner is implemented, it's not used anywhere...
+
 pub(crate) fn find_tags(
     xml_data: &[u8],
     search_queries: &[&str],
