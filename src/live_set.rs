@@ -167,22 +167,22 @@ impl LiveSet {
         let time_signature: TimeSignature = load_time_signature(&xml_data)?;
 
         let mut live_set = LiveSet {
-            id: Id::default(),
-            file_path,
-            file_name,
-            xml_data,
-            file_hash,
-            created_time,
-            modified_time,
-            last_scan_timestamp: Local::now(),
-            ableton_version,
-            key_signature: None,
-            tempo: None,
-            time_signature,
-            estimated_duration: None,
-            furthest_bar: None,
-            plugins: HashSet::new(),
-            samples: HashSet::new(),
+            id: Id::default(),                  // TODO: should be created in database
+            file_path,                          // taken directly from file metadata
+            file_name,                          // taken directly from file metadata
+            created_time,                       // taken directly from file metadata
+            modified_time,                      // taken directly from file metadata
+            file_hash,                          // generated from file contents
+            xml_data,                           // extracted from file
+            last_scan_timestamp: Local::now(),  // set when scan is run
+            ableton_version,                    // extracted from xml data at beginning of scan, used for version checking
+            key_signature: None,                // extracted from xml data during scan
+            tempo: None,                        // extracted from xml data during scan
+            time_signature,                     // extracted from xml data during scan
+            furthest_bar: None,                 // extracted from xml data during scan
+            plugins: HashSet::new(),            // populated from xml data during scan
+            samples: HashSet::new(),            // populated from xml data during scan
+            estimated_duration: None,           // calculated after scan
         };
 
         let samples = live_set.load_samples()?;
