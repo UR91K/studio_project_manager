@@ -242,7 +242,7 @@ impl Scanner {
     }
 
     /// Main scanning function that processes the XML data
-    pub fn scan(&mut self, xml_data: &[u8]) -> Result<ScanResult, LiveSetError> {
+    pub(crate) fn scan(&mut self, xml_data: &[u8]) -> Result<ScanResult, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
         reader.trim_text(true);
         let mut buf = Vec::new();

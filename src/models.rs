@@ -75,7 +75,7 @@ impl Ord for AbletonVersion {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 #[allow(dead_code)]
 pub(crate) enum Scale {
     Empty,
@@ -115,7 +115,7 @@ pub(crate) enum Scale {
     Messiaen7,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 #[allow(dead_code)]
 pub(crate) enum Tonic {
     Empty,
@@ -133,11 +133,36 @@ pub(crate) enum Tonic {
     B,
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub(crate) struct KeySignature {
-    pub(crate) tonic: Tonic,
-    pub(crate) scale: Scale,
+impl Tonic {
+    pub fn from_midi_note(number: i32) -> Self {
+        match number % 12 {
+            0 => Tonic::C,
+            1 => Tonic::CSharp,
+            2 => Tonic::D,
+            3 => Tonic::DSharp,
+            4 => Tonic::E,
+            5 => Tonic::F,
+            6 => Tonic::FSharp,
+            7 => Tonic::G,
+            8 => Tonic::GSharp,
+            9 => Tonic::A,
+            10 => Tonic::ASharp,
+            11 => Tonic::B,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct KeySignature {
+    pub tonic: Tonic,
+    pub scale: Scale,
+}
+
+impl fmt::Display for KeySignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} {:?}", self.tonic, self.scale)
+    }
 }
 
 // PLUGINS
