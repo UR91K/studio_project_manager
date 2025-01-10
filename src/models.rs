@@ -153,7 +153,7 @@ impl Tonic {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KeySignature {
     pub tonic: Tonic,
     pub scale: Scale,

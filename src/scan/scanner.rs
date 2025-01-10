@@ -9,7 +9,7 @@ use quick_xml::Reader;
 use colored::Colorize;
 
 use crate::error::LiveSetError;
-use crate::models::{AbletonVersion, Id, Plugin, PluginInfo, Sample, TimeSignature};
+use crate::models::{AbletonVersion, Id, Plugin, PluginInfo, Sample, TimeSignature, KeySignature, Scale, Tonic};
 use crate::utils::plugins::LineTrackingBuffer;
 use crate::utils::{StringResultExt, EventExt};
 use crate::config::CONFIG;
@@ -60,6 +60,10 @@ pub enum ScannerState {
     
     // Time signature state
     InTimeSignature,
+
+    // Key scanning states
+    InMidiClip,
+    InScaleInformation,
 }
 
 /// Configuration for what should be scanned
@@ -77,6 +81,7 @@ pub struct ScanOptions {
     pub scan_master_track: bool,
     pub estimate_duration: bool,
     pub calculate_furthest_bar: bool,
+    pub scan_key: bool,
 }
 
 impl Default for ScanOptions {
@@ -93,6 +98,7 @@ impl Default for ScanOptions {
             scan_master_track: true,
             estimate_duration: true,
             calculate_furthest_bar: true,
+            scan_key: true,
         }
     }
 }
@@ -107,6 +113,7 @@ pub(crate) struct ScanResult {
     pub(crate) tempo: f64,
     pub(crate) time_signature: TimeSignature,
     pub(crate) furthest_bar: Option<f64>,
+    pub(crate) key_signature: KeySignature,
 }
 
 /// The main scanner that processes the XML data
@@ -136,6 +143,11 @@ pub struct Scanner {
     pub(crate) current_tempo: Option<f64>,
     pub(crate) current_time_signature: Option<TimeSignature>,
     pub(crate) current_end_times: Vec<f64>,
+
+    // Initialize key scanning state
+    pub(crate) key_frequencies: HashMap<KeySignature, usize>,
+    current_scale_info: Option<(Tonic, Scale)>,
+    current_clip_in_key: bool,
 }
 
 #[allow(dead_code)]
@@ -168,6 +180,11 @@ impl Scanner {
             current_tempo: None,
             current_time_signature: None,
             current_end_times: Vec::new(),
+
+            // Initialize key scanning state
+            key_frequencies: HashMap::new(),
+            current_scale_info: None,
+            current_clip_in_key: false,
         })
     }
 
@@ -432,6 +449,43 @@ impl Scanner {
             result.plugins.insert(plugin);
         }
 
+        // Handle key signature if requested
+        if self.options.scan_key {
+            if self.ableton_version.major < 11 {
+                debug_fn!(
+                    "finalize_result",
+                    "Version {} is less than 11, defaulting to Empty key signature",
+                    self.ableton_version
+                );
+                result.key_signature = KeySignature::default();
+            } else {
+                // Find the most frequent key signature
+                let most_frequent_key = self.key_frequencies
+                    .iter()
+                    .max_by_key(|&(_, count)| count)
+                    .map(|(key, count)| {
+                        debug_fn!(
+                            "finalize_result",
+                            "Found most frequent key signature: {} (count: {})",
+                            key,
+                            count
+                        );
+                        key.clone()
+                    })
+                    .unwrap_or_else(|| {
+                        debug_fn!(
+                            "finalize_result",
+                            "No key signatures found, using default"
+                        );
+                        KeySignature::default()
+                    });
+                
+                result.key_signature = most_frequent_key;
+            }
+        } else {
+            result.key_signature = KeySignature::default();
+        }
+
         Ok(result)
     }
 
@@ -564,6 +618,43 @@ impl Scanner {
                 }
             };
             result.plugins.insert(plugin);
+        }
+
+        // Handle key signature if requested
+        if self.options.scan_key {
+            if self.ableton_version.major < 11 {
+                debug_fn!(
+                    "finalize_result",
+                    "Version {} is less than 11, defaulting to Empty key signature",
+                    self.ableton_version
+                );
+                result.key_signature = KeySignature::default();
+            } else {
+                // Find the most frequent key signature
+                let most_frequent_key = self.key_frequencies
+                    .iter()
+                    .max_by_key(|&(_, count)| count)
+                    .map(|(key, count)| {
+                        debug_fn!(
+                            "finalize_result",
+                            "Found most frequent key signature: {} (count: {})",
+                            key,
+                            count
+                        );
+                        key.clone()
+                    })
+                    .unwrap_or_else(|| {
+                        debug_fn!(
+                            "finalize_result",
+                            "No key signatures found, using default"
+                        );
+                        KeySignature::default()
+                    });
+                
+                result.key_signature = most_frequent_key;
+            }
+        } else {
+            result.key_signature = KeySignature::default();
         }
 
         Ok(result)
@@ -879,10 +970,29 @@ impl Scanner {
                                 );
                             }
                         }
+                        ScannerState::InScaleInformation => {
+                            debug_fn!(
+                                "handle_start_event",
+                                "[{}] Found scale name: {}",
+                                line,
+                                value
+                            );
+                            let scale = match value.as_ref() {
+                                "Major" => Scale::Major,
+                                "Minor" => Scale::Minor,
+                                // Add other scale mappings as needed
+                                _ => Scale::Empty,
+                            };
+                            if let Some((tonic, _)) = self.current_scale_info.as_ref() {
+                                self.current_scale_info = Some((tonic.clone(), scale));
+                            } else {
+                                self.current_scale_info = Some((Tonic::Empty, scale));
+                            }
+                        }
                         _ => {
                             trace_fn!(
                                 "handle_start_event",
-                                "[{}] Found plugin name at depth {} but not in correct state: {:?}",
+                                "[{}] Found name tag at depth {} but not in correct state: {:?}",
                                 line,
                                 self.depth,
                                 self.state
@@ -1020,6 +1130,66 @@ impl Scanner {
                     }
                 }
                 self.state = ScannerState::InTempoManual;
+            }
+            "MidiClip" => {
+                if self.options.scan_key {
+                    debug_fn!(
+                        "handle_start_event",
+                        "[{}] Entering MidiClip at depth {}",
+                        line,
+                        self.depth
+                    );
+                    self.state = ScannerState::InMidiClip;
+                    self.current_clip_in_key = false;  // Reset for new clip
+                    self.current_scale_info = None;    // Reset scale info
+                }
+            }
+            "ScaleInformation" if matches!(self.state, ScannerState::InMidiClip) => {
+                debug_fn!(
+                    "handle_start_event",
+                    "[{}] Entering ScaleInformation at depth {}",
+                    line,
+                    self.depth
+                );
+                self.state = ScannerState::InScaleInformation;
+            }
+            "RootNote" if matches!(self.state, ScannerState::InScaleInformation) => {
+                if let Some(value) = event.try_get_attribute("Value")? {
+                    if let Ok(root_note) = value.unescape_value()?.parse::<i32>() {
+                        debug_fn!(
+                            "handle_start_event",
+                            "[{}] Found root note: {}",
+                            line,
+                            root_note
+                        );
+                        let tonic = Tonic::from_midi_note(root_note);
+                        if let Some((_, scale)) = self.current_scale_info.as_ref() {
+                            self.current_scale_info = Some((tonic, scale.clone()));
+                        } else {
+                            self.current_scale_info = Some((tonic, Scale::Empty));
+                        }
+                    }
+                }
+            }
+            "IsInKey" if matches!(self.state, ScannerState::InMidiClip) => {
+                if let Some(value) = event.try_get_attribute("Value")? {
+                    let is_in_key = value.unescape_value()?.as_ref() == "true";
+                    debug_fn!(
+                        "handle_start_event",
+                        "[{}] Found IsInKey: {}",
+                        line,
+                        is_in_key
+                    );
+                    self.current_clip_in_key = is_in_key;
+                    
+                    // If clip is in key and we have scale info, add to frequencies
+                    if is_in_key {
+                        if let Some((tonic, scale)) = self.current_scale_info.take() {
+                            let key_sig = KeySignature { tonic, scale };
+                            *self.key_frequencies.entry(key_sig).or_insert(0) += 1;
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -1196,6 +1366,28 @@ impl Scanner {
                 self.state = ScannerState::InTempo {
                     version: self.ableton_version.major,
                 };
+            }
+            "MidiClip" => {
+                debug_fn!(
+                    "handle_end_event",
+                    "Exiting MidiClip at depth {}, resetting state",
+                    self.depth
+                );
+                if matches!(self.state, ScannerState::InMidiClip) {
+                    self.state = ScannerState::Root;
+                    self.current_clip_in_key = false;
+                    self.current_scale_info = None;
+                }
+            }
+            "ScaleInformation" => {
+                debug_fn!(
+                    "handle_end_event",
+                    "Exiting ScaleInformation at depth {}, returning to MidiClip state",
+                    self.depth
+                );
+                if matches!(self.state, ScannerState::InScaleInformation) {
+                    self.state = ScannerState::InMidiClip;
+                }
             }
             _ => {}
         }

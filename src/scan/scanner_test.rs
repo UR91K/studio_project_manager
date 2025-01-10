@@ -1,6 +1,6 @@
 use super::scanner::{Scanner, ScanOptions, ScannerState};
 use crate::error::LiveSetError;
-use crate::models::{PluginFormat, TimeSignature};
+use crate::models::{PluginFormat, Scale, TimeSignature, Tonic};
 use quick_xml::events::{BytesStart, BytesEnd, Event};
 use quick_xml::Reader;
 use std::sync::Once;
@@ -1194,6 +1194,394 @@ fn test_invalid_tempo() {
     
     // Verify scanner state is clean
     assert_clean_state(&scanner);
+}
+
+#[test]
+fn test_key_signature_v12() {
+    let mut scanner = create_test_scanner();
+    let mut reader = Reader::from_str(r#"
+        <MidiClip Id="0" Time="0">
+            <LomId Value="0" />
+            <LomIdView Value="0" />
+            <CurrentStart Value="0" />
+            <CurrentEnd Value="8" />
+            <Loop>
+                <LoopStart Value="0" />
+                <LoopEnd Value="8" />
+                <StartRelative Value="0" />
+                <LoopOn Value="true" />
+                <OutMarker Value="8" />
+                <HiddenLoopStart Value="0" />
+                <HiddenLoopEnd Value="4" />
+            </Loop>
+            <Name Value="" />
+            <Annotation Value="" />
+            <Color Value="4" />
+            <LaunchMode Value="0" />
+            <LaunchQuantisation Value="0" />
+            <TimeSignature>
+                <TimeSignatures>
+                    <RemoteableTimeSignature Id="0">
+                        <Numerator Value="4" />
+                        <Denominator Value="4" />
+                        <Time Value="0" />
+                    </RemoteableTimeSignature>
+                </TimeSignatures>
+            </TimeSignature>
+            <Envelopes>
+                <Envelopes />
+            </Envelopes>
+            <ScrollerTimePreserver>
+                <LeftTime Value="0" />
+                <RightTime Value="8" />
+            </ScrollerTimePreserver>
+            <TimeSelection>
+                <AnchorTime Value="0" />
+                <OtherTime Value="0" />
+            </TimeSelection>
+            <Legato Value="false" />
+            <Ram Value="false" />
+            <GrooveSettings>
+                <GrooveId Value="-1" />
+            </GrooveSettings>
+            <Disabled Value="false" />
+            <VelocityAmount Value="0" />
+            <FollowAction>
+                <FollowTime Value="4" />
+                <IsLinked Value="true" />
+                <LoopIterations Value="1" />
+                <FollowActionA Value="4" />
+                <FollowActionB Value="0" />
+                <FollowChanceA Value="100" />
+                <FollowChanceB Value="0" />
+                <JumpIndexA Value="1" />
+                <JumpIndexB Value="1" />
+                <FollowActionEnabled Value="false" />
+            </FollowAction>
+            <Grid>
+                <FixedNumerator Value="1" />
+                <FixedDenominator Value="16" />
+                <GridIntervalPixel Value="20" />
+                <Ntoles Value="2" />
+                <SnapToGrid Value="true" />
+                <Fixed Value="true" />
+            </Grid>
+            <FreezeStart Value="0" />
+            <FreezeEnd Value="0" />
+            <IsWarped Value="true" />
+            <TakeId Value="1" />
+            <Notes>
+                <KeyTracks />
+                <PerNoteEventStore>
+                    <EventLists />
+                </PerNoteEventStore>
+                <NoteProbabilityGroups />
+                <ProbabilityGroupIdGenerator>
+                    <NextId Value="1" />
+                </ProbabilityGroupIdGenerator>
+                <NoteIdGenerator>
+                    <NextId Value="1" />
+                </NoteIdGenerator>
+            </Notes>
+            <BankSelectCoarse Value="-1" />
+            <BankSelectFine Value="-1" />
+            <ProgramChange Value="-1" />
+            <NoteEditorFoldInZoom Value="-1" />
+            <NoteEditorFoldInScroll Value="0" />
+            <NoteEditorFoldOutZoom Value="2620" />
+            <NoteEditorFoldOutScroll Value="-1126" />
+            <NoteEditorFoldScaleZoom Value="-1" />
+            <NoteEditorFoldScaleScroll Value="0" />
+            <ScaleInformation>
+                <RootNote Value="0" />
+                <Name Value="Major" />
+            </ScaleInformation>
+            <IsInKey Value="true" />
+            <NoteSpellingPreference Value="0" />
+            <AccidentalSpellingPreference Value="3" />
+            <PreferFlatRootNote Value="false" />
+            <ExpressionGrid>
+                <FixedNumerator Value="1" />
+                <FixedDenominator Value="16" />
+                <GridIntervalPixel Value="20" />
+                <Ntoles Value="2" />
+                <SnapToGrid Value="false" />
+                <Fixed Value="false" />
+            </ExpressionGrid>
+        </MidiClip>
+    "#);
+
+    process_xml(&mut scanner, &mut reader);
+
+    // Set required fields for a valid project
+    scanner.current_tempo = Some(120.0);
+    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+
+    // Finalize and check the result
+    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    assert_eq!(result.key_signature.tonic, Tonic::C);
+    assert_eq!(result.key_signature.scale, Scale::Major);
+}
+
+#[test]
+fn test_key_signature_v9() {
+    let mut scanner = create_test_scanner_with_version(9);
+    let mut reader = Reader::from_str(r#"
+        <MidiClip Time="224">
+            <LomId Value="0" />
+            <LomIdView Value="0" />
+            <WarpMarkers>
+                <WarpMarker SecTime="0" BeatTime="0" />
+                <WarpMarker SecTime="0.015625" BeatTime="0.03125" />
+            </WarpMarkers>
+            <MarkersGenerated Value="false" />
+            <CurrentStart Value="224" />
+            <CurrentEnd Value="256" />
+            <Loop>
+                <LoopStart Value="0" />
+                <LoopEnd Value="32" />
+                <StartRelative Value="0" />
+                <LoopOn Value="false" />
+                <OutMarker Value="64" />
+                <HiddenLoopStart Value="0" />
+                <HiddenLoopEnd Value="64" />
+            </Loop>
+            <Name Value="Arabic C Scale" />
+            <Annotation Value="" />
+            <ColorIndex Value="16" />
+            <LaunchMode Value="0" />
+            <LaunchQuantisation Value="0" />
+            <TimeSignature>
+                <TimeSignatures>
+                    <RemoteableTimeSignature>
+                        <Numerator Value="4" />
+                        <Denominator Value="4" />
+                        <Time Value="0" />
+                    </RemoteableTimeSignature>
+                </TimeSignatures>
+            </TimeSignature>
+            <Envelopes>
+                <Envelopes />
+            </Envelopes>
+            <ScrollerTimePreserver>
+                <LeftTime Value="0.016361886429258954" />
+                <RightTime Value="25.663618864292591" />
+            </ScrollerTimePreserver>
+            <TimeSelection>
+                <AnchorTime Value="8" />
+                <OtherTime Value="9" />
+            </TimeSelection>
+            <Legato Value="false" />
+            <Ram Value="false" />
+            <GrooveSettings>
+                <GrooveId Value="-1" />
+            </GrooveSettings>
+            <Disabled Value="false" />
+            <VelocityAmount Value="0" />
+            <FollowTime Value="4" />
+            <FollowActionA Value="0" />
+            <FollowActionB Value="0" />
+            <FollowChanceA Value="1" />
+            <FollowChanceB Value="0" />
+            <Grid>
+                <FixedNumerator Value="1" />
+                <FixedDenominator Value="16" />
+                <GridIntervalPixel Value="20" />
+                <Ntoles Value="2" />
+                <SnapToGrid Value="true" />
+                <Fixed Value="false" />
+            </Grid>
+            <FreezeStart Value="0" />
+            <FreezeEnd Value="0" />
+            <IsSongTempoMaster Value="false" />
+            <IsWarped Value="true" />
+            <Notes />
+            <BankSelectCoarse Value="-1" />
+            <BankSelectFine Value="-1" />
+            <ProgramChange Value="-1" />
+            <NoteEditorFoldInZoom Value="825" />
+            <NoteEditorFoldInScroll Value="-297" />
+            <NoteEditorFoldOutZoom Value="3072" />
+            <NoteEditorFoldOutScroll Value="0" />
+        </MidiClip>
+    "#);
+
+    process_xml(&mut scanner, &mut reader);
+
+    // Set required fields for a valid project
+    scanner.current_tempo = Some(120.0);
+    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+
+    // Finalize and check the result
+    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    assert_eq!(result.key_signature.tonic, Tonic::Empty);
+    assert_eq!(result.key_signature.scale, Scale::Empty);
+}
+
+#[test]
+fn test_key_signature_not_in_key() {
+    let mut scanner = create_test_scanner();
+    let mut reader = Reader::from_str(r#"
+        <MidiClip Id="0" Time="0">
+            <LomId Value="0" />
+            <LomIdView Value="0" />
+            <CurrentStart Value="0" />
+            <CurrentEnd Value="8" />
+            <Loop>
+                <LoopStart Value="0" />
+                <LoopEnd Value="8" />
+                <StartRelative Value="0" />
+                <LoopOn Value="true" />
+                <OutMarker Value="8" />
+                <HiddenLoopStart Value="0" />
+                <HiddenLoopEnd Value="4" />
+            </Loop>
+            <Name Value="" />
+            <Annotation Value="" />
+            <Color Value="4" />
+            <LaunchMode Value="0" />
+            <LaunchQuantisation Value="0" />
+            <TimeSignature>
+                <TimeSignatures>
+                    <RemoteableTimeSignature Id="0">
+                        <Numerator Value="4" />
+                        <Denominator Value="4" />
+                        <Time Value="0" />
+                    </RemoteableTimeSignature>
+                </TimeSignatures>
+            </TimeSignature>
+            <Envelopes>
+                <Envelopes />
+            </Envelopes>
+            <ScrollerTimePreserver>
+                <LeftTime Value="0" />
+                <RightTime Value="8" />
+            </ScrollerTimePreserver>
+            <TimeSelection>
+                <AnchorTime Value="0" />
+                <OtherTime Value="0" />
+            </TimeSelection>
+            <Legato Value="false" />
+            <Ram Value="false" />
+            <GrooveSettings>
+                <GrooveId Value="-1" />
+            </GrooveSettings>
+            <Disabled Value="false" />
+            <VelocityAmount Value="0" />
+            <FollowAction>
+                <FollowTime Value="4" />
+                <IsLinked Value="true" />
+                <LoopIterations Value="1" />
+                <FollowActionA Value="4" />
+                <FollowActionB Value="0" />
+                <FollowChanceA Value="100" />
+                <FollowChanceB Value="0" />
+                <JumpIndexA Value="1" />
+                <JumpIndexB Value="1" />
+                <FollowActionEnabled Value="false" />
+            </FollowAction>
+            <Grid>
+                <FixedNumerator Value="1" />
+                <FixedDenominator Value="16" />
+                <GridIntervalPixel Value="20" />
+                <Ntoles Value="2" />
+                <SnapToGrid Value="true" />
+                <Fixed Value="true" />
+            </Grid>
+            <FreezeStart Value="0" />
+            <FreezeEnd Value="0" />
+            <IsWarped Value="true" />
+            <TakeId Value="1" />
+            <Notes>
+                <KeyTracks />
+                <PerNoteEventStore>
+                    <EventLists />
+                </PerNoteEventStore>
+                <NoteProbabilityGroups />
+                <ProbabilityGroupIdGenerator>
+                    <NextId Value="1" />
+                </ProbabilityGroupIdGenerator>
+                <NoteIdGenerator>
+                    <NextId Value="1" />
+                </NoteIdGenerator>
+            </Notes>
+            <BankSelectCoarse Value="-1" />
+            <BankSelectFine Value="-1" />
+            <ProgramChange Value="-1" />
+            <NoteEditorFoldInZoom Value="-1" />
+            <NoteEditorFoldInScroll Value="0" />
+            <NoteEditorFoldOutZoom Value="2620" />
+            <NoteEditorFoldOutScroll Value="-1126" />
+            <NoteEditorFoldScaleZoom Value="-1" />
+            <NoteEditorFoldScaleScroll Value="0" />
+            <ScaleInformation>
+                <RootNote Value="0" />
+                <Name Value="Major" />
+            </ScaleInformation>
+            <IsInKey Value="false" />
+            <NoteSpellingPreference Value="0" />
+            <AccidentalSpellingPreference Value="3" />
+            <PreferFlatRootNote Value="false" />
+            <ExpressionGrid>
+                <FixedNumerator Value="1" />
+                <FixedDenominator Value="16" />
+                <GridIntervalPixel Value="20" />
+                <Ntoles Value="2" />
+                <SnapToGrid Value="false" />
+                <Fixed Value="false" />
+            </ExpressionGrid>
+        </MidiClip>
+    "#);
+    process_xml(&mut scanner, &mut reader);
+
+    // Set required fields for a valid project
+    scanner.current_tempo = Some(120.0);
+    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+
+    // Finalize and check the result
+    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    assert_eq!(result.key_signature.tonic, Tonic::Empty);
+    assert_eq!(result.key_signature.scale, Scale::Empty);
+    assert_eq!(scanner.key_frequencies.len(), 0);
+}
+
+#[test]
+fn test_multiple_key_signatures() {
+    let mut scanner = create_test_scanner();
+    let mut reader = Reader::from_str(r#"
+        <MidiClip>
+            <ScaleInformation>
+                <RootNote Value="0" />
+                <Name Value="Major" />
+            </ScaleInformation>
+            <IsInKey Value="true" />
+        </MidiClip>
+        <MidiClip>
+            <ScaleInformation>
+                <RootNote Value="0" />
+                <Name Value="Major" />
+            </ScaleInformation>
+            <IsInKey Value="true" />
+        </MidiClip>
+        <MidiClip>
+            <ScaleInformation>
+                <RootNote Value="9" />
+                <Name Value="Minor" />
+            </ScaleInformation>
+            <IsInKey Value="true" />
+        </MidiClip>
+    "#);
+    process_xml(&mut scanner, &mut reader);
+
+    // Set required fields for a valid project
+    scanner.current_tempo = Some(120.0);
+    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+
+    // Finalize and check the result
+    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    assert_eq!(result.key_signature.tonic, Tonic::C);
+    assert_eq!(result.key_signature.scale, Scale::Major);
+    assert_eq!(scanner.key_frequencies.len(), 2);
 }
 
 // Helper function to process XML in tests
