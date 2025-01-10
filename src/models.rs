@@ -328,6 +328,23 @@ pub struct TimeSignature {
 }
 
 impl TimeSignature {
+    pub fn is_valid(&self) -> bool {
+        // Check numerator is between 1 and 99
+        if !(1..=99).contains(&self.numerator) {
+            return false;
+        }
+
+        // Check denominator is between 1 and 16 and is a power of 2
+        if self.denominator > 16 || self.denominator < 1 {
+            return false;
+        }
+
+        // Check if denominator is a power of 2
+        self.denominator & (self.denominator - 1) == 0
+    }
+}
+
+impl TimeSignature {
     pub fn from_encoded(encoded_value: i32) -> Result<Self, TimeSignatureError> {
         if encoded_value < 0 || encoded_value > 494 {
             return Err(TimeSignatureError::InvalidEncodedValue(encoded_value));
@@ -358,11 +375,12 @@ impl TimeSignature {
     }
 }
 
+
 impl Default for TimeSignature {
     fn default() -> Self {
         Self {
-            numerator: 4,
-            denominator: 4,
+            numerator: 0,
+            denominator: 0,
         }
     }
 }

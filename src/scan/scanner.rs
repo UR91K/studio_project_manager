@@ -140,8 +140,8 @@ pub struct Scanner {
     
     // Tempo and timing state
     pub(crate) dev_identifiers: Arc<parking_lot::RwLock<HashMap<String, ()>>>,
-    pub(crate) current_tempo: Option<f64>,
-    pub(crate) current_time_signature: Option<TimeSignature>,
+    pub(crate) current_tempo: f64,
+    pub(crate) current_time_signature: TimeSignature,
     pub(crate) current_end_times: Vec<f64>,
 
     // Initialize key scanning state
@@ -184,8 +184,8 @@ impl Scanner {
             
             // Initialize other state
             dev_identifiers: Arc::new(parking_lot::RwLock::new(HashMap::new())),
-            current_tempo: None,
-            current_time_signature: None,
+            current_tempo: 0.0,
+            current_time_signature: TimeSignature::default(),
             current_end_times: Vec::new(),
 
             // Initialize key scanning state
@@ -331,38 +331,23 @@ impl Scanner {
         // Set the version
         result.version = self.ableton_version;
 
-        // Validate and set tempo (required for a valid project)
-        match self.current_tempo {
-            Some(tempo) if tempo > 0.0 => {
-                result.tempo = tempo;
-            }
-            Some(tempo) => {
-                return Err(LiveSetError::InvalidProject(
-                    format!("Invalid tempo value: {}", tempo)
-                ));
-            }
-            None => {
-                return Err(LiveSetError::InvalidProject(
-                    "No tempo found in project".into()
-                ));
-            }
+        // Validate and set tempo (must be between 10 and 999 BPM)
+        if self.current_tempo < 10.0 || self.current_tempo > 999.0 {
+            return Err(LiveSetError::InvalidProject(
+                format!("Invalid tempo value: {}", self.current_tempo)
+            ));
         }
+        result.tempo = self.current_tempo;
 
         // Validate and set time signature (required for a valid project)
-        match &self.current_time_signature {
-            Some(time_sig) if time_sig.numerator > 0 && time_sig.denominator > 0 => {
-                result.time_signature = time_sig.clone();
-            }
-            Some(time_sig) => {
-                return Err(LiveSetError::InvalidProject(
-                    format!("Invalid time signature: {}/{}", time_sig.numerator, time_sig.denominator)
-                ));
-            }
-            None => {
-                return Err(LiveSetError::InvalidProject(
-                    "No time signature found in project".into()
-                ));
-            }
+        if self.current_time_signature.numerator > 0 && self.current_time_signature.denominator > 0 {
+            result.time_signature = self.current_time_signature.clone();
+        } else {
+            return Err(LiveSetError::InvalidProject(
+                format!("Invalid time signature: {}/{}", 
+                    self.current_time_signature.numerator, 
+                    self.current_time_signature.denominator)
+            ));
         }
 
         // Calculate furthest bar if requested and we have end times
@@ -456,6 +441,7 @@ impl Scanner {
         }
 
         // Handle key signature if requested
+        // TODO: add fallback to key detection using midi data, use music21 python script to detect key
         if self.options.scan_key {
             // Find the most frequent key signature
             let most_frequent_key = self.key_frequencies
@@ -493,37 +479,22 @@ impl Scanner {
         result.version = self.ableton_version;
 
         // Validate and set tempo (required for a valid project)
-        match self.current_tempo {
-            Some(tempo) if tempo > 0.0 => {
-                result.tempo = tempo;
-            }
-            Some(tempo) => {
-                return Err(LiveSetError::InvalidProject(
-                    format!("Invalid tempo value: {}", tempo)
-                ));
-            }
-            None => {
-                return Err(LiveSetError::InvalidProject(
-                    "No tempo found in project".into()
-                ));
-            }
+        if self.current_tempo < 10.0 || self.current_tempo > 999.0 {
+            return Err(LiveSetError::InvalidProject(
+                format!("Invalid tempo value: {}", self.current_tempo)
+            ));
         }
+        result.tempo = self.current_tempo;
 
         // Validate and set time signature (required for a valid project)
-        match &self.current_time_signature {
-            Some(time_sig) if time_sig.numerator > 0 && time_sig.denominator > 0 => {
-                result.time_signature = time_sig.clone();
-            }
-            Some(time_sig) => {
-                return Err(LiveSetError::InvalidProject(
-                    format!("Invalid time signature: {}/{}", time_sig.numerator, time_sig.denominator)
-                ));
-            }
-            None => {
-                return Err(LiveSetError::InvalidProject(
-                    "No time signature found in project".into()
-                ));
-            }
+        if self.current_time_signature.numerator > 0 && self.current_time_signature.denominator > 0 {
+            result.time_signature = self.current_time_signature.clone();
+        } else {
+            return Err(LiveSetError::InvalidProject(
+                format!("Invalid time signature: {}/{}", 
+                    self.current_time_signature.numerator, 
+                    self.current_time_signature.denominator)
+            ));
         }
 
         // Calculate furthest bar if requested and we have end times
@@ -1016,7 +987,7 @@ impl Scanner {
                                         time_sig.numerator,
                                         time_sig.denominator
                                     );
-                                    self.current_time_signature = Some(time_sig);
+                                    self.current_time_signature = time_sig;
                                 }
                                 Err(e) => {
                                     warn_fn!(
@@ -1088,14 +1059,14 @@ impl Scanner {
                 if let Some(value) = event.try_get_attribute("Value")? {
                     let value_str = value.unescape_value()?.to_string();
                     match value_str.parse::<f64>() {
-                        Ok(tempo) if tempo > 0.0 => {
+                        Ok(tempo) if tempo >= 10.0 && tempo <= 999.0 => {
                             debug_fn!(
                                 "handle_start_event",
                                 "[{}] Found valid tempo value: {}",
                                 line,
                                 tempo
                             );
-                            self.current_tempo = Some(tempo);
+                            self.current_tempo = tempo;
                         }
                         Ok(_) => {
                             warn_fn!(
