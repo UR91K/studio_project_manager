@@ -152,9 +152,16 @@ pub struct Scanner {
 
 #[allow(dead_code)]
 impl Scanner {
-    pub fn new(xml_data: &[u8], options: ScanOptions) -> Result<Self, LiveSetError> {
+    pub fn new(xml_data: &[u8], mut options: ScanOptions) -> Result<Self, LiveSetError> {
         // First, detect and validate the version
         let version = Self::detect_version(xml_data)?;
+        
+        // Disable features not supported in older versions
+        if version.major < 11 {
+            options.scan_key = false;  // Key detection only available in v11+
+            warn_fn!("scanner", "Key detection not supported in version {}", version);
+            // Add other version-specific feature flags here
+        }
         
         Ok(Self {
             state: ScannerState::Root,
@@ -360,7 +367,6 @@ impl Scanner {
 
         // Calculate furthest bar if requested and we have end times
         if self.options.calculate_furthest_bar && !self.current_end_times.is_empty() {
-            // We can now use result.time_signature directly since it's guaranteed to be valid
             let beats_per_bar = result.time_signature.numerator as f64;
             let max_end_time = self.current_end_times.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             result.furthest_bar = Some(max_end_time / beats_per_bar);
@@ -451,37 +457,28 @@ impl Scanner {
 
         // Handle key signature if requested
         if self.options.scan_key {
-            if self.ableton_version.major < 11 {
-                debug_fn!(
-                    "finalize_result",
-                    "Version {} is less than 11, defaulting to Empty key signature",
-                    self.ableton_version
-                );
-                result.key_signature = KeySignature::default();
-            } else {
-                // Find the most frequent key signature
-                let most_frequent_key = self.key_frequencies
-                    .iter()
-                    .max_by_key(|&(_, count)| count)
-                    .map(|(key, count)| {
-                        debug_fn!(
-                            "finalize_result",
-                            "Found most frequent key signature: {} (count: {})",
-                            key,
-                            count
-                        );
-                        key.clone()
-                    })
-                    .unwrap_or_else(|| {
-                        debug_fn!(
-                            "finalize_result",
-                            "No key signatures found, using default"
-                        );
-                        KeySignature::default()
-                    });
-                
-                result.key_signature = most_frequent_key;
-            }
+            // Find the most frequent key signature
+            let most_frequent_key = self.key_frequencies
+                .iter()
+                .max_by_key(|&(_, count)| count)
+                .map(|(key, count)| {
+                    debug_fn!(
+                        "finalize_result",
+                        "Found most frequent key signature: {} (count: {})",
+                        key,
+                        count
+                    );
+                    key.clone()
+                })
+                .unwrap_or_else(|| {
+                    debug_fn!(
+                        "finalize_result",
+                        "No key signatures found, using default"
+                    );
+                    KeySignature::default()
+                });
+            
+            result.key_signature = most_frequent_key;
         } else {
             result.key_signature = KeySignature::default();
         }
@@ -531,7 +528,6 @@ impl Scanner {
 
         // Calculate furthest bar if requested and we have end times
         if self.options.calculate_furthest_bar && !self.current_end_times.is_empty() {
-            // We can now use result.time_signature directly since it's guaranteed to be valid
             let beats_per_bar = result.time_signature.numerator as f64;
             let max_end_time = self.current_end_times.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             result.furthest_bar = Some(max_end_time / beats_per_bar);
@@ -622,37 +618,28 @@ impl Scanner {
 
         // Handle key signature if requested
         if self.options.scan_key {
-            if self.ableton_version.major < 11 {
-                debug_fn!(
-                    "finalize_result",
-                    "Version {} is less than 11, defaulting to Empty key signature",
-                    self.ableton_version
-                );
-                result.key_signature = KeySignature::default();
-            } else {
-                // Find the most frequent key signature
-                let most_frequent_key = self.key_frequencies
-                    .iter()
-                    .max_by_key(|&(_, count)| count)
-                    .map(|(key, count)| {
-                        debug_fn!(
-                            "finalize_result",
-                            "Found most frequent key signature: {} (count: {})",
-                            key,
-                            count
-                        );
-                        key.clone()
-                    })
-                    .unwrap_or_else(|| {
-                        debug_fn!(
-                            "finalize_result",
-                            "No key signatures found, using default"
-                        );
-                        KeySignature::default()
-                    });
-                
-                result.key_signature = most_frequent_key;
-            }
+            // Find the most frequent key signature
+            let most_frequent_key = self.key_frequencies
+                .iter()
+                .max_by_key(|&(_, count)| count)
+                .map(|(key, count)| {
+                    debug_fn!(
+                        "finalize_result",
+                        "Found most frequent key signature: {} (count: {})",
+                        key,
+                        count
+                    );
+                    key.clone()
+                })
+                .unwrap_or_else(|| {
+                    debug_fn!(
+                        "finalize_result",
+                        "No key signatures found, using default"
+                    );
+                    KeySignature::default()
+                });
+            
+            result.key_signature = most_frequent_key;
         } else {
             result.key_signature = KeySignature::default();
         }
