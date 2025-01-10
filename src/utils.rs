@@ -18,7 +18,6 @@ pub mod metadata;
 pub mod plugins;
 pub mod samples;
 pub mod time_signature;
-pub mod xml_parsing;
 
 #[macro_export]
 macro_rules! trace_fn {
