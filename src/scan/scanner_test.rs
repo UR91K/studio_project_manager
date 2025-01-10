@@ -9,7 +9,6 @@ use super::scanner::ScanResult;
 
 static TIME_SIGNATURE: TimeSignature = TimeSignature { numerator: 4, denominator: 4 };
 
-// Initialize logging exactly once for all tests
 static INIT: Once = Once::new();
 fn setup() {
     INIT.call_once(|| {
@@ -23,7 +22,7 @@ fn setup() {
 }
 
 fn create_test_scanner() -> Scanner {
-    setup(); // This will only initialize logging on first call
+    setup();
     let xml_data = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <Ableton MajorVersion="11" MinorVersion="12.0_12049">
@@ -271,89 +270,9 @@ fn test_vst3_audio_fx() {
             </Vst3PluginInfo>
         </PluginDesc>
     "#);
-    let mut byte_pos = 0;
-
-    // Enter SourceContext
-    scanner.handle_start_event(
-        &create_start_event("SourceContext"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Enter Value
-    scanner.handle_start_event(
-        &create_start_event("Value"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Enter BranchSourceContext
-    let mut branch_event = create_start_event("BranchSourceContext");
-    branch_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &branch_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Handle empty tags
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "OriginalFileRef");
     
-    // Add BrowserContentPath
-    scanner.handle_start_event(
-        &create_empty_event("BrowserContentPath", Some("query:Everything#Pro-Q%203")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
+    process_xml(&mut scanner, &mut reader);
 
-    // Handle more empty tags
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "LocalFiltersJson");
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "PresetRef");
-
-    // Add device ID
-    scanner.handle_start_event(
-        &create_empty_event(
-            "BranchDeviceId",
-            Some("device:vst3:audiofx:72c4db71-7a4d-459a-b97e-51745d84b39d")
-        ),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Exit BranchSourceContext and Value
-    scanner.handle_end_event(&create_end_event("BranchSourceContext")).unwrap();
-    scanner.handle_end_event(&create_end_event("Value")).unwrap();
-    scanner.handle_end_event(&create_end_event("SourceContext")).unwrap();
-
-    // Enter PluginDesc
-    scanner.handle_start_event(
-        &create_start_event("PluginDesc"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Enter Vst3PluginInfo
-    let mut plugin_info_event = create_start_event("Vst3PluginInfo");
-    plugin_info_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &plugin_info_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Add plugin name
-    scanner.handle_start_event(
-        &create_empty_event("Name", Some("Pro-Q 3")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Exit all tags
-    scanner.handle_end_event(&create_end_event("Name")).unwrap();
-    scanner.handle_end_event(&create_end_event("Vst3PluginInfo")).unwrap();
-    scanner.handle_end_event(&create_end_event("PluginDesc")).unwrap();
-
-    // Verify the plugin was collected correctly
     assert_eq!(scanner.plugin_info_tags.len(), 1);
     let plugin_info = scanner.plugin_info_tags.values().next().unwrap();
     assert_eq!(plugin_info.name, "Pro-Q 3");
@@ -385,89 +304,9 @@ fn test_vst2_audio_fx() {
             </VstPluginInfo>
         </PluginDesc>
     "#);
-    let mut byte_pos = 0;
 
-    // Enter SourceContext
-    scanner.handle_start_event(
-        &create_start_event("SourceContext"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
+    process_xml(&mut scanner, &mut reader);
 
-    // Enter Value
-    scanner.handle_start_event(
-        &create_start_event("Value"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Enter BranchSourceContext
-    let mut branch_event = create_start_event("BranchSourceContext");
-    branch_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &branch_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Handle empty tags
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "OriginalFileRef");
-    
-    // Add BrowserContentPath
-    scanner.handle_start_event(
-        &create_empty_event("BrowserContentPath", Some("view:X-Plugins#Altiverb%207")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Handle more empty tags
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "LocalFiltersJson");
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "PresetRef");
-
-    // Add device ID
-    scanner.handle_start_event(
-        &create_empty_event(
-            "BranchDeviceId",
-            Some("device:vst:audiofx:1096184373?n=Altiverb%207")
-        ),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Exit BranchSourceContext and Value
-    scanner.handle_end_event(&create_end_event("BranchSourceContext")).unwrap();
-    scanner.handle_end_event(&create_end_event("Value")).unwrap();
-    scanner.handle_end_event(&create_end_event("SourceContext")).unwrap();
-
-    // Enter PluginDesc
-    scanner.handle_start_event(
-        &create_start_event("PluginDesc"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Enter VstPluginInfo
-    let mut plugin_info_event = create_start_event("VstPluginInfo");
-    plugin_info_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &plugin_info_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Add plugin name
-    scanner.handle_start_event(
-        &create_empty_event("PlugName", Some("Altiverb 7")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Exit all tags
-    scanner.handle_end_event(&create_end_event("PlugName")).unwrap();
-    scanner.handle_end_event(&create_end_event("VstPluginInfo")).unwrap();
-    scanner.handle_end_event(&create_end_event("PluginDesc")).unwrap();
-
-    // Verify the plugin was collected correctly
     assert_eq!(scanner.plugin_info_tags.len(), 1);
     let plugin_info = scanner.plugin_info_tags.values().next().unwrap();
     assert_eq!(plugin_info.name, "Altiverb 7");
@@ -499,89 +338,9 @@ fn test_vst3_instrument() {
             </Vst3PluginInfo>
         </PluginDesc>
     "#);
-    let mut byte_pos = 0;
 
-    // Enter SourceContext
-    scanner.handle_start_event(
-        &create_start_event("SourceContext"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
+    process_xml(&mut scanner, &mut reader);
 
-    // Enter Value
-    scanner.handle_start_event(
-        &create_start_event("Value"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Enter BranchSourceContext
-    let mut branch_event = create_start_event("BranchSourceContext");
-    branch_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &branch_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Handle empty tags
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "OriginalFileRef");
-    
-    // Add BrowserContentPath
-    scanner.handle_start_event(
-        &create_empty_event("BrowserContentPath", Some("query:Everything#Omnisphere")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Handle more empty tags
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "LocalFiltersJson");
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "PresetRef");
-
-    // Add device ID
-    scanner.handle_start_event(
-        &create_empty_event(
-            "BranchDeviceId",
-            Some("device:vst3:instr:84e8de5f-9255-2222-96fa-e4133c935a18")
-        ),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Exit BranchSourceContext and Value
-    scanner.handle_end_event(&create_end_event("BranchSourceContext")).unwrap();
-    scanner.handle_end_event(&create_end_event("Value")).unwrap();
-    scanner.handle_end_event(&create_end_event("SourceContext")).unwrap();
-
-    // Enter PluginDesc
-    scanner.handle_start_event(
-        &create_start_event("PluginDesc"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Enter Vst3PluginInfo
-    let mut plugin_info_event = create_start_event("Vst3PluginInfo");
-    plugin_info_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &plugin_info_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Add plugin name
-    scanner.handle_start_event(
-        &create_empty_event("Name", Some("Omnisphere")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    // Exit all tags
-    scanner.handle_end_event(&create_end_event("Name")).unwrap();
-    scanner.handle_end_event(&create_end_event("Vst3PluginInfo")).unwrap();
-    scanner.handle_end_event(&create_end_event("PluginDesc")).unwrap();
-
-    // Verify the plugin was collected correctly
     assert_eq!(scanner.plugin_info_tags.len(), 1);
     let plugin_info = scanner.plugin_info_tags.values().next().unwrap();
     assert_eq!(plugin_info.name, "Omnisphere");
@@ -663,150 +422,20 @@ fn test_interleaved_plugins_and_sample() {
             </VstPluginInfo>
         </PluginDesc>
     "#);
-    let mut byte_pos = 0;
 
-    // Process first plugin (Pro-Q 3)
-    scanner.handle_start_event(
-        &create_start_event("SourceContext"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_start_event(
-        &create_start_event("Value"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    let mut branch_event = create_start_event("BranchSourceContext");
-    branch_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &branch_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "OriginalFileRef");
-    scanner.handle_start_event(
-        &create_empty_event("BrowserContentPath", Some("query:Everything#Pro-Q%203")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "LocalFiltersJson");
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "PresetRef");
-    scanner.handle_start_event(
-        &create_empty_event(
-            "BranchDeviceId",
-            Some("device:vst3:audiofx:72c4db71-7a4d-459a-b97e-51745d84b39d")
-        ),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_end_event(&create_end_event("BranchSourceContext")).unwrap();
-    scanner.handle_end_event(&create_end_event("Value")).unwrap();
-    scanner.handle_end_event(&create_end_event("SourceContext")).unwrap();
+    process_xml(&mut scanner, &mut reader);
 
-    scanner.handle_start_event(
-        &create_start_event("PluginDesc"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    let mut plugin_info_event = create_start_event("Vst3PluginInfo");
-    plugin_info_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &plugin_info_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_start_event(
-        &create_empty_event("Name", Some("Pro-Q 3")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_end_event(&create_end_event("Name")).unwrap();
-    scanner.handle_end_event(&create_end_event("Vst3PluginInfo")).unwrap();
-    scanner.handle_end_event(&create_end_event("PluginDesc")).unwrap();
-
-    // Process sample
-    scanner.handle_start_event(
-        &create_start_event("SampleRef"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    // ... sample processing will be implemented when we add sample handling ...
-    scanner.handle_end_event(&create_end_event("SampleRef")).unwrap();
-
-    // Process second plugin (Altiverb 7)
-    scanner.handle_start_event(
-        &create_start_event("SourceContext"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_start_event(
-        &create_start_event("Value"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    let mut branch_event = create_start_event("BranchSourceContext");
-    branch_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &branch_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "OriginalFileRef");
-    scanner.handle_start_event(
-        &create_empty_event("BrowserContentPath", Some("view:X-Plugins#Altiverb%207")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "LocalFiltersJson");
-    handle_tag_sequence(&mut scanner, &mut reader, &mut byte_pos, "PresetRef");
-    scanner.handle_start_event(
-        &create_empty_event(
-            "BranchDeviceId",
-            Some("device:vst:audiofx:1096184373?n=Altiverb%207")
-        ),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_end_event(&create_end_event("BranchSourceContext")).unwrap();
-    scanner.handle_end_event(&create_end_event("Value")).unwrap();
-    scanner.handle_end_event(&create_end_event("SourceContext")).unwrap();
-
-    scanner.handle_start_event(
-        &create_start_event("PluginDesc"),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    let mut plugin_info_event = create_start_event("VstPluginInfo");
-    plugin_info_event.push_attribute(("Id", "0"));
-    scanner.handle_start_event(
-        &plugin_info_event,
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_start_event(
-        &create_empty_event("PlugName", Some("Altiverb 7")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_end_event(&create_end_event("PlugName")).unwrap();
-    scanner.handle_end_event(&create_end_event("VstPluginInfo")).unwrap();
-    scanner.handle_end_event(&create_end_event("PluginDesc")).unwrap();
-
-    // Verify results
     assert_eq!(scanner.plugin_info_tags.len(), 2);
     let plugin_info: Vec<_> = scanner.plugin_info_tags.values().collect();
     
-    // Verify Pro-Q 3
     let proq3 = plugin_info.iter().find(|p| p.name == "Pro-Q 3").unwrap();
     assert_eq!(proq3.dev_identifier, "device:vst3:audiofx:72c4db71-7a4d-459a-b97e-51745d84b39d");
     assert_eq!(proq3.plugin_format, PluginFormat::VST3AudioFx);
 
-    // Verify Altiverb 7
     let altiverb = plugin_info.iter().find(|p| p.name == "Altiverb 7").unwrap();
     assert_eq!(altiverb.dev_identifier, "device:vst:audiofx:1096184373?n=Altiverb%207");
     assert_eq!(altiverb.plugin_format, PluginFormat::VST2AudioFx);
 
-    // Verify scanner state is clean
     assert_eq!(scanner.state, ScannerState::Root);
     assert_eq!(scanner.in_source_context, false);
     assert_eq!(scanner.current_branch_info, None);
@@ -829,6 +458,7 @@ fn test_malformed_missing_browser_path() {
             </Vst3PluginInfo>
         </PluginDesc>
     "#);
+
     process_xml(&mut scanner, &mut reader);
 
     assert_eq!(scanner.plugin_info_tags.len(), 0, "Should not collect plugin without browser path");
@@ -852,6 +482,7 @@ fn test_malformed_missing_device_id() {
             </Vst3PluginInfo>
         </PluginDesc>
     "#);
+
     process_xml(&mut scanner, &mut reader);
 
     assert_eq!(scanner.plugin_info_tags.len(), 0, "Should not collect plugin without device ID");
@@ -879,6 +510,7 @@ fn test_malformed_multiple_plugin_info() {
             </VstPluginInfo>
         </PluginDesc>
     "#);
+
     process_xml(&mut scanner, &mut reader);
 
     assert_eq!(scanner.plugin_info_tags.len(), 1, "Should only collect the first plugin info");
@@ -907,6 +539,7 @@ fn test_malformed_invalid_device_id() {
             </Vst3PluginInfo>
         </PluginDesc>
     "#);
+
     process_xml(&mut scanner, &mut reader);
 
     assert_eq!(scanner.plugin_info_tags.len(), 0, "Should not collect plugin with invalid device ID");
@@ -923,6 +556,7 @@ fn test_malformed_orphaned_plugin_desc() {
             </Vst3PluginInfo>
         </PluginDesc>
     "#);
+
     process_xml(&mut scanner, &mut reader);
 
     assert_eq!(scanner.plugin_info_tags.len(), 0, "Should not collect orphaned plugin desc");
@@ -937,6 +571,7 @@ fn test_malformed_orphaned_plugin_info() {
             <Name Value="Should Not Appear" />
         </Vst3PluginInfo>
     "#);
+
     process_xml(&mut scanner, &mut reader);
 
     assert_eq!(scanner.plugin_info_tags.len(), 0, "Should not collect orphaned plugin info");
@@ -985,20 +620,16 @@ fn test_sample_v12() {
 
     process_xml(&mut scanner, &mut reader);
 
-    // Set required fields for a valid project
     scanner.current_tempo = 120.0;
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 
-    // Finalize and get the scan result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
 
-    // Verify sample was collected correctly
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
     let sample = result.samples.iter().next().unwrap();
     assert_eq!(sample.path.to_str().unwrap(), "C:/Users/judee/Samples/Vintage Drum Machines/KB6_Archives_7_2017_Relaximus/Yamaha/Yamaha DTXpress/11 e - Effect 2/74 Vocal04.wav");
     assert_eq!(sample.name, "74 Vocal04.wav");
     
-    // Verify scanner state is clean
     assert_clean_state(&scanner);
 }
 
@@ -1056,19 +687,15 @@ fn test_sample_v10() {
 
     process_xml(&mut scanner, &mut reader);
 
-    // Set required fields for a valid project
     scanner.current_tempo = 120.0;
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 
-    // Finalize and get the scan result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
 
-    // Verify sample was collected correctly
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
     let sample = result.samples.iter().next().unwrap();
     assert_eq!(sample.name, "YK - Retro OH (Hats) [2018-09-08 151017].wav");
     
-    // Verify scanner state is clean
     assert_clean_state(&scanner);
 }
 
@@ -1124,19 +751,15 @@ fn test_sample_v9() {
 
     process_xml(&mut scanner, &mut reader);
 
-    // Set required fields for a valid project
     scanner.current_tempo = 120.0;
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 
-    // Finalize and get the scan result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
 
-    // Verify sample was collected correctly
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
     let sample = result.samples.iter().next().unwrap();
     assert_eq!(sample.name, "Old Vinyl   Free Download   Sound Effect [High Quality].mp3");
     
-    // Verify scanner state is clean
     assert_clean_state(&scanner);
 }
 
@@ -1162,10 +785,8 @@ fn test_tempo_parsing() {
 
     process_xml(&mut scanner, &mut reader);
 
-    // Verify tempo was collected correctly
     assert_eq!(scanner.current_tempo, 120.0);
     
-    // Verify scanner state is clean
     assert_clean_state(&scanner);
 }
 
@@ -1181,10 +802,8 @@ fn test_invalid_tempo() {
 
     process_xml(&mut scanner, &mut reader);
 
-    // Verify invalid tempo is not collected
     assert_eq!(scanner.current_tempo, 0.0);
     
-    // Verify scanner state is clean
     assert_clean_state(&scanner);
 }
 
@@ -1305,11 +924,9 @@ fn test_key_signature_v12() {
 
     process_xml(&mut scanner, &mut reader);
 
-    // Set required fields for a valid project
     scanner.current_tempo = 120.0;
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 
-    // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert_eq!(result.key_signature.tonic, Tonic::C);
     assert_eq!(result.key_signature.scale, Scale::Major);
@@ -1400,11 +1017,9 @@ fn test_key_signature_v9() {
 
     process_xml(&mut scanner, &mut reader);
 
-    // Set required fields for a valid project
     scanner.current_tempo = 120.0;
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 
-    // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert_eq!(result.key_signature.tonic, Tonic::Empty);
     assert_eq!(result.key_signature.scale, Scale::Empty);
@@ -1524,6 +1139,7 @@ fn test_key_signature_not_in_key() {
             </ExpressionGrid>
         </MidiClip>
     "#);
+    
     process_xml(&mut scanner, &mut reader);
 
     scanner.current_tempo = 120.0;
@@ -1561,6 +1177,7 @@ fn test_multiple_key_signatures() {
             <IsInKey Value="true" />
         </MidiClip>
     "#);
+
     process_xml(&mut scanner, &mut reader);
 
     scanner.current_tempo = 120.0;
@@ -1572,7 +1189,6 @@ fn test_multiple_key_signatures() {
     assert_eq!(scanner.key_frequencies.len(), 2);
 }
 
-/// Helper function to process XML in tests
 fn process_xml(scanner: &mut Scanner, reader: &mut Reader<&[u8]>) {
     let mut byte_pos = 0;
     loop {
@@ -1598,7 +1214,6 @@ fn process_xml(scanner: &mut Scanner, reader: &mut Reader<&[u8]>) {
     }
 }
 
-/// Helper function to verify scanner is in a clean state
 fn assert_clean_state(scanner: &Scanner) {
     assert_eq!(scanner.state, ScannerState::Root, "Scanner should be in Root state");
     assert_eq!(scanner.in_source_context, false, "Scanner should not be in source context");
