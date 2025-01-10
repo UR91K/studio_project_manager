@@ -8,7 +8,7 @@ A tool which aims to let users create an index of their Ableton Live sets and se
 
 ### Currently implemented
 
-- Fast scanning and analyzing of Ableton Live Set (.als) files
+- Extremely fast scanning and analyzing of Ableton Live Set (.als) files (~270 MB/s)
 - Extract the following project data:
     - Tempo
     - Ableton version
