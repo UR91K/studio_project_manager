@@ -9,6 +9,11 @@ use super::scanner::ScanResult;
 
 static TIME_SIGNATURE: TimeSignature = TimeSignature { numerator: 4, denominator: 4 };
 
+fn setup_valid_scanner(scanner: &mut Scanner) {
+    scanner.current_tempo = 120.0;
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
+}
+
 static INIT: Once = Once::new();
 fn setup() {
     INIT.call_once(|| {
@@ -99,6 +104,7 @@ fn handle_tag_sequence(scanner: &mut Scanner, reader: &mut Reader<&[u8]>, byte_p
     ).unwrap();
 }
 
+// TESTS
 
 #[test]
 fn test_time_signature() {
@@ -106,13 +112,8 @@ fn test_time_signature() {
     let mut reader = Reader::from_str(r#"
         <EnumEvent Value="201" />
     "#);
-    let mut byte_pos = 0;
 
-    scanner.handle_start_event(
-        &create_empty_event("EnumEvent", Some("201")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
+    process_xml(&mut scanner, &mut reader);
 
     assert!(scanner.current_time_signature.is_valid());
     let time_sig = scanner.current_time_signature;
@@ -126,13 +127,8 @@ fn test_invalid_time_signature() {
     let mut reader = Reader::from_str(r#"
         <EnumEvent Value="invalid" />
     "#);
-    let mut byte_pos = 0;
 
-    scanner.handle_start_event(
-        &create_empty_event("EnumEvent", Some("invalid")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
+    process_xml(&mut scanner, &mut reader);
 
     assert!(!scanner.current_time_signature.is_valid());
 }
@@ -140,31 +136,15 @@ fn test_invalid_time_signature() {
 #[test]
 fn test_furthest_bar() {
     let mut scanner = create_test_scanner();
+    setup_valid_scanner(&mut scanner);
+
     let mut reader = Reader::from_str(r#"
         <CurrentEnd Value="16.0" />
         <CurrentEnd Value="32.0" />
         <CurrentEnd Value="8.0" />
     "#);
-    let mut byte_pos = 0;
 
-    scanner.handle_start_event(
-        &create_empty_event("CurrentEnd", Some("16.0")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_start_event(
-        &create_empty_event("CurrentEnd", Some("32.0")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-    scanner.handle_start_event(
-        &create_empty_event("CurrentEnd", Some("8.0")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
-
-    scanner.current_time_signature = TIME_SIGNATURE.clone();
-    scanner.current_tempo = 120.0;
+    process_xml(&mut scanner, &mut reader);
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert!(result.furthest_bar.is_some());
@@ -177,13 +157,8 @@ fn test_furthest_bar_no_tempo() {
     let mut reader = Reader::from_str(r#"
         <CurrentEnd Value="16.0" />
     "#);
-    let mut byte_pos = 0;
 
-    scanner.handle_start_event(
-        &create_empty_event("CurrentEnd", Some("16.0")),
-        &mut reader,
-        &mut byte_pos
-    ).unwrap();
+    process_xml(&mut scanner, &mut reader);
 
     let result = scanner.finalize_result(ScanResult::default());
     assert!(result.is_err());
@@ -197,11 +172,13 @@ fn test_furthest_bar_no_tempo() {
 
 #[test]
 fn test_version_parsing() {
-    let xml_data = r#"<?xml version="1.0" encoding="UTF-8"?>
-<Ableton MajorVersion="5" MinorVersion="12.0_12049" SchemaChangeCount="7" Creator="Ableton Live 12.0" Revision="5094b92fa547974769f44cf233f1474777d9434a">
-    <LiveSet>
-    </LiveSet>
-</Ableton>"#.as_bytes();
+
+    let xml_data = r#"
+        <?xml version="1.0" encoding="UTF-8"?>
+            <Ableton MajorVersion="5" MinorVersion="12.0_12049" SchemaChangeCount="7" Creator="Ableton Live 12.0" Revision="5094b92fa547974769f44cf233f1474777d9434a">
+                <LiveSet>
+                </LiveSet>
+            </Ableton>"#.as_bytes();
 
     let scanner = Scanner::new(xml_data, ScanOptions::default()).unwrap();
     assert_eq!(scanner.ableton_version.major, 12);
@@ -581,6 +558,8 @@ fn test_malformed_orphaned_plugin_info() {
 #[test]
 fn test_sample_v12() {
     let mut scanner = create_test_scanner();
+    setup_valid_scanner(&mut scanner);
+
     let mut reader = Reader::from_str(r#"
         <SampleRef>
             <FileRef>
@@ -620,9 +599,6 @@ fn test_sample_v12() {
 
     process_xml(&mut scanner, &mut reader);
 
-    scanner.current_tempo = 120.0;
-    scanner.current_time_signature = TIME_SIGNATURE.clone();
-
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
 
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
@@ -636,6 +612,8 @@ fn test_sample_v12() {
 #[test]
 fn test_sample_v10() {
     let mut scanner = create_test_scanner_with_version(10);
+    setup_valid_scanner(&mut scanner);
+
     let mut reader = Reader::from_str(r#"
         <SampleRef>
             <FileRef>
@@ -687,9 +665,6 @@ fn test_sample_v10() {
 
     process_xml(&mut scanner, &mut reader);
 
-    scanner.current_tempo = 120.0;
-    scanner.current_time_signature = TIME_SIGNATURE.clone();
-
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
 
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
@@ -702,6 +677,8 @@ fn test_sample_v10() {
 #[test]
 fn test_sample_v9() {
     let mut scanner = create_test_scanner_with_version(9);
+    setup_valid_scanner(&mut scanner);
+    
     let mut reader = Reader::from_str(r#"
         <SampleRef>
             <FileRef>
@@ -750,9 +727,6 @@ fn test_sample_v9() {
     "#);
 
     process_xml(&mut scanner, &mut reader);
-
-    scanner.current_tempo = 120.0;
-    scanner.current_time_signature = TIME_SIGNATURE.clone();
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
 
@@ -810,6 +784,8 @@ fn test_invalid_tempo() {
 #[test]
 fn test_key_signature_v12() {
     let mut scanner = create_test_scanner();
+    setup_valid_scanner(&mut scanner);
+
     let mut reader = Reader::from_str(r#"
         <MidiClip Id="0" Time="0">
             <LomId Value="0" />
@@ -924,9 +900,6 @@ fn test_key_signature_v12() {
 
     process_xml(&mut scanner, &mut reader);
 
-    scanner.current_tempo = 120.0;
-    scanner.current_time_signature = TIME_SIGNATURE.clone();
-
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert_eq!(result.key_signature.tonic, Tonic::C);
     assert_eq!(result.key_signature.scale, Scale::Major);
@@ -1017,8 +990,7 @@ fn test_key_signature_v9() {
 
     process_xml(&mut scanner, &mut reader);
 
-    scanner.current_tempo = 120.0;
-    scanner.current_time_signature = TIME_SIGNATURE.clone();
+    setup_valid_scanner(&mut scanner);
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert_eq!(result.key_signature.tonic, Tonic::Empty);
@@ -1142,8 +1114,7 @@ fn test_key_signature_not_in_key() {
     
     process_xml(&mut scanner, &mut reader);
 
-    scanner.current_tempo = 120.0;
-    scanner.current_time_signature = TIME_SIGNATURE.clone();
+    setup_valid_scanner(&mut scanner);
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert_eq!(result.key_signature.tonic, Tonic::Empty);
@@ -1180,8 +1151,7 @@ fn test_multiple_key_signatures() {
 
     process_xml(&mut scanner, &mut reader);
 
-    scanner.current_tempo = 120.0;
-    scanner.current_time_signature = TIME_SIGNATURE.clone();
+    setup_valid_scanner(&mut scanner);
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert_eq!(result.key_signature.tonic, Tonic::C);
