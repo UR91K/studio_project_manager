@@ -6,7 +6,7 @@ use std::io::BufRead;
 use log::{debug, trace, warn};
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use colored::Colorize;
+
 
 use crate::error::LiveSetError;
 use crate::models::{AbletonVersion, Id, Plugin, PluginInfo, Sample, TimeSignature, KeySignature, Scale, Tonic};

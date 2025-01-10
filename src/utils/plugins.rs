@@ -33,6 +33,7 @@ impl LineTrackingBuffer {
         self.current_line
     }
 
+    #[allow(dead_code)]
     pub (crate) fn update_position(&mut self, byte_position: usize) {
         self.get_line_number(byte_position);
     }
