@@ -273,6 +273,7 @@ pub(crate) fn get_line_number(file_path: &Path, byte_position: usize) -> std::io
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn format_duration(duration: &Duration) -> String {
     let total_seconds = duration.num_seconds();
     let milliseconds = duration.num_milliseconds() % 1000;
