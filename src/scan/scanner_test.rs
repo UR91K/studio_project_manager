@@ -7,6 +7,8 @@ use std::sync::Once;
 
 use super::scanner::ScanResult;
 
+static TIME_SIGNATURE: TimeSignature = TimeSignature { numerator: 4, denominator: 4 };
+
 // Initialize logging exactly once for all tests
 static INIT: Once = Once::new();
 fn setup() {
@@ -115,8 +117,8 @@ fn test_time_signature() {
     ).unwrap();
 
     // Verify the time signature was collected correctly
-    assert!(scanner.current_time_signature.is_some());
-    let time_sig = scanner.current_time_signature.unwrap();
+    assert!(scanner.current_time_signature.is_valid());
+    let time_sig = scanner.current_time_signature;
     assert_eq!(time_sig.numerator, 4);
     assert_eq!(time_sig.denominator, 4);
 }
@@ -137,7 +139,7 @@ fn test_invalid_time_signature() {
     ).unwrap();
 
     // Verify no time signature was collected
-    assert!(scanner.current_time_signature.is_none());
+    assert!(!scanner.current_time_signature.is_valid());
 }
 
 #[test]
@@ -168,8 +170,8 @@ fn test_furthest_bar() {
     ).unwrap();
 
     // Set a time signature and tempo (required for valid project)
-    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
-    scanner.current_tempo = Some(120.0);
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
+    scanner.current_tempo = 120.0;
 
     // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
@@ -197,7 +199,7 @@ fn test_furthest_bar_no_tempo() {
     assert!(result.is_err());
     match result {
         Err(LiveSetError::InvalidProject(msg)) => {
-            assert_eq!(msg, "No tempo found in project");
+            assert_eq!(msg, "Invalid tempo value: 0");
         }
         _ => panic!("Expected InvalidProject error"),
     }
@@ -993,8 +995,8 @@ fn test_sample_v12() {
     process_xml(&mut scanner, &mut reader);
 
     // Set required fields for a valid project
-    scanner.current_tempo = Some(120.0);
-    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+    scanner.current_tempo = 120.0;
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
 
     // Finalize and get the scan result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
@@ -1064,8 +1066,8 @@ fn test_sample_v10() {
     process_xml(&mut scanner, &mut reader);
 
     // Set required fields for a valid project
-    scanner.current_tempo = Some(120.0);
-    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+    scanner.current_tempo = 120.0;
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
 
     // Finalize and get the scan result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
@@ -1132,8 +1134,8 @@ fn test_sample_v9() {
     process_xml(&mut scanner, &mut reader);
 
     // Set required fields for a valid project
-    scanner.current_tempo = Some(120.0);
-    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+    scanner.current_tempo = 120.0;
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
 
     // Finalize and get the scan result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
@@ -1170,8 +1172,7 @@ fn test_tempo_parsing() {
     process_xml(&mut scanner, &mut reader);
 
     // Verify tempo was collected correctly
-    assert!(scanner.current_tempo.is_some());
-    assert_eq!(scanner.current_tempo.unwrap(), 120.0);
+    assert_eq!(scanner.current_tempo, 120.0);
     
     // Verify scanner state is clean
     assert_clean_state(&scanner);
@@ -1190,7 +1191,7 @@ fn test_invalid_tempo() {
     process_xml(&mut scanner, &mut reader);
 
     // Verify invalid tempo is not collected
-    assert!(scanner.current_tempo.is_none());
+    assert_eq!(scanner.current_tempo, 0.0);
     
     // Verify scanner state is clean
     assert_clean_state(&scanner);
@@ -1314,8 +1315,8 @@ fn test_key_signature_v12() {
     process_xml(&mut scanner, &mut reader);
 
     // Set required fields for a valid project
-    scanner.current_tempo = Some(120.0);
-    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+    scanner.current_tempo = 120.0;
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
 
     // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
@@ -1409,8 +1410,8 @@ fn test_key_signature_v9() {
     process_xml(&mut scanner, &mut reader);
 
     // Set required fields for a valid project
-    scanner.current_tempo = Some(120.0);
-    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+    scanner.current_tempo = 120.0;
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
 
     // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
@@ -1535,8 +1536,8 @@ fn test_key_signature_not_in_key() {
     process_xml(&mut scanner, &mut reader);
 
     // Set required fields for a valid project
-    scanner.current_tempo = Some(120.0);
-    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+    scanner.current_tempo = 120.0;
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
 
     // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
@@ -1574,8 +1575,8 @@ fn test_multiple_key_signatures() {
     process_xml(&mut scanner, &mut reader);
 
     // Set required fields for a valid project
-    scanner.current_tempo = Some(120.0);
-    scanner.current_time_signature = Some(TimeSignature { numerator: 4, denominator: 4 });
+    scanner.current_tempo = 120.0;
+    scanner.current_time_signature = TIME_SIGNATURE.clone();
 
     // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
