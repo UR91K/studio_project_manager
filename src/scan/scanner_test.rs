@@ -1,7 +1,7 @@
 use super::scanner::{Scanner, ScanOptions, ScannerState};
 use crate::error::LiveSetError;
 use crate::models::{PluginFormat, Scale, TimeSignature, Tonic};
-use quick_xml::events::{BytesStart, BytesEnd, Event};
+use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::sync::Once;
 
@@ -75,33 +75,6 @@ fn create_test_scanner_with_version(version: u32) -> Scanner {
         version
     ).into_bytes();
     Scanner::new(&xml_data, ScanOptions::default()).expect("Failed to create test scanner")
-}
-
-fn create_start_event(name: &str) -> BytesStart {
-    BytesStart::new(name)
-}
-
-fn create_end_event(name: &str) -> BytesEnd {
-    BytesEnd::new(name)
-}
-
-fn create_empty_event<'a>(name: &'a str, value: Option<&'a str>) -> BytesStart<'a> {
-    let mut event = BytesStart::new(name);
-    if let Some(val) = value {
-        event.push_attribute(("Value", val));
-    }
-    event
-}
-
-fn handle_tag_sequence(scanner: &mut Scanner, reader: &mut Reader<&[u8]>, byte_pos: &mut usize, tag: &str) {
-    scanner.handle_start_event(
-        &create_start_event(tag),
-        reader,
-        byte_pos
-    ).unwrap();
-    scanner.handle_end_event(
-        &create_end_event(tag)
-    ).unwrap();
 }
 
 // TESTS
@@ -678,7 +651,7 @@ fn test_sample_v10() {
 fn test_sample_v9() {
     let mut scanner = create_test_scanner_with_version(9);
     setup_valid_scanner(&mut scanner);
-    
+
     let mut reader = Reader::from_str(r#"
         <SampleRef>
             <FileRef>
