@@ -64,7 +64,7 @@ impl LiveSet {
             last_scan_timestamp: Local::now(),
 
             ableton_version: scan_result.version,
-            key_signature: None, //TODO: parse key signature
+            key_signature: scan_result.key_signature,
             tempo: scan_result.tempo,
             time_signature: scan_result.time_signature,
             furthest_bar: scan_result.furthest_bar,

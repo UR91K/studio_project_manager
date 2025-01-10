@@ -113,7 +113,7 @@ pub(crate) struct ScanResult {
     pub(crate) tempo: f64,
     pub(crate) time_signature: TimeSignature,
     pub(crate) furthest_bar: Option<f64>,
-    pub(crate) key_signature: KeySignature,
+    pub(crate) key_signature: Option<KeySignature>,
 }
 
 /// The main scanner that processes the XML data
@@ -464,9 +464,9 @@ impl Scanner {
                     KeySignature::default()
                 });
             
-            result.key_signature = most_frequent_key;
+            result.key_signature = Some(most_frequent_key);
         } else {
-            result.key_signature = KeySignature::default();
+            result.key_signature = None;
         }
 
         Ok(result)
@@ -610,9 +610,9 @@ impl Scanner {
                     KeySignature::default()
                 });
             
-            result.key_signature = most_frequent_key;
+            result.key_signature = Some(most_frequent_key);
         } else {
-            result.key_signature = KeySignature::default();
+            result.key_signature = None;
         }
 
         Ok(result)

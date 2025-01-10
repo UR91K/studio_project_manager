@@ -874,8 +874,8 @@ fn test_key_signature_v12() {
     process_xml(&mut scanner, &mut reader);
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
-    assert_eq!(result.key_signature.tonic, Tonic::C);
-    assert_eq!(result.key_signature.scale, Scale::Major);
+    assert_eq!(result.key_signature.clone().unwrap().tonic, Tonic::C);
+    assert_eq!(result.key_signature.clone().unwrap().scale, Scale::Major);
 }
 
 #[test]
@@ -966,8 +966,8 @@ fn test_key_signature_v9() {
     setup_valid_scanner(&mut scanner);
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
-    assert_eq!(result.key_signature.tonic, Tonic::Empty);
-    assert_eq!(result.key_signature.scale, Scale::Empty);
+    assert_eq!(result.key_signature.clone().unwrap().tonic, Tonic::Empty);
+    assert_eq!(result.key_signature.clone().unwrap().scale, Scale::Empty);
 }
 
 #[test]
@@ -1090,8 +1090,8 @@ fn test_key_signature_not_in_key() {
     setup_valid_scanner(&mut scanner);
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
-    assert_eq!(result.key_signature.tonic, Tonic::Empty);
-    assert_eq!(result.key_signature.scale, Scale::Empty);
+    assert_eq!(result.key_signature.clone().unwrap().tonic, Tonic::Empty);
+    assert_eq!(result.key_signature.clone().unwrap().scale, Scale::Empty);
     assert_eq!(scanner.key_frequencies.len(), 0);
 }
 
@@ -1127,8 +1127,8 @@ fn test_multiple_key_signatures() {
     setup_valid_scanner(&mut scanner);
 
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
-    assert_eq!(result.key_signature.tonic, Tonic::C);
-    assert_eq!(result.key_signature.scale, Scale::Major);
+    assert_eq!(result.key_signature.clone().unwrap().tonic, Tonic::C);
+    assert_eq!(result.key_signature.clone().unwrap().scale, Scale::Major);
     assert_eq!(scanner.key_frequencies.len(), 2);
 }
 
