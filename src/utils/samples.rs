@@ -1,15 +1,10 @@
-use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::str::from_utf8;
 
 #[allow(unused_imports)]
 use log::{debug, error, trace, warn};
-use quick_xml::events::Event;
-use quick_xml::Reader;
 
 #[allow(unused_imports)]
 use crate::error::{AttributeError, SampleError, XmlParseError};
-use crate::utils::xml_parsing::{find_attribute, find_tags};
 
 pub(crate) fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, SampleError> {
     trace!("Starting sample path decoding");
