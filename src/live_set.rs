@@ -1,11 +1,9 @@
 // /src/live_set.rs
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashSet};
 use std::path::PathBuf;
-use std::time::Instant;
 
 use chrono::{DateTime, Duration, Local};
 use colored::Colorize;
-use log::{debug, error, info};
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
