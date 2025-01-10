@@ -340,7 +340,7 @@ impl Scanner {
         result.tempo = self.current_tempo;
 
         // Validate and set time signature (required for a valid project)
-        if self.current_time_signature.numerator > 0 && self.current_time_signature.denominator > 0 {
+        if self.current_time_signature.is_valid() {
             result.time_signature = self.current_time_signature.clone();
         } else {
             return Err(LiveSetError::InvalidProject(
@@ -487,7 +487,7 @@ impl Scanner {
         result.tempo = self.current_tempo;
 
         // Validate and set time signature (required for a valid project)
-        if self.current_time_signature.numerator > 0 && self.current_time_signature.denominator > 0 {
+        if self.current_time_signature.is_valid() {
             result.time_signature = self.current_time_signature.clone();
         } else {
             return Err(LiveSetError::InvalidProject(

@@ -109,14 +109,12 @@ fn test_time_signature() {
     "#);
     let mut byte_pos = 0;
 
-    // Process the EnumEvent tag
     scanner.handle_start_event(
         &create_empty_event("EnumEvent", Some("201")),
         &mut reader,
         &mut byte_pos
     ).unwrap();
 
-    // Verify the time signature was collected correctly
     assert!(scanner.current_time_signature.is_valid());
     let time_sig = scanner.current_time_signature;
     assert_eq!(time_sig.numerator, 4);
@@ -131,14 +129,12 @@ fn test_invalid_time_signature() {
     "#);
     let mut byte_pos = 0;
 
-    // Process the EnumEvent tag
     scanner.handle_start_event(
         &create_empty_event("EnumEvent", Some("invalid")),
         &mut reader,
         &mut byte_pos
     ).unwrap();
 
-    // Verify no time signature was collected
     assert!(!scanner.current_time_signature.is_valid());
 }
 
@@ -152,7 +148,6 @@ fn test_furthest_bar() {
     "#);
     let mut byte_pos = 0;
 
-    // Process the CurrentEnd tags
     scanner.handle_start_event(
         &create_empty_event("CurrentEnd", Some("16.0")),
         &mut reader,
@@ -169,11 +164,9 @@ fn test_furthest_bar() {
         &mut byte_pos
     ).unwrap();
 
-    // Set a time signature and tempo (required for valid project)
     scanner.current_time_signature = TIME_SIGNATURE.clone();
     scanner.current_tempo = 120.0;
 
-    // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert!(result.furthest_bar.is_some());
     assert_eq!(result.furthest_bar.unwrap(), 8.0); // 32.0 / 4 beats per bar = 8.0 bars
@@ -187,14 +180,12 @@ fn test_furthest_bar_no_tempo() {
     "#);
     let mut byte_pos = 0;
 
-    // Process the CurrentEnd tag
     scanner.handle_start_event(
         &create_empty_event("CurrentEnd", Some("16.0")),
         &mut reader,
         &mut byte_pos
     ).unwrap();
 
-    // Don't set tempo - should result in error
     let result = scanner.finalize_result(ScanResult::default());
     assert!(result.is_err());
     match result {
@@ -1535,11 +1526,9 @@ fn test_key_signature_not_in_key() {
     "#);
     process_xml(&mut scanner, &mut reader);
 
-    // Set required fields for a valid project
     scanner.current_tempo = 120.0;
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 
-    // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert_eq!(result.key_signature.tonic, Tonic::Empty);
     assert_eq!(result.key_signature.scale, Scale::Empty);
@@ -1574,18 +1563,16 @@ fn test_multiple_key_signatures() {
     "#);
     process_xml(&mut scanner, &mut reader);
 
-    // Set required fields for a valid project
     scanner.current_tempo = 120.0;
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 
-    // Finalize and check the result
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
     assert_eq!(result.key_signature.tonic, Tonic::C);
     assert_eq!(result.key_signature.scale, Scale::Major);
     assert_eq!(scanner.key_frequencies.len(), 2);
 }
 
-// Helper function to process XML in tests
+/// Helper function to process XML in tests
 fn process_xml(scanner: &mut Scanner, reader: &mut Reader<&[u8]>) {
     let mut byte_pos = 0;
     loop {
@@ -1611,7 +1598,7 @@ fn process_xml(scanner: &mut Scanner, reader: &mut Reader<&[u8]>) {
     }
 }
 
-// Helper function to verify scanner is in a clean state
+/// Helper function to verify scanner is in a clean state
 fn assert_clean_state(scanner: &Scanner) {
     assert_eq!(scanner.state, ScannerState::Root, "Scanner should be in Root state");
     assert_eq!(scanner.in_source_context, false, "Scanner should not be in source context");

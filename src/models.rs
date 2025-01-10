@@ -342,9 +342,7 @@ impl TimeSignature {
         // Check if denominator is a power of 2
         self.denominator & (self.denominator - 1) == 0
     }
-}
 
-impl TimeSignature {
     pub fn from_encoded(encoded_value: i32) -> Result<Self, TimeSignatureError> {
         if encoded_value < 0 || encoded_value > 494 {
             return Err(TimeSignatureError::InvalidEncodedValue(encoded_value));
@@ -374,7 +372,6 @@ impl TimeSignature {
         2_u8.pow((multiple - 1) as u32)
     }
 }
-
 
 impl Default for TimeSignature {
     fn default() -> Self {
