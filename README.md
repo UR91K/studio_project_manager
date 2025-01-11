@@ -2,7 +2,7 @@
 
 ## Overview
 
-A tool which aims to let users create an index of their Ableton Live sets and search them based on their contents
+A tool which aims to let users create an index of their Ableton Live sets and search them based on their contents. As far as I know, this has the fastest ableton live set parser out there.
 
 ## Features
 

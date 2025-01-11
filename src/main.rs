@@ -19,6 +19,7 @@ pub mod scan;
 mod live_set;
 mod utils;
 mod backup;
+pub mod live_set_db;
 
 fn main() {
     Builder::new().filter_level(LevelFilter::Info).init();
