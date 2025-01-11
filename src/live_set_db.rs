@@ -340,8 +340,8 @@ impl LiveSetDatabase {
         Ok(())
     }
 
+    #[allow(unused_variables, dead_code)] // TODO: Implement
     pub fn get_project(&mut self, id: &str) -> Result<Option<LiveSet>, DatabaseError> {
-        // TODO: Implement
         Ok(None)
     }
 
@@ -617,7 +617,7 @@ mod tests {
     #[test]
     fn test_database_initialization() {
         setup();
-        let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+        let db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
         
         // Verify tables exist
         let tables = db

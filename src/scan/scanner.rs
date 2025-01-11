@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 
 use crate::error::LiveSetError;
-use crate::models::{AbletonVersion, Id, Plugin, PluginInfo, Sample, TimeSignature, KeySignature, Scale, Tonic};
+use crate::models::{AbletonVersion, Plugin, PluginInfo, Sample, TimeSignature, KeySignature, Scale, Tonic};
 use crate::utils::plugins::LineTrackingBuffer;
 use crate::utils::{StringResultExt, EventExt};
 use crate::config::CONFIG;

@@ -12,30 +12,30 @@ use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamp
 use crate::utils::plugins::get_most_recent_db_file;
 use crate::utils::{decompress_gzip_file, validate_ableton_file};
 use crate::scan::{Scanner, ScanOptions as ScannerOptions};
-use colored::*;
+
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct LiveSet {
-    pub id: Uuid,
-    pub file_path: PathBuf,
-    pub file_name: String,
-    pub file_hash: String,
-    pub created_time: DateTime<Local>,
-    pub modified_time: DateTime<Local>,
-    pub xml_data: Vec<u8>,
-    pub last_scan_timestamp: DateTime<Local>,
+    pub(crate) id: Uuid,
+    pub(crate) file_path: PathBuf,
+    pub(crate) file_name: String,
+    pub(crate) file_hash: String,
+    pub(crate) created_time: DateTime<Local>,
+    pub(crate) modified_time: DateTime<Local>,
+    pub(crate) xml_data: Vec<u8>,
+    pub(crate) last_scan_timestamp: DateTime<Local>,
 
-    pub ableton_version: AbletonVersion,
+    pub(crate) ableton_version: AbletonVersion,
     
-    pub key_signature: Option<KeySignature>,
-    pub tempo: f64,
-    pub time_signature: TimeSignature,
-    pub furthest_bar: Option<f64>,
-    pub plugins: HashSet<Plugin>,
-    pub samples: HashSet<Sample>,
+    pub(crate) key_signature: Option<KeySignature>,
+    pub(crate) tempo: f64,
+    pub(crate) time_signature: TimeSignature,
+    pub(crate) furthest_bar: Option<f64>,
+    pub(crate) plugins: HashSet<Plugin>,
+    pub(crate) samples: HashSet<Sample>,
     
-    pub estimated_duration: Option<chrono::Duration>,
+    pub(crate) estimated_duration: Option<chrono::Duration>,
 }
 
 impl LiveSet {
@@ -138,7 +138,7 @@ mod tests {
     use std::path::Path;
     use std::sync::Once;
     use std::time::Instant;
-
+    use colored::*;
     static INIT: Once = Once::new();
     fn setup() {
         INIT.call_once(|| {
