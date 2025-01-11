@@ -18,25 +18,25 @@ use colored::*;
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct LiveSet {
-    id: Id,
-    file_path: PathBuf,
-    file_name: String,
-    file_hash: String,
-    created_time: DateTime<Local>,
-    modified_time: DateTime<Local>,
-    xml_data: Vec<u8>,
-    last_scan_timestamp: DateTime<Local>,
+    pub id: Id,
+    pub file_path: PathBuf,
+    pub file_name: String,
+    pub file_hash: String,
+    pub created_time: DateTime<Local>,
+    pub modified_time: DateTime<Local>,
+    pub xml_data: Vec<u8>,
+    pub last_scan_timestamp: DateTime<Local>,
 
-    ableton_version: AbletonVersion,
+    pub ableton_version: AbletonVersion,
     
-    key_signature: Option<KeySignature>,
-    tempo: f64,
-    time_signature: TimeSignature,
-    furthest_bar: Option<f64>,
-    plugins: HashSet<Plugin>,
-    samples: HashSet<Sample>,
+    pub key_signature: Option<KeySignature>,
+    pub tempo: f64,
+    pub time_signature: TimeSignature,
+    pub furthest_bar: Option<f64>,
+    pub plugins: HashSet<Plugin>,
+    pub samples: HashSet<Sample>,
     
-    estimated_duration: Option<chrono::Duration>,
+    pub estimated_duration: Option<chrono::Duration>,
 }
 
 impl LiveSet {
@@ -206,6 +206,12 @@ mod tests {
             (r"C:\Users\judee\Documents\Projects\band with joel\Forkspan Project\Forkspan.als", "small"),
             (r"C:\Users\judee\Documents\Projects\Beats\rodent beats\RODENT 4 Project\RODENT 4 ver 2 re mix.als", "medium"),
             (r"C:\Users\judee\Documents\Projects\band with joel\green tea Project\green tea.als", "large"),
+            (r"C:\Users\judee\Documents\Projects\Beats\Beats Project\SET 120.als", "median"),
+            (r"C:\Users\judee\Documents\Projects\tape\white tape b Project\white tape b.als", "min"),
+            (r"C:\Users\judee\Documents\Projects\Beats\rodent beats\RODENT 4 Project\RODENT 4 ver 2.als", "another large"),
+            (r"C:\Users\judee\Documents\Projects\Beats\Beats Project\a lot on my mind 130 Live11.als", "mean"),
+            (r"C:\Users\judee\Documents\Projects\rust mastering\dp tekno 19 master Project\dp tekno 19 master.als", "mode"),
+            (r"C:\Users\judee\Documents\Projects\test_projects_dir\duplicated plugins test Project\duplicated plugins test.als", "min"),
         ];
 
         let mut total_size = 0.0;
@@ -265,7 +271,15 @@ mod tests {
             if !live_set.plugins.is_empty() {
                 println!("\n{}", "Plugins:".yellow().bold());
                 for plugin in &live_set.plugins {
-                    println!("  - {} ({})", plugin.name.cyan(), format!("{:?}", plugin.plugin_format).bright_black());
+                    let status = if plugin.installed {
+                        "✓".green()
+                    } else {
+                        "✗".red()
+                    };
+                    println!("  {} {} ({})", 
+                        status,
+                        plugin.name.cyan(), 
+                        format!("{:?}", plugin.plugin_format).bright_black());
                 }
             }
 
