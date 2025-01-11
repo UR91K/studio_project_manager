@@ -4,6 +4,7 @@ use chrono::{DateTime, Local, TimeZone};
 use uuid::Uuid;
 use std::collections::HashSet;
 use std::str::FromStr;
+#[allow(unused_imports)]
 use log::{debug, info, warn};
 use crate::error::DatabaseError;
 use crate::models::{Plugin, Sample, PluginFormat, Scale, Tonic, KeySignature, TimeSignature, AbletonVersion};
@@ -347,37 +348,183 @@ impl LiveSetDatabase {
 
     pub fn search(&mut self, query: &str) -> Result<Vec<LiveSet>, DatabaseError> {
         debug!("Performing search with query: {}", query);
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT DISTINCT p.* 
-            FROM projects p
-            LEFT JOIN project_plugins pp ON pp.project_id = p.id
-            LEFT JOIN plugins pl ON pl.id = pp.plugin_id
-            LEFT JOIN project_samples ps ON ps.project_id = p.id
-            LEFT JOIN samples s ON s.id = ps.sample_id
-            WHERE 
-                p.name LIKE ?1 OR
-                pl.name LIKE ?1 OR
-                s.name LIKE ?1
-            "#,
-        )?;
+        let tx = self.conn.transaction()?;
+        
+        // First, get all matching project paths
+        let project_paths = {
+            let mut stmt = tx.prepare(
+                r#"
+                SELECT DISTINCT p.path 
+                FROM projects p
+                LEFT JOIN project_plugins pp ON pp.project_id = p.id
+                LEFT JOIN plugins pl ON pl.id = pp.plugin_id
+                LEFT JOIN project_samples ps ON ps.project_id = p.id
+                LEFT JOIN samples s ON s.id = ps.sample_id
+                WHERE 
+                    p.name LIKE ?1 OR
+                    pl.name LIKE ?1 OR
+                    s.name LIKE ?1 OR
+                    pl.vendor LIKE ?1
+                "#,
+            )?;
 
-        let pattern = format!("%{}%", query);
-        debug!("Using search pattern: {}", pattern);
+            let pattern = format!("%{}%", query);
+            debug!("Using search pattern: {}", pattern);
 
-        let projects = stmt
-            .query_map([pattern], |_row| {
-                warn!("Search result mapping not yet implemented");
-                Err(rusqlite::Error::InvalidColumnType(
-                    0,
-                    "Not implemented".to_string(),
-                    rusqlite::types::Type::Null,
-                ))
-            })?
-            .collect::<SqliteResult<Vec<_>>>()?;
+            let paths: Vec<String> = stmt.query_map([&pattern], |row| {
+                row.get(0)
+            })?.filter_map(|r| r.ok()).collect();
+            
+            debug!("Found {} matching project paths", paths.len());
+            paths
+        };
 
-        debug!("Found {} matching projects", projects.len());
-        Ok(projects)
+        let mut results = Vec::new();
+        
+        // For each path, get the full project details
+        for path in project_paths {
+            let project = {
+                let mut stmt = tx.prepare(
+                    r#"
+                    SELECT 
+                        id, path, name, hash, created_at, modified_at, last_scanned_at,
+                        tempo, time_signature_numerator, time_signature_denominator,
+                        key_signature_tonic, key_signature_scale, duration_seconds, furthest_bar,
+                        ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta
+                    FROM projects 
+                    WHERE path = ?
+                    "#,
+                )?;
+
+                stmt.query_row([&path], |row| {
+                    let project_id: String = row.get(0)?;
+                    debug!("Found project with ID: {}", project_id);
+                    
+                    let duration_secs: Option<i64> = row.get(12)?;
+                    let created_timestamp: i64 = row.get(4)?;
+                    let modified_timestamp: i64 = row.get(5)?;
+                    let scanned_timestamp: i64 = row.get(6)?;
+                    
+                    let mut live_set = LiveSet {
+                        id: Uuid::parse_str(&project_id).map_err(|_| rusqlite::Error::InvalidParameterName("Invalid UUID".into()))?,
+                        file_path: PathBuf::from(row.get::<_, String>(1)?),
+                        file_name: row.get(2)?,
+                        file_hash: row.get(3)?,
+                        created_time: Local.timestamp_opt(created_timestamp, 0)
+                            .single()
+                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
+                        modified_time: Local.timestamp_opt(modified_timestamp, 0)
+                            .single()
+                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
+                        last_scan_timestamp: Local.timestamp_opt(scanned_timestamp, 0)
+                            .single()
+                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
+                        xml_data: Vec::new(),
+                        
+                        tempo: row.get(7)?,
+                        time_signature: TimeSignature {
+                            numerator: row.get(8)?,
+                            denominator: row.get(9)?,
+                        },
+                        key_signature: match (row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?) {
+                            (Some(tonic), Some(scale)) => {
+                                debug!("Found key signature: {} {}", tonic, scale);
+                                Some(KeySignature {
+                                    tonic: tonic.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    scale: scale.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                })
+                            },
+                            _ => None,
+                        },
+                        furthest_bar: row.get(13)?,
+                        
+                        ableton_version: AbletonVersion {
+                            major: row.get(14)?,
+                            minor: row.get(15)?,
+                            patch: row.get(16)?,
+                            beta: row.get(17)?,
+                        },
+                        
+                        estimated_duration: duration_secs.map(chrono::Duration::seconds),
+                        plugins: HashSet::new(),
+                        samples: HashSet::new(),
+                    };
+
+                    // Get plugins in a new scope
+                    {
+                        let mut stmt = tx.prepare(
+                            r#"
+                            SELECT p.* 
+                            FROM plugins p
+                            JOIN project_plugins pp ON pp.plugin_id = p.id
+                            WHERE pp.project_id = ?
+                            "#,
+                        )?;
+
+                        let plugins = stmt.query_map([&project_id], |row| {
+                            let name: String = row.get(4)?;
+                            debug!("Found plugin: {}", name);
+                            Ok(Plugin {
+                                id: Uuid::new_v4(),
+                                plugin_id: row.get(1)?,
+                                module_id: row.get(2)?,
+                                dev_identifier: row.get(3)?,
+                                name,
+                                plugin_format: row.get::<_, String>(5)?.parse()
+                                    .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                installed: row.get(6)?,
+                                vendor: row.get(7)?,
+                                version: row.get(8)?,
+                                sdk_version: row.get(9)?,
+                                flags: row.get(10)?,
+                                scanstate: row.get(11)?,
+                                enabled: row.get(12)?,
+                            })
+                        })?.filter_map(|r| r.ok()).collect::<HashSet<_>>();
+
+                        debug!("Retrieved {} plugins", plugins.len());
+                        live_set.plugins = plugins;
+                    }
+
+                    // Get samples in a new scope
+                    {
+                        let mut stmt = tx.prepare(
+                            r#"
+                            SELECT s.* 
+                            FROM samples s
+                            JOIN project_samples ps ON ps.sample_id = s.id
+                            WHERE ps.project_id = ?
+                            "#,
+                        )?;
+
+                        let samples = stmt.query_map([&project_id], |row| {
+                            let name: String = row.get(1)?;
+                            debug!("Found sample: {}", name);
+                            Ok(Sample {
+                                id: Uuid::new_v4(),
+                                name,
+                                path: PathBuf::from(row.get::<_, String>(2)?),
+                                is_present: row.get(3)?,
+                            })
+                        })?.filter_map(|r| r.ok()).collect::<HashSet<_>>();
+
+                        debug!("Retrieved {} samples", samples.len());
+                        live_set.samples = samples;
+                    }
+
+                    Ok(live_set)
+                }).optional()?
+            };
+
+            if let Some(live_set) = project {
+                debug!("Retrieved project: {}", live_set.file_name);
+                results.push(live_set);
+            }
+        }
+
+        tx.commit()?;
+        debug!("Successfully retrieved {} matching projects", results.len());
+        Ok(results)
     }
 
     pub fn get_project_by_path(&mut self, path: &str) -> Result<Option<LiveSet>, DatabaseError> {
@@ -534,6 +681,8 @@ impl LiveSetDatabase {
 
 #[cfg(test)]
 mod tests {
+    use crate::{scan::ScanResult, test_utils::LiveSetBuilder};
+
     use super::*;
     use std::sync::Once;
     use chrono::Local;
@@ -588,7 +737,7 @@ mod tests {
             modified_time: now,
             last_scan_timestamp: now,
             xml_data: Vec::new(),
-
+            
             ableton_version: AbletonVersion {
                 major: 11,
                 minor: 1,
@@ -608,6 +757,30 @@ mod tests {
             furthest_bar: Some(16.0),
             plugins,
             samples,
+            estimated_duration: Some(chrono::Duration::seconds(60)),
+        }
+    }
+
+    fn create_test_live_set_from_scan(name: &str, scan_result: ScanResult) -> LiveSet {
+        let now = Local::now();
+        LiveSet {
+            id: Uuid::new_v4(),
+            file_path: PathBuf::from(format!("C:/test/{}", name)),
+            file_name: name.to_string(),
+            file_hash: format!("test_hash_{}", name),
+            created_time: now,
+            modified_time: now,
+            last_scan_timestamp: now,
+            xml_data: Vec::new(),
+            
+            ableton_version: scan_result.version,
+            key_signature: scan_result.key_signature,
+            tempo: scan_result.tempo,
+            time_signature: scan_result.time_signature,
+            furthest_bar: scan_result.furthest_bar,
+            plugins: scan_result.plugins,
+            samples: scan_result.samples,
+            
             estimated_duration: Some(chrono::Duration::seconds(60)),
         }
     }
@@ -675,5 +848,82 @@ mod tests {
         assert_eq!(retrieved_sample.name, original_sample.name);
         assert_eq!(retrieved_sample.path, original_sample.path);
         assert_eq!(retrieved_sample.is_present, original_sample.is_present);
+    }
+
+    #[test]
+    fn test_multiple_projects() {
+        setup();
+        let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+        
+        // Create three different projects with distinct characteristics
+        let edm_project = create_test_live_set_from_scan(
+            "EDM Project.als",
+            LiveSetBuilder::new()
+                .with_plugin("Serum")
+                .with_plugin("Massive")
+                .with_installed_plugin("Pro-Q 3", Some("FabFilter".to_string()))
+                .with_sample("kick.wav")
+                .with_sample("snare.wav")
+                .with_tempo(140.0)
+                .build()
+        );
+
+        let rock_project = create_test_live_set_from_scan(
+            "Rock Band.als",
+            LiveSetBuilder::new()
+                .with_plugin("Guitar Rig 6")
+                .with_installed_plugin("Pro-R", Some("FabFilter".to_string()))
+                .with_sample("guitar_riff.wav")
+                .with_sample("drums.wav")
+                .with_tempo(120.0)
+                .build()
+        );
+
+        let ambient_project = create_test_live_set_from_scan(
+            "Ambient Soundscape.als",
+            LiveSetBuilder::new()
+                .with_plugin("Omnisphere")
+                .with_installed_plugin("Pro-L 2", Some("FabFilter".to_string()))
+                .with_sample("pad.wav")
+                .with_sample("atmosphere.wav")
+                .with_tempo(80.0)
+                .build()
+        );
+
+        
+        // Store the IDs before inserting
+        let edm_id = edm_project.id;
+        // let rock_id = rock_project.id;
+        // let ambient_id = ambient_project.id;
+
+        // Insert all projects
+        db.insert_project(&edm_project).expect("Failed to insert EDM project");
+        db.insert_project(&rock_project).expect("Failed to insert rock project");
+        db.insert_project(&ambient_project).expect("Failed to insert ambient project");
+
+        // Test retrieval by path
+        let retrieved_edm = db.get_project_by_path(&edm_project.file_path.to_string_lossy())
+            .expect("Failed to retrieve EDM project")
+            .expect("EDM project not found");
+
+        // Verify project details
+        assert_eq!(retrieved_edm.id, edm_id);
+        assert_eq!(retrieved_edm.tempo, 140.0);
+        assert_eq!(retrieved_edm.plugins.len(), 3);
+        assert_eq!(retrieved_edm.samples.len(), 2);
+        
+        // Verify specific plugin exists
+        assert!(retrieved_edm.plugins.iter().any(|p| p.name == "Serum"));
+        assert!(retrieved_edm.plugins.iter().any(|p| p.name == "Pro-Q 3" && p.vendor == Some("FabFilter".to_string())));
+
+        // Test basic search functionality
+        let fab_filter_results = db.search("FabFilter").expect("Search failed");
+        assert_eq!(fab_filter_results.len(), 3); // All projects have a FabFilter plugin
+
+        let edm_results = db.search("kick.wav").expect("Search failed");
+        assert_eq!(edm_results.len(), 1); // Only EDM project has kick.wav
+
+        let serum_results = db.search("Serum").expect("Search failed");
+        assert_eq!(serum_results.len(), 1); // Only EDM project has Serum
     }
 } 

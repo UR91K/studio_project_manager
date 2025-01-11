@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_variables)]
 use std::collections::HashSet;
 use std::path::PathBuf;
 use uuid::Uuid;
