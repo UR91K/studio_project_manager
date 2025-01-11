@@ -4,7 +4,6 @@ use crate::models::{PluginFormat, Scale, TimeSignature, Tonic};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::sync::Once;
-use uuid::Uuid;
 
 use super::scanner::ScanResult;
 
