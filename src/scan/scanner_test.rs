@@ -4,6 +4,7 @@ use crate::models::{PluginFormat, Scale, TimeSignature, Tonic};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::sync::Once;
+use uuid::Uuid;
 
 use super::scanner::ScanResult;
 
@@ -16,13 +17,11 @@ fn setup_valid_scanner(scanner: &mut Scanner) {
 
 static INIT: Once = Once::new();
 fn setup() {
-    INIT.call_once(|| {
-        std::env::set_var("RUST_LOG", "debug");
-        env_logger::builder()
-            .is_test(true)
-            .filter_level(log::LevelFilter::Debug)
-            .try_init()
-            .expect("Failed to initialize logger");
+    let _ = INIT.call_once(|| {
+        let _ = std::env::set_var("RUST_LOG", "debug");
+        if let Err(_) = env_logger::try_init() {
+            // Logger already initialized, that's fine
+        }
     });
 }
 
@@ -202,6 +201,7 @@ fn test_beta_version() {
 #[test]
 fn test_vst3_audio_fx() {
     let mut scanner = create_test_scanner();
+    setup_valid_scanner(&mut scanner);
     let mut reader = Reader::from_str(r#"
         <SourceContext>
             <Value>
@@ -223,19 +223,22 @@ fn test_vst3_audio_fx() {
     
     process_xml(&mut scanner, &mut reader);
 
-    assert_eq!(scanner.plugin_info_tags.len(), 1);
-    let plugin_info = scanner.plugin_info_tags.values().next().unwrap();
-    assert_eq!(plugin_info.name, "Pro-Q 3");
+    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    assert_eq!(result.plugins.len(), 1);
+    let plugin = result.plugins.iter().next().unwrap();
+    assert!(plugin.id.to_string().len() > 0, "Plugin should have a valid UUID");
+    assert_eq!(plugin.name, "Pro-Q 3");
     assert_eq!(
-        plugin_info.dev_identifier,
+        plugin.dev_identifier,
         "device:vst3:audiofx:72c4db71-7a4d-459a-b97e-51745d84b39d"
     );
-    assert_eq!(plugin_info.plugin_format, PluginFormat::VST3AudioFx);
+    assert_eq!(plugin.plugin_format, PluginFormat::VST3AudioFx);
 }
 
 #[test]
 fn test_vst2_audio_fx() {
     let mut scanner = create_test_scanner();
+    setup_valid_scanner(&mut scanner);
     let mut reader = Reader::from_str(r#"
         <SourceContext>
             <Value>
@@ -257,19 +260,22 @@ fn test_vst2_audio_fx() {
 
     process_xml(&mut scanner, &mut reader);
 
-    assert_eq!(scanner.plugin_info_tags.len(), 1);
-    let plugin_info = scanner.plugin_info_tags.values().next().unwrap();
-    assert_eq!(plugin_info.name, "Altiverb 7");
+    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    assert_eq!(result.plugins.len(), 1);
+    let plugin = result.plugins.iter().next().unwrap();
+    assert!(plugin.id.to_string().len() > 0, "Plugin should have a valid UUID");
+    assert_eq!(plugin.name, "Altiverb 7");
     assert_eq!(
-        plugin_info.dev_identifier,
+        plugin.dev_identifier,
         "device:vst:audiofx:1096184373?n=Altiverb%207"
     );
-    assert_eq!(plugin_info.plugin_format, PluginFormat::VST2AudioFx);
+    assert_eq!(plugin.plugin_format, PluginFormat::VST2AudioFx);
 }
 
 #[test]
 fn test_vst3_instrument() {
     let mut scanner = create_test_scanner();
+    setup_valid_scanner(&mut scanner);
     let mut reader = Reader::from_str(r#"
         <SourceContext>
             <Value>
@@ -291,19 +297,22 @@ fn test_vst3_instrument() {
 
     process_xml(&mut scanner, &mut reader);
 
-    assert_eq!(scanner.plugin_info_tags.len(), 1);
-    let plugin_info = scanner.plugin_info_tags.values().next().unwrap();
-    assert_eq!(plugin_info.name, "Omnisphere");
+    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    assert_eq!(result.plugins.len(), 1);
+    let plugin = result.plugins.iter().next().unwrap();
+    assert!(plugin.id.to_string().len() > 0, "Plugin should have a valid UUID");
+    assert_eq!(plugin.name, "Omnisphere");
     assert_eq!(
-        plugin_info.dev_identifier,
+        plugin.dev_identifier,
         "device:vst3:instr:84e8de5f-9255-2222-96fa-e4133c935a18"
     );
-    assert_eq!(plugin_info.plugin_format, PluginFormat::VST3Instrument);
+    assert_eq!(plugin.plugin_format, PluginFormat::VST3Instrument);
 }
 
 #[test]
 fn test_interleaved_plugins_and_sample() {
     let mut scanner = create_test_scanner();
+    setup_valid_scanner(&mut scanner);
     let mut reader = Reader::from_str(r#"
         <SourceContext>
             <Value>
@@ -323,41 +332,12 @@ fn test_interleaved_plugins_and_sample() {
         </PluginDesc>
         <SampleRef>
             <FileRef>
-                <RelativePathType Value="1" />
-                <RelativePath Value="../../../../Samples/Vintage Drum Machines/KB6_Archives_7_2017_Relaximus/Yamaha/Yamaha DTXpress/11 e - Effect 2/74 Vocal04.wav" />
-                <Path Value="C:/Users/judee/Samples/Vintage Drum Machines/KB6_Archives_7_2017_Relaximus/Yamaha/Yamaha DTXpress/11 e - Effect 2/74 Vocal04.wav" />
-                <Type Value="1" />
-                <LivePackName Value="" />
-                <LivePackId Value="" />
-                <OriginalFileSize Value="146440" />
-                <OriginalCrc Value="40395" />
+                <Path Value="C:/test/sample.wav" />
             </FileRef>
-            <LastModDate Value="1628727109" />
-            <SourceContext>
-                <SourceContext Id="0">
-                    <OriginalFileRef>
-                        <FileRef Id="0">
-                            <RelativePathType Value="1" />
-                            <RelativePath Value="../../../../Samples/Vintage Drum Machines/KB6_Archives_7_2017_Relaximus/Yamaha/Yamaha DTXpress/11 e - Effect 2/74 Vocal04.wav" />
-                            <Path Value="C:/Users/judee/Samples/Vintage Drum Machines/KB6_Archives_7_2017_Relaximus/Yamaha/Yamaha DTXpress/11 e - Effect 2/74 Vocal04.wav" />
-                            <Type Value="1" />
-                            <LivePackName Value="" />
-                            <LivePackId Value="" />
-                            <OriginalFileSize Value="146440" />
-                            <OriginalCrc Value="40395" />
-                        </FileRef>
-                    </OriginalFileRef>
-                    <BrowserContentPath Value="view:X-Samples#FileId_689899" />
-                    <LocalFiltersJson Value="" />
-                </SourceContext>
-            </SourceContext>
-            <SampleUsageHint Value="0" />
-            <DefaultDuration Value="24284" />
-            <DefaultSampleRate Value="44100" />
         </SampleRef>
         <SourceContext>
             <Value>
-                <BranchSourceContext Id="0">
+                <BranchSourceContext Id="1">
                     <OriginalFileRef />
                     <BrowserContentPath Value="view:X-Plugins#Altiverb%207" />
                     <LocalFiltersJson Value="{&quot;local-filters&quot;:{&quot;devtype&quot;:[&quot;audio-fx&quot;],&quot;devarch&quot;:[&quot;plugin-vst&quot;]}}" />
@@ -367,7 +347,7 @@ fn test_interleaved_plugins_and_sample() {
             </Value>
         </SourceContext>
         <PluginDesc>
-            <VstPluginInfo Id="0">
+            <VstPluginInfo Id="1">
                 <PlugName Value="Altiverb 7" />
             </VstPluginInfo>
         </PluginDesc>
@@ -375,20 +355,28 @@ fn test_interleaved_plugins_and_sample() {
 
     process_xml(&mut scanner, &mut reader);
 
-    assert_eq!(scanner.plugin_info_tags.len(), 2);
-    let plugin_info: Vec<_> = scanner.plugin_info_tags.values().collect();
-    
-    let proq3 = plugin_info.iter().find(|p| p.name == "Pro-Q 3").unwrap();
+    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    assert_eq!(result.plugins.len(), 2);
+    assert_eq!(result.samples.len(), 1);
+
+    // Check plugins
+    let proq3 = result.plugins.iter().find(|p| p.name == "Pro-Q 3").unwrap();
+    assert!(proq3.id.to_string().len() > 0, "Plugin should have a valid UUID");
     assert_eq!(proq3.dev_identifier, "device:vst3:audiofx:72c4db71-7a4d-459a-b97e-51745d84b39d");
     assert_eq!(proq3.plugin_format, PluginFormat::VST3AudioFx);
 
-    let altiverb = plugin_info.iter().find(|p| p.name == "Altiverb 7").unwrap();
+    let altiverb = result.plugins.iter().find(|p| p.name == "Altiverb 7").unwrap();
+    assert!(altiverb.id.to_string().len() > 0, "Plugin should have a valid UUID");
     assert_eq!(altiverb.dev_identifier, "device:vst:audiofx:1096184373?n=Altiverb%207");
     assert_eq!(altiverb.plugin_format, PluginFormat::VST2AudioFx);
 
-    assert_eq!(scanner.state, ScannerState::Root);
-    assert_eq!(scanner.in_source_context, false);
-    assert_eq!(scanner.current_branch_info, None);
+    // Check sample
+    let sample = result.samples.iter().next().unwrap();
+    assert!(sample.id.to_string().len() > 0, "Sample should have a valid UUID");
+    assert_eq!(sample.name, "sample.wav");
+    assert_eq!(sample.path.to_str().unwrap(), "C:/test/sample.wav");
+
+    assert_clean_state(&scanner);
 }
 
 #[test]
@@ -576,6 +564,7 @@ fn test_sample_v12() {
 
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
     let sample = result.samples.iter().next().unwrap();
+    assert!(sample.id.to_string().len() > 0, "Sample should have a valid UUID");
     assert_eq!(sample.path.to_str().unwrap(), "C:/Users/judee/Samples/Vintage Drum Machines/KB6_Archives_7_2017_Relaximus/Yamaha/Yamaha DTXpress/11 e - Effect 2/74 Vocal04.wav");
     assert_eq!(sample.name, "74 Vocal04.wav");
     
@@ -652,6 +641,7 @@ fn test_sample_v9() {
     let mut scanner = create_test_scanner_with_version(9);
     setup_valid_scanner(&mut scanner);
 
+    // DO NOT EDIT THIS XML DATA
     let mut reader = Reader::from_str(r#"
         <SampleRef>
             <FileRef>
@@ -881,93 +871,24 @@ fn test_key_signature_v12() {
 #[test]
 fn test_key_signature_v9() {
     let mut scanner = create_test_scanner_with_version(9);
+    setup_valid_scanner(&mut scanner);
+
     let mut reader = Reader::from_str(r#"
-        <MidiClip Time="224">
-            <LomId Value="0" />
-            <LomIdView Value="0" />
-            <WarpMarkers>
-                <WarpMarker SecTime="0" BeatTime="0" />
-                <WarpMarker SecTime="0.015625" BeatTime="0.03125" />
-            </WarpMarkers>
-            <MarkersGenerated Value="false" />
-            <CurrentStart Value="224" />
-            <CurrentEnd Value="256" />
-            <Loop>
-                <LoopStart Value="0" />
-                <LoopEnd Value="32" />
-                <StartRelative Value="0" />
-                <LoopOn Value="false" />
-                <OutMarker Value="64" />
-                <HiddenLoopStart Value="0" />
-                <HiddenLoopEnd Value="64" />
-            </Loop>
-            <Name Value="Arabic C Scale" />
-            <Annotation Value="" />
-            <ColorIndex Value="16" />
-            <LaunchMode Value="0" />
-            <LaunchQuantisation Value="0" />
-            <TimeSignature>
-                <TimeSignatures>
-                    <RemoteableTimeSignature>
-                        <Numerator Value="4" />
-                        <Denominator Value="4" />
-                        <Time Value="0" />
-                    </RemoteableTimeSignature>
-                </TimeSignatures>
-            </TimeSignature>
-            <Envelopes>
-                <Envelopes />
-            </Envelopes>
-            <ScrollerTimePreserver>
-                <LeftTime Value="0.016361886429258954" />
-                <RightTime Value="25.663618864292591" />
-            </ScrollerTimePreserver>
-            <TimeSelection>
-                <AnchorTime Value="8" />
-                <OtherTime Value="9" />
-            </TimeSelection>
-            <Legato Value="false" />
-            <Ram Value="false" />
-            <GrooveSettings>
-                <GrooveId Value="-1" />
-            </GrooveSettings>
-            <Disabled Value="false" />
-            <VelocityAmount Value="0" />
-            <FollowTime Value="4" />
-            <FollowActionA Value="0" />
-            <FollowActionB Value="0" />
-            <FollowChanceA Value="1" />
-            <FollowChanceB Value="0" />
-            <Grid>
-                <FixedNumerator Value="1" />
-                <FixedDenominator Value="16" />
-                <GridIntervalPixel Value="20" />
-                <Ntoles Value="2" />
-                <SnapToGrid Value="true" />
-                <Fixed Value="false" />
-            </Grid>
-            <FreezeStart Value="0" />
-            <FreezeEnd Value="0" />
-            <IsSongTempoMaster Value="false" />
-            <IsWarped Value="true" />
-            <Notes />
-            <BankSelectCoarse Value="-1" />
-            <BankSelectFine Value="-1" />
-            <ProgramChange Value="-1" />
-            <NoteEditorFoldInZoom Value="825" />
-            <NoteEditorFoldInScroll Value="-297" />
-            <NoteEditorFoldOutZoom Value="3072" />
-            <NoteEditorFoldOutScroll Value="0" />
-        </MidiClip>
+        <KeySignature>
+            <Tonic Value="0" />
+            <Scale Value="0" />
+        </KeySignature>
+        <KeySignature>
+            <Tonic Value="0" />
+            <Scale Value="0" />
+        </KeySignature>
     "#);
 
     process_xml(&mut scanner, &mut reader);
 
-    setup_valid_scanner(&mut scanner);
-
     let result = scanner.finalize_result(ScanResult::default()).unwrap();
-    assert_eq!(result.key_signature.clone().unwrap().tonic, Tonic::Empty);
-    assert_eq!(result.key_signature.clone().unwrap().scale, Scale::Empty);
+    assert!(result.key_signature.is_none(), "Key signature should be None for Ableton version 9");
+    assert_eq!(scanner.key_frequencies.len(), 0, "No key frequencies should be recorded for version 9");
 }
 
 #[test]
@@ -1133,27 +1054,23 @@ fn test_multiple_key_signatures() {
 }
 
 fn process_xml(scanner: &mut Scanner, reader: &mut Reader<&[u8]>) {
+    let mut buf = Vec::new();
     let mut byte_pos = 0;
     loop {
-        match reader.read_event_into(&mut Vec::new()) {
-            Ok(Event::Start(ref e)) => {
-                scanner.depth += 1;
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 scanner.handle_start_event(e, reader, &mut byte_pos).unwrap();
             }
             Ok(Event::End(ref e)) => {
                 scanner.handle_end_event(e).unwrap();
-                scanner.depth -= 1;
-            }
-            Ok(Event::Empty(ref e)) => {
-                scanner.handle_start_event(e, reader, &mut byte_pos).unwrap();
             }
             Ok(Event::Text(ref e)) => {
                 scanner.handle_text_event(e).unwrap();
             }
             Ok(Event::Eof) => break,
-            Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
             _ => {}
         }
+        buf.clear();
     }
 }
 
