@@ -157,7 +157,7 @@ impl std::fmt::Display for Scale {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct KeySignature {
+pub(crate) struct KeySignature {
     pub tonic: Tonic,
     pub scale: Scale,
 }
@@ -208,8 +208,9 @@ pub struct Plugin {
     pub(crate) installed: bool,
 }
 
+#[allow(dead_code)]
 impl Plugin {
-    pub fn new(
+    pub(crate) fn new(
         name: String,
         dev_identifier: String,
         plugin_format: PluginFormat,
