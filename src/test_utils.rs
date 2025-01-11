@@ -47,7 +47,7 @@ impl LiveSetBuilder {
             flags: None,
             scanstate: None,
             enabled: None,
-            plugin_format: PluginFormat::Vst3,
+            plugin_format: PluginFormat::VST3AudioFx,
             installed: false,
         };
         self.plugins.insert(plugin);
@@ -66,8 +66,8 @@ impl LiveSetBuilder {
             sdk_version: Some("1.0.0".to_string()),
             flags: Some(0),
             scanstate: Some(0),
-            enabled: Some(true),
-            plugin_format: PluginFormat::Vst3,
+            enabled: Some(1),
+            plugin_format: PluginFormat::VST3AudioFx,
             installed: true,
         };
         self.plugins.insert(plugin);
@@ -88,7 +88,7 @@ impl LiveSetBuilder {
         self
     }
 
-    pub fn with_time_signature(mut self, numerator: u32, denominator: u32) -> Self {
+    pub fn with_time_signature(mut self, numerator: u8, denominator: u8) -> Self {
         self.time_signature = TimeSignature { numerator, denominator };
         self
     }
