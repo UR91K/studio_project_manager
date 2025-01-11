@@ -1,14 +1,13 @@
-// /src/live_set.rs
 use std::collections::HashSet;
 use std::path::PathBuf;
-
 use chrono::{DateTime, Duration, Local};
+use uuid::Uuid;
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::error::LiveSetError;
 use crate::{debug_fn, info_fn};
-use crate::models::{AbletonVersion, Id, KeySignature, Plugin, Sample, TimeSignature};
+use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
 use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamps};
 use crate::utils::plugins::get_most_recent_db_file;
 use crate::utils::{decompress_gzip_file, validate_ableton_file};
@@ -18,7 +17,7 @@ use colored::*;
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct LiveSet {
-    pub id: Id,
+    pub id: Uuid,
     pub file_path: PathBuf,
     pub file_name: String,
     pub file_hash: String,
@@ -53,9 +52,8 @@ impl LiveSet {
         let mut scanner = Scanner::new(&xml_data, scanner_options)?;
         let scan_result = scanner.scan(&xml_data)?;
 
-        //TODO: don't use defaults, make sure project can only ever be valid data from the file
         let mut live_set = LiveSet {
-            id: Id::default(),
+            id: Uuid::new_v4(),
             file_path,
             file_name,
             file_hash,

@@ -4,6 +4,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::str;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use once_cell::sync::Lazy;
 
@@ -190,6 +191,9 @@ impl fmt::Display for PluginFormat {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Plugin {
+    // Our database ID
+    pub(crate) id: Uuid,
+    // Ableton database IDs
     pub(crate) plugin_id: Option<i32>,
     pub(crate) module_id: Option<i32>,
     pub(crate) dev_identifier: String,
@@ -202,6 +206,48 @@ pub struct Plugin {
     pub(crate) enabled: Option<i32>,
     pub(crate) plugin_format: PluginFormat,
     pub(crate) installed: bool,
+}
+
+impl Plugin {
+    pub fn new(
+        name: String,
+        dev_identifier: String,
+        plugin_format: PluginFormat,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            plugin_id: None,
+            module_id: None,
+            dev_identifier,
+            name,
+            vendor: None,
+            version: None,
+            sdk_version: None,
+            flags: None,
+            scanstate: None,
+            enabled: None,
+            plugin_format,
+            installed: false,
+        }
+    }
+
+    pub fn rescan(&mut self, db: &AbletonDatabase) -> Result<(), DatabaseError> {
+        if let Some(db_plugin) = db.get_plugin_by_dev_identifier(&self.dev_identifier)? {
+            self.plugin_id = Some(db_plugin.plugin_id);
+            self.module_id = db_plugin.module_id;
+            self.name = db_plugin.name;
+            self.vendor = db_plugin.vendor;
+            self.version = db_plugin.version;
+            self.sdk_version = db_plugin.sdk_version;
+            self.flags = db_plugin.flags;
+            self.scanstate = db_plugin.scanstate;
+            self.enabled = db_plugin.enabled;
+            self.installed = true;
+        } else {
+            self.installed = false;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -244,31 +290,11 @@ pub fn get_installed_plugins() -> Arc<Result<HashSet<(String, PluginFormat)>, Da
     INSTALLED_PLUGINS.clone()
 }
 
-impl Plugin {
-    pub fn rescan(&mut self, db: &AbletonDatabase) -> Result<(), DatabaseError> {
-        if let Some(db_plugin) = db.get_plugin_by_dev_identifier(&self.dev_identifier)? {
-            self.plugin_id = Some(db_plugin.plugin_id);
-            self.module_id = db_plugin.module_id;
-            self.name = db_plugin.name;
-            self.vendor = db_plugin.vendor;
-            self.version = db_plugin.version;
-            self.sdk_version = db_plugin.sdk_version;
-            self.flags = db_plugin.flags;
-            self.scanstate = db_plugin.scanstate;
-            self.enabled = db_plugin.enabled;
-            self.installed = true;
-        } else {
-            self.installed = false;
-        }
-        Ok(())
-    }
-}
-
 // Sample types
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Sample {
-    pub(crate) id: Id,
+    pub(crate) id: Uuid,
     pub(crate) name: String,
     pub(crate) path: PathBuf,
     pub(crate) is_present: bool,
@@ -276,10 +302,10 @@ pub(crate) struct Sample {
 
 #[allow(dead_code)]
 impl Sample {
-    pub(crate) fn new(id: Id, name: String, path: PathBuf) -> Self {
+    pub(crate) fn new(name: String, path: PathBuf) -> Self {
         let is_present = path.exists();
         Self {
-            id,
+            id: Uuid::new_v4(),
             name,
             path,
             is_present,
@@ -311,7 +337,7 @@ impl Sample {
             .map(String::from)
             .unwrap_or_else(|| "Unknown".to_string());
 
-        Ok(Self::new(Id::default(), name, path))
+        Ok(Self::new(name, path))
     }
 
     pub(crate) fn from_11_plus_data(path_value: &str) -> Self {
@@ -321,7 +347,7 @@ impl Sample {
             .unwrap_or_default()
             .to_string_lossy()
             .into_owned();
-        Self::new(Id::default(), name, path)
+        Self::new(name, path)
     }
 
     pub(crate) fn is_present(&self) -> bool {

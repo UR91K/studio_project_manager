@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use log::{debug, info, warn};
 use crate::error::DatabaseError;
-use crate::models::{Plugin, Sample, PluginFormat, Scale, Tonic, KeySignature, TimeSignature, AbletonVersion, Id};
+use crate::models::{Plugin, Sample, PluginFormat, Scale, Tonic, KeySignature, TimeSignature, AbletonVersion};
 use crate::live_set::LiveSet;
 
 // Wrapper type for DateTime
@@ -148,10 +148,19 @@ impl LiveSetDatabase {
             -- Plugin catalog
             CREATE TABLE IF NOT EXISTS plugins (
                 id TEXT PRIMARY KEY,
+                ableton_plugin_id INTEGER,
+                ableton_module_id INTEGER,
+                dev_identifier TEXT NOT NULL,
                 name TEXT NOT NULL,
                 format TEXT NOT NULL,
                 installed BOOLEAN NOT NULL,
-                UNIQUE(name, format)
+                vendor TEXT,
+                version TEXT,
+                sdk_version TEXT,
+                flags INTEGER,
+                scanstate INTEGER,
+                enabled INTEGER,
+                UNIQUE(dev_identifier)
             );
 
             -- Sample catalog
@@ -194,9 +203,9 @@ impl LiveSetDatabase {
         debug!("Inserting project: {} ({})", live_set.file_name, live_set.file_path.display());
         let tx = self.conn.transaction()?;
         
-        // Generate UUIDs for new entries
-        let project_id = Uuid::new_v4().to_string();
-        debug!("Generated project UUID: {}", project_id);
+        // Use the LiveSet's UUID
+        let project_id = live_set.id.to_string();
+        debug!("Using project UUID: {}", project_id);
 
         // Insert project
         tx.execute(
@@ -265,12 +274,26 @@ impl LiveSetDatabase {
         id: &str,
     ) -> Result<(), DatabaseError> {
         tx.execute(
-            "INSERT OR IGNORE INTO plugins (id, name, format, installed) VALUES (?, ?, ?, ?)",
+            r#"
+            INSERT OR IGNORE INTO plugins (
+                id, ableton_plugin_id, ableton_module_id, dev_identifier, name, format, installed,
+                vendor, version, sdk_version, flags, scanstate, enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
             params![
                 id,
+                plugin.plugin_id,
+                plugin.module_id,
+                plugin.dev_identifier,
                 plugin.name,
                 format!("{:?}", plugin.plugin_format),
                 plugin.installed,
+                plugin.vendor,
+                plugin.version,
+                plugin.sdk_version,
+                plugin.flags,
+                plugin.scanstate,
+                plugin.enabled,
             ],
         )?;
         Ok(())
@@ -385,7 +408,7 @@ impl LiveSetDatabase {
             
             // Create LiveSet instance
             let live_set = LiveSet {
-                id: Id::default(),
+                id: Uuid::parse_str(&project_id).map_err(|_| rusqlite::Error::InvalidParameterName("Invalid UUID".into()))?,
                 file_path: PathBuf::from(row.get::<_, String>(1)?),
                 file_name: row.get(2)?,
                 file_hash: row.get(3)?,
@@ -455,22 +478,23 @@ impl LiveSetDatabase {
         )?;
 
         let plugins = stmt.query_map([path], |row| {
-            let name: String = row.get(1)?;
+            let name: String = row.get(4)?;
             debug!("Found plugin: {}", name);
             Ok(Plugin {
+                id: Uuid::new_v4(),
+                plugin_id: row.get(1)?,
+                module_id: row.get(2)?,
+                dev_identifier: row.get(3)?,
                 name,
-                plugin_format: row.get::<_, String>(2)?.parse()
+                plugin_format: row.get::<_, String>(5)?.parse()
                     .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                installed: row.get(3)?,
-                plugin_id: None,
-                module_id: None,
-                dev_identifier: String::new(),
-                vendor: None,
-                version: None,
-                sdk_version: None,
-                flags: None,
-                scanstate: None,
-                enabled: None,
+                installed: row.get(6)?,
+                vendor: row.get(7)?,
+                version: row.get(8)?,
+                sdk_version: row.get(9)?,
+                flags: row.get(10)?,
+                scanstate: row.get(11)?,
+                enabled: row.get(12)?,
             })
         })?.collect::<SqliteResult<HashSet<_>>>()?;
 
@@ -492,7 +516,7 @@ impl LiveSetDatabase {
             let name: String = row.get(1)?;
             debug!("Found sample: {}", name);
             Ok(Sample {
-                id: Id::default(),
+                id: Uuid::new_v4(),
                 name,
                 path: PathBuf::from(row.get::<_, String>(2)?),
                 is_present: row.get(3)?,
@@ -534,6 +558,7 @@ mod tests {
 
         // Add a test plugin
         plugins.insert(Plugin {
+            id: Uuid::new_v4(),
             plugin_id: Some(1),
             module_id: Some(2),
             dev_identifier: "device:vst3:audiofx:test-plugin".to_string(),
@@ -550,14 +575,14 @@ mod tests {
 
         // Add a test sample
         samples.insert(Sample {
-            id: Id::default(),
+            id: Uuid::new_v4(),
             name: "test_sample.wav".to_string(),
             path: PathBuf::from("C:/test/test_sample.wav"),
             is_present: true,
         });
 
         LiveSet {
-            id: Id::default(),
+            id: Uuid::new_v4(),
             file_path: PathBuf::from("C:/test/test_project.als"),
             file_name: "test_project.als".to_string(),
             file_hash: "test_hash".to_string(),

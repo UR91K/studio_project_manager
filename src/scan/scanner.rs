@@ -6,6 +6,7 @@ use std::io::BufRead;
 use log::{debug, trace, warn};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use uuid::Uuid;
 
 
 use crate::error::LiveSetError;
@@ -368,7 +369,6 @@ impl Scanner {
         // Convert sample paths to Sample structs
         for path in &self.sample_paths {
             result.samples.insert(Sample::new(
-                Id::default(),
                 path.file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
@@ -401,6 +401,7 @@ impl Scanner {
                         db_plugin.name.green()
                     );
                     Plugin {
+                        id: Uuid::new_v4(),
                         plugin_id: Some(db_plugin.plugin_id),
                         module_id: db_plugin.module_id,
                         dev_identifier: db_plugin.dev_identifier.clone(),
@@ -422,6 +423,7 @@ impl Scanner {
                         info
                     );
                     Plugin {
+                        id: Uuid::new_v4(),
                         plugin_id: None,
                         module_id: None,
                         dev_identifier: dev_identifier.clone(),
@@ -515,7 +517,6 @@ impl Scanner {
         // Convert sample paths to Sample structs
         for path in &self.sample_paths {
             result.samples.insert(Sample::new(
-                Id::default(),
                 path.file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
@@ -548,6 +549,7 @@ impl Scanner {
                         db_plugin.name.green()
                     );
                     Plugin {
+                        id: Uuid::new_v4(),
                         plugin_id: Some(db_plugin.plugin_id),
                         module_id: db_plugin.module_id,
                         dev_identifier: db_plugin.dev_identifier.clone(),
@@ -569,6 +571,7 @@ impl Scanner {
                         info
                     );
                     Plugin {
+                        id: Uuid::new_v4(),
                         plugin_id: None,
                         module_id: None,
                         dev_identifier: dev_identifier.clone(),
