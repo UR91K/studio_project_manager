@@ -163,43 +163,6 @@ impl LiveSetDatabase {
             );
 
             -- FTS5 triggers for maintaining the search index
-            CREATE TRIGGER IF NOT EXISTS projects_ai AFTER INSERT ON projects BEGIN
-                INSERT INTO project_search (
-                    project_id, name, path, created_at, modified_at,
-                    version, key_signature, tempo, time_signature,
-                    plugins, samples, tags, notes
-                )
-                SELECT 
-                    p.id,
-                    p.name,
-                    p.path,
-                    p.created_at,
-                    p.modified_at,
-                    p.ableton_version_major || '.' || p.ableton_version_minor,
-                    CASE 
-                        WHEN p.key_signature_tonic IS NOT NULL 
-                        THEN p.key_signature_tonic || ' ' || p.key_signature_scale 
-                        ELSE NULL 
-                    END,
-                    p.tempo,
-                    p.time_signature_numerator || '/' || p.time_signature_denominator,
-                    (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
-                     FROM plugins pl 
-                     JOIN project_plugins pp ON pp.plugin_id = pl.id 
-                     WHERE pp.project_id = p.id),
-                    (SELECT GROUP_CONCAT(s.name, ' ')
-                     FROM samples s 
-                     JOIN project_samples ps ON ps.sample_id = s.id 
-                     WHERE ps.project_id = p.id),
-                    (SELECT GROUP_CONCAT(t.name, ' ')
-                     FROM tags t 
-                     JOIN project_tags pt ON pt.tag_id = t.id 
-                     WHERE pt.project_id = p.id),
-                    COALESCE(p.notes, '')
-                FROM projects p
-                WHERE p.id = new.id;
-            END;
-
             CREATE TRIGGER IF NOT EXISTS projects_au AFTER UPDATE ON projects BEGIN
                 -- First delete the old record from FTS
                 DELETE FROM project_search WHERE project_id = old.id;
@@ -319,12 +282,81 @@ impl LiveSetDatabase {
         }
 
         tx.commit()?;
+
+        // Update FTS5 index after everything is inserted
+        debug!("Updating FTS5 index for project {}", live_set.file_name);
+        self.conn.execute(
+            r#"
+            INSERT INTO project_search (
+                project_id, name, path, created_at, modified_at,
+                version, key_signature, tempo, time_signature,
+                plugins, samples, tags, notes
+            )
+            SELECT 
+                p.id,
+                p.name,
+                p.path,
+                p.created_at,
+                p.modified_at,
+                p.ableton_version_major || '.' || p.ableton_version_minor,
+                CASE 
+                    WHEN p.key_signature_tonic IS NOT NULL 
+                    THEN p.key_signature_tonic || ' ' || p.key_signature_scale 
+                    ELSE NULL 
+                END,
+                p.tempo,
+                p.time_signature_numerator || '/' || p.time_signature_denominator,
+                (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
+                 FROM plugins pl 
+                 JOIN project_plugins pp ON pp.plugin_id = pl.id 
+                 WHERE pp.project_id = p.id),
+                (SELECT GROUP_CONCAT(s.name, ' ')
+                 FROM samples s 
+                 JOIN project_samples ps ON ps.sample_id = s.id 
+                 WHERE ps.project_id = p.id),
+                (SELECT GROUP_CONCAT(t.name, ' ')
+                 FROM tags t 
+                 JOIN project_tags pt ON pt.tag_id = t.id 
+                 WHERE pt.project_id = p.id),
+                COALESCE(p.notes, '')
+            FROM projects p
+            WHERE p.id = ?
+            "#,
+            [project_id],
+        )?;
+
         info!(
             "Successfully inserted project {} with {} plugins and {} samples",
             live_set.file_name,
             live_set.plugins.len(),
             live_set.samples.len()
         );
+        
+        // After successful commit, let's inspect the FTS5 index
+        debug!("Inspecting FTS5 index for project {}", live_set.file_name);
+        match self.conn.query_row(
+            "SELECT * FROM project_search WHERE project_id = ?",
+            [live_set.id.to_string()],
+            |row| {
+                debug!("FTS5 index content:");
+                debug!("  project_id: {}", row.get::<_, String>(0)?);
+                debug!("  name: {}", row.get::<_, String>(1)?);
+                debug!("  path: {}", row.get::<_, String>(2)?);
+                let plugins: Option<String> = row.get(9)?;
+                debug!("  plugins: {:?}", plugins);
+                let samples: Option<String> = row.get(10)?;
+                debug!("  samples: {:?}", samples);
+                let tags: Option<String> = row.get(11)?;
+                debug!("  tags: {:?}", tags);
+                let notes: Option<String> = row.get(12)?;
+                debug!("  notes: {:?}", notes);
+                Ok(())
+            },
+        ) {
+            Ok(_) => debug!("Successfully inspected FTS5 index"),
+            Err(e) => warn!("Failed to inspect FTS5 index: {}", e),
+        };
+
         Ok(())
     }
 
