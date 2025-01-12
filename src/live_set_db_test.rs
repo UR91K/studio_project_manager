@@ -1,5 +1,5 @@
 #![allow(dead_code, unused_imports)]
-use crate::live_set_db::LiveSetDatabase;
+use crate::database::LiveSetDatabase;
 use crate::scan::ScanResult;
 use crate::test_utils::LiveSetBuilder;
 use chrono::Local;
