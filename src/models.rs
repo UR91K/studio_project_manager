@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
-use std::str;
+use std::str::{self, FromStr};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -143,6 +143,86 @@ impl Tonic {
         }
     }
 }
+
+impl FromStr for Tonic {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Empty" => Ok(Tonic::Empty),
+            "C" => Ok(Tonic::C),
+            "CSharp" => Ok(Tonic::CSharp),
+            "D" => Ok(Tonic::D),
+            "DSharp" => Ok(Tonic::DSharp),
+            "E" => Ok(Tonic::E),
+            "F" => Ok(Tonic::F),
+            "FSharp" => Ok(Tonic::FSharp),
+            "G" => Ok(Tonic::G),
+            "GSharp" => Ok(Tonic::GSharp),
+            "A" => Ok(Tonic::A),
+            "ASharp" => Ok(Tonic::ASharp),
+            "B" => Ok(Tonic::B),
+            _ => Err(format!("Invalid tonic: {}", s)),
+        }
+    }
+}
+
+impl FromStr for Scale {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Empty" => Ok(Scale::Empty),
+            "Major" => Ok(Scale::Major),
+            "Minor" => Ok(Scale::Minor),
+            "Dorian" => Ok(Scale::Dorian),
+            "Mixolydian" => Ok(Scale::Mixolydian),
+            "Aeolian" => Ok(Scale::Aeolian),
+            "Phrygian" => Ok(Scale::Phrygian),
+            "Locrian" => Ok(Scale::Locrian),
+            "WholeTone" => Ok(Scale::WholeTone),
+            "HalfWholeDim" => Ok(Scale::HalfWholeDim),
+            "WholeHalfDim" => Ok(Scale::WholeHalfDim),
+            "MinorBlues" => Ok(Scale::MinorBlues),
+            "MinorPentatonic" => Ok(Scale::MinorPentatonic),
+            "MajorPentatonic" => Ok(Scale::MajorPentatonic),
+            "HarmonicMinor" => Ok(Scale::HarmonicMinor),
+            "MelodicMinor" => Ok(Scale::MelodicMinor),
+            "Dorian4" => Ok(Scale::Dorian4),
+            "PhrygianDominant" => Ok(Scale::PhrygianDominant),
+            "LydianDominant" => Ok(Scale::LydianDominant),
+            "LydianAugmented" => Ok(Scale::LydianAugmented),
+            "HarmonicMajor" => Ok(Scale::HarmonicMajor),
+            "SuperLocrian" => Ok(Scale::SuperLocrian),
+            "BToneSpanish" => Ok(Scale::BToneSpanish),
+            "HungarianMinor" => Ok(Scale::HungarianMinor),
+            "Hirajoshi" => Ok(Scale::Hirajoshi),
+            "Iwato" => Ok(Scale::Iwato),
+            "PelogSelisir" => Ok(Scale::PelogSelisir),
+            "PelogTembung" => Ok(Scale::PelogTembung),
+            "Messiaen1" => Ok(Scale::Messiaen1),
+            "Messiaen2" => Ok(Scale::Messiaen2),
+            "Messiaen3" => Ok(Scale::Messiaen3),
+            "Messiaen4" => Ok(Scale::Messiaen4),
+            "Messiaen5" => Ok(Scale::Messiaen5),
+            "Messiaen6" => Ok(Scale::Messiaen6),
+            "Messiaen7" => Ok(Scale::Messiaen7),
+            _ => Err(format!("Invalid scale: {}", s)),
+        }
+    }
+}
+
+impl FromStr for PluginFormat {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "VST2Instrument" | "VST2 Instrument" => Ok(PluginFormat::VST2Instrument),
+            "VST2AudioFx" | "VST2 Effect" => Ok(PluginFormat::VST2AudioFx),
+            "VST3Instrument" | "VST3 Instrument" => Ok(PluginFormat::VST3Instrument),
+            "VST3AudioFx" | "VST3 Effect" => Ok(PluginFormat::VST3AudioFx),
+            _ => Err(format!("Invalid plugin format: {}", s)),
+        }
+    }
+}
+
 
 impl std::fmt::Display for Tonic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
