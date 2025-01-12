@@ -157,6 +157,7 @@ pub(crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
     Ok(())
 }
 
+
 /// Formats a file size in bytes to a human-readable string (B, KB, MB, or GB).
 ///
 /// # Examples
@@ -169,6 +170,7 @@ pub(crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
 /// assert_eq!(format_file_size(1_048_576), "1.00 MB");
 /// assert_eq!(format_file_size(1_073_741_824), "1.00 GB");
 /// ```
+#[allow(dead_code)]
 pub(crate) fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * KB;
