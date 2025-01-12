@@ -156,6 +156,137 @@ impl LiveSetDatabase {
             CREATE INDEX IF NOT EXISTS idx_samples_path ON samples(path);
             CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
             CREATE INDEX IF NOT EXISTS idx_collection_projects_position ON collection_projects(collection_id, position);
+
+            -- FTS5 virtual table for searching
+            CREATE VIRTUAL TABLE IF NOT EXISTS project_search USING fts5(
+                project_id UNINDEXED,  -- Reference to the original project
+                name,                  -- Project name
+                path,                  -- Project path
+                created_at UNINDEXED,  -- Timestamps are not searchable
+                modified_at UNINDEXED,
+                version,               -- Ableton version
+                key_signature,         -- Combined key signature
+                tempo,                 -- Project tempo
+                time_signature,        -- Combined time signature
+                plugins,               -- Concatenated plugin names and vendors
+                samples,               -- Concatenated sample names
+                tags,                  -- Concatenated tag names
+                notes,                 -- Project notes
+                tokenize = 'porter unicode61 remove_diacritics 2'
+            );
+
+            -- Trigger to keep FTS index updated on insert
+            CREATE TRIGGER IF NOT EXISTS projects_ai AFTER INSERT ON projects BEGIN
+                INSERT INTO project_search (
+                    project_id, name, path, created_at, modified_at,
+                    version, key_signature, tempo, time_signature,
+                    plugins, samples, tags, notes
+                )
+                SELECT 
+                    p.id,
+                    p.name,
+                    p.path,
+                    p.created_at,
+                    p.modified_at,
+                    p.ableton_version_major || '.' || p.ableton_version_minor,
+                    CASE 
+                        WHEN p.key_signature_tonic IS NOT NULL 
+                        THEN p.key_signature_tonic || ' ' || p.key_signature_scale 
+                        ELSE NULL 
+                    END,
+                    p.tempo,
+                    p.time_signature_numerator || '/' || p.time_signature_denominator,
+                    (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
+                     FROM plugins pl 
+                     JOIN project_plugins pp ON pp.plugin_id = pl.id 
+                     WHERE pp.project_id = p.id),
+                    (SELECT GROUP_CONCAT(s.name, ' ')
+                     FROM samples s 
+                     JOIN project_samples ps ON ps.sample_id = s.id 
+                     WHERE ps.project_id = p.id),
+                    (SELECT GROUP_CONCAT(t.name, ' ')
+                     FROM tags t 
+                     JOIN project_tags pt ON pt.tag_id = t.id 
+                     WHERE pt.project_id = p.id),
+                    p.notes
+                FROM projects p
+                WHERE p.id = new.id;
+            END;
+
+            -- Trigger to keep FTS index updated on update
+            CREATE TRIGGER IF NOT EXISTS projects_au AFTER UPDATE ON projects BEGIN
+                INSERT INTO project_search (
+                    project_search,
+                    project_id, name, path, created_at, modified_at,
+                    version, key_signature, tempo, time_signature,
+                    plugins, samples, tags, notes
+                )
+                VALUES(
+                    'delete',
+                    old.id, old.name, old.path, old.created_at, old.modified_at,
+                    old.ableton_version_major || '.' || old.ableton_version_minor,
+                    CASE 
+                        WHEN old.key_signature_tonic IS NOT NULL 
+                        THEN old.key_signature_tonic || ' ' || old.key_signature_scale 
+                        ELSE NULL 
+                    END,
+                    old.tempo,
+                    old.time_signature_numerator || '/' || old.time_signature_denominator,
+                    (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
+                     FROM plugins pl 
+                     JOIN project_plugins pp ON pp.plugin_id = pl.id 
+                     WHERE pp.project_id = old.id),
+                    (SELECT GROUP_CONCAT(s.name, ' ')
+                     FROM samples s 
+                     JOIN project_samples ps ON ps.sample_id = s.id 
+                     WHERE ps.project_id = old.id),
+                    (SELECT GROUP_CONCAT(t.name, ' ')
+                     FROM tags t 
+                     JOIN project_tags pt ON pt.tag_id = t.id 
+                     WHERE pt.project_id = old.id),
+                    old.notes
+                );
+                
+                INSERT INTO project_search (
+                    project_id, name, path, created_at, modified_at,
+                    version, key_signature, tempo, time_signature,
+                    plugins, samples, tags, notes
+                )
+                SELECT 
+                    p.id,
+                    p.name,
+                    p.path,
+                    p.created_at,
+                    p.modified_at,
+                    p.ableton_version_major || '.' || p.ableton_version_minor,
+                    CASE 
+                        WHEN p.key_signature_tonic IS NOT NULL 
+                        THEN p.key_signature_tonic || ' ' || p.key_signature_scale 
+                        ELSE NULL 
+                    END,
+                    p.tempo,
+                    p.time_signature_numerator || '/' || p.time_signature_denominator,
+                    (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
+                     FROM plugins pl 
+                     JOIN project_plugins pp ON pp.plugin_id = pl.id 
+                     WHERE pp.project_id = p.id),
+                    (SELECT GROUP_CONCAT(s.name, ' ')
+                     FROM samples s 
+                     JOIN project_samples ps ON ps.sample_id = s.id 
+                     WHERE ps.project_id = p.id),
+                    (SELECT GROUP_CONCAT(t.name, ' ')
+                     FROM tags t 
+                     JOIN project_tags pt ON pt.tag_id = t.id 
+                     WHERE pt.project_id = p.id),
+                    p.notes
+                FROM projects p
+                WHERE p.id = new.id;
+            END;
+
+            -- Trigger to keep FTS index updated on delete
+            CREATE TRIGGER IF NOT EXISTS projects_ad AFTER DELETE ON projects BEGIN
+                INSERT INTO project_search(project_search, project_id) VALUES('delete', old.id);
+            END;
             "#,
         )?;
 
