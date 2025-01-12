@@ -42,12 +42,23 @@ impl LiveSetDatabase {
         debug!("Initializing database tables and indexes");
         self.conn.execute_batch(
             r#"
+            -- Collections system
+            CREATE TABLE IF NOT EXISTS collections (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                notes TEXT,
+                created_at DATETIME NOT NULL,
+                modified_at DATETIME NOT NULL
+            );
+
             -- Core project data
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
                 path TEXT NOT NULL UNIQUE,
                 name TEXT NOT NULL,
                 hash TEXT NOT NULL,
+                notes TEXT,
                 created_at DATETIME NOT NULL,
                 modified_at DATETIME NOT NULL,
                 last_scanned_at DATETIME NOT NULL,
@@ -64,6 +75,16 @@ impl LiveSetDatabase {
                 ableton_version_minor INTEGER NOT NULL,
                 ableton_version_patch INTEGER NOT NULL,
                 ableton_version_beta BOOLEAN NOT NULL
+            );
+
+            -- Tasks system
+            CREATE TABLE IF NOT EXISTS project_tasks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                description TEXT NOT NULL,
+                completed BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at DATETIME NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
             );
 
             -- Plugin catalog
@@ -1351,5 +1372,125 @@ impl LiveSetDatabase {
 
         debug!("Retrieved all collections");
         Ok(collections)
+    }
+
+    // Notes methods
+    pub fn set_project_notes(&mut self, project_id: &str, notes: &str) -> Result<(), DatabaseError> {
+        debug!("Setting notes for project {}", project_id);
+        self.conn.execute(
+            "UPDATE projects SET notes = ? WHERE id = ?",
+            params![notes, project_id],
+        )?;
+        debug!("Successfully set project notes");
+        Ok(())
+    }
+
+    pub fn get_project_notes(&mut self, project_id: &str) -> Result<Option<String>, DatabaseError> {
+        debug!("Getting notes for project {}", project_id);
+        let notes = self.conn.query_row(
+            "SELECT notes FROM projects WHERE id = ?",
+            [project_id],
+            |row| row.get(0),
+        )?;
+        debug!("Successfully retrieved project notes");
+        Ok(notes)
+    }
+
+    pub fn set_collection_notes(&mut self, collection_id: &str, notes: &str) -> Result<(), DatabaseError> {
+        debug!("Setting notes for collection {}", collection_id);
+        let now = Local::now();
+        self.conn.execute(
+            "UPDATE collections SET notes = ?, modified_at = ? WHERE id = ?",
+            params![notes, SqlDateTime::from(now), collection_id],
+        )?;
+        debug!("Successfully set collection notes");
+        Ok(())
+    }
+
+    pub fn get_collection_notes(&mut self, collection_id: &str) -> Result<Option<String>, DatabaseError> {
+        debug!("Getting notes for collection {}", collection_id);
+        let notes = self.conn.query_row(
+            "SELECT notes FROM collections WHERE id = ?",
+            [collection_id],
+            |row| row.get(0),
+        )?;
+        debug!("Successfully retrieved collection notes");
+        Ok(notes)
+    }
+
+    // Tasks methods
+    pub fn add_task(&mut self, project_id: &str, description: &str) -> Result<String, DatabaseError> {
+        debug!("Adding task to project {}: {}", project_id, description);
+        let task_id = Uuid::new_v4().to_string();
+        let now = Local::now();
+
+        self.conn.execute(
+            "INSERT INTO project_tasks (id, project_id, description, completed, created_at) VALUES (?, ?, ?, ?, ?)",
+            params![task_id, project_id, description, false, SqlDateTime::from(now)],
+        )?;
+
+        debug!("Successfully added task: {}", task_id);
+        Ok(task_id)
+    }
+
+    pub fn complete_task(&mut self, task_id: &str, completed: bool) -> Result<(), DatabaseError> {
+        debug!("Setting task {} completion status to {}", task_id, completed);
+        self.conn.execute(
+            "UPDATE project_tasks SET completed = ? WHERE id = ?",
+            params![completed, task_id],
+        )?;
+        debug!("Successfully updated task completion status");
+        Ok(())
+    }
+
+    pub fn remove_task(&mut self, task_id: &str) -> Result<(), DatabaseError> {
+        debug!("Removing task {}", task_id);
+        self.conn.execute("DELETE FROM project_tasks WHERE id = ?", [task_id])?;
+        debug!("Successfully removed task");
+        Ok(())
+    }
+
+    pub fn get_project_tasks(&mut self, project_id: &str) -> Result<Vec<(String, String, bool)>, DatabaseError> {
+        debug!("Getting tasks for project {}", project_id);
+        let mut stmt = self.conn.prepare(
+            "SELECT id, description, completed FROM project_tasks WHERE project_id = ? ORDER BY created_at"
+        )?;
+
+        let tasks = stmt.query_map([project_id], |row| {
+            let id: String = row.get(0)?;
+            let description: String = row.get(1)?;
+            let completed: bool = row.get(2)?;
+            debug!("Found task: {} ({})", description, id);
+            Ok((id, description, completed))
+        })?.filter_map(|r| r.ok()).collect();
+
+        debug!("Successfully retrieved project tasks");
+        Ok(tasks)
+    }
+
+    pub fn get_collection_tasks(&mut self, collection_id: &str) -> Result<Vec<(String, String, String, bool)>, DatabaseError> {
+        debug!("Getting tasks for all projects in collection {}", collection_id);
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT t.id, p.name, t.description, t.completed
+            FROM project_tasks t
+            JOIN projects p ON p.id = t.project_id
+            JOIN collection_projects cp ON cp.project_id = p.id
+            WHERE cp.collection_id = ?
+            ORDER BY cp.position, t.created_at
+            "#
+        )?;
+
+        let tasks = stmt.query_map([collection_id], |row| {
+            let id: String = row.get(0)?;
+            let project_name: String = row.get(1)?;
+            let description: String = row.get(2)?;
+            let completed: bool = row.get(3)?;
+            debug!("Found task: {} ({}) from project {}", description, id, project_name);
+            Ok((id, project_name, description, completed))
+        })?.filter_map(|r| r.ok()).collect();
+
+        debug!("Successfully retrieved collection tasks");
+        Ok(tasks)
     }
 }
