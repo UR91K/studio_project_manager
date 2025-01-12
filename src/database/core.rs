@@ -27,17 +27,7 @@ impl LiveSetDatabase {
         debug!("Initializing database tables and indexes");
         self.conn.execute_batch(
             r#"
-            -- Collections system
-            CREATE TABLE IF NOT EXISTS collections (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                description TEXT,
-                notes TEXT,
-                created_at DATETIME NOT NULL,
-                modified_at DATETIME NOT NULL
-            );
-
-            -- Core project data
+            -- Core tables
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
                 path TEXT NOT NULL UNIQUE,
@@ -62,17 +52,6 @@ impl LiveSetDatabase {
                 ableton_version_beta BOOLEAN NOT NULL
             );
 
-            -- Tasks system
-            CREATE TABLE IF NOT EXISTS project_tasks (
-                id TEXT PRIMARY KEY,
-                project_id TEXT NOT NULL,
-                description TEXT NOT NULL,
-                completed BOOLEAN NOT NULL DEFAULT FALSE,
-                created_at DATETIME NOT NULL,
-                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-            );
-
-            -- Plugin catalog
             CREATE TABLE IF NOT EXISTS plugins (
                 id TEXT PRIMARY KEY,
                 ableton_plugin_id INTEGER,
@@ -90,7 +69,6 @@ impl LiveSetDatabase {
                 UNIQUE(dev_identifier)
             );
 
-            -- Sample catalog
             CREATE TABLE IF NOT EXISTS samples (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -98,39 +76,19 @@ impl LiveSetDatabase {
                 is_present BOOLEAN NOT NULL
             );
 
-            -- Tags system
             CREATE TABLE IF NOT EXISTS tags (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
                 created_at DATETIME NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS project_tags (
-                project_id TEXT NOT NULL,
-                tag_id TEXT NOT NULL,
-                created_at DATETIME NOT NULL,
-                PRIMARY KEY (project_id, tag_id),
-                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-            );
-
-            -- Collections system
             CREATE TABLE IF NOT EXISTS collections (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
                 description TEXT,
+                notes TEXT,
                 created_at DATETIME NOT NULL,
                 modified_at DATETIME NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS collection_projects (
-                collection_id TEXT NOT NULL,
-                project_id TEXT NOT NULL,
-                position INTEGER NOT NULL,  -- For maintaining order
-                added_at DATETIME NOT NULL,
-                PRIMARY KEY (collection_id, project_id),
-                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
-                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
             );
 
             -- Junction tables
@@ -150,14 +108,43 @@ impl LiveSetDatabase {
                 FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
             );
 
-            -- Basic indexes
+            CREATE TABLE IF NOT EXISTS project_tags (
+                project_id TEXT NOT NULL,
+                tag_id TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                PRIMARY KEY (project_id, tag_id),
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS collection_projects (
+                collection_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                added_at DATETIME NOT NULL,
+                PRIMARY KEY (collection_id, project_id),
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+
+            -- Additional features
+            CREATE TABLE IF NOT EXISTS project_tasks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                description TEXT NOT NULL,
+                completed BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at DATETIME NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+
+            -- Basic indexes for performance
             CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path);
             CREATE INDEX IF NOT EXISTS idx_plugins_name ON plugins(name);
             CREATE INDEX IF NOT EXISTS idx_samples_path ON samples(path);
             CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
             CREATE INDEX IF NOT EXISTS idx_collection_projects_position ON collection_projects(collection_id, position);
 
-            -- FTS5 virtual table for searching
+            -- Full-text search
             CREATE VIRTUAL TABLE IF NOT EXISTS project_search USING fts5(
                 project_id UNINDEXED,  -- Reference to the original project
                 name,                  -- Project name
@@ -175,7 +162,7 @@ impl LiveSetDatabase {
                 tokenize = 'porter unicode61 remove_diacritics 2'
             );
 
-            -- Trigger to keep FTS index updated on insert
+            -- FTS5 triggers for maintaining the search index
             CREATE TRIGGER IF NOT EXISTS projects_ai AFTER INSERT ON projects BEGIN
                 INSERT INTO project_search (
                     project_id, name, path, created_at, modified_at,
@@ -208,45 +195,16 @@ impl LiveSetDatabase {
                      FROM tags t 
                      JOIN project_tags pt ON pt.tag_id = t.id 
                      WHERE pt.project_id = p.id),
-                    p.notes
+                    COALESCE(p.notes, '')
                 FROM projects p
                 WHERE p.id = new.id;
             END;
 
-            -- Trigger to keep FTS index updated on update
             CREATE TRIGGER IF NOT EXISTS projects_au AFTER UPDATE ON projects BEGIN
-                INSERT INTO project_search (
-                    project_search,
-                    project_id, name, path, created_at, modified_at,
-                    version, key_signature, tempo, time_signature,
-                    plugins, samples, tags, notes
-                )
-                VALUES(
-                    'delete',
-                    old.id, old.name, old.path, old.created_at, old.modified_at,
-                    old.ableton_version_major || '.' || old.ableton_version_minor,
-                    CASE 
-                        WHEN old.key_signature_tonic IS NOT NULL 
-                        THEN old.key_signature_tonic || ' ' || old.key_signature_scale 
-                        ELSE NULL 
-                    END,
-                    old.tempo,
-                    old.time_signature_numerator || '/' || old.time_signature_denominator,
-                    (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
-                     FROM plugins pl 
-                     JOIN project_plugins pp ON pp.plugin_id = pl.id 
-                     WHERE pp.project_id = old.id),
-                    (SELECT GROUP_CONCAT(s.name, ' ')
-                     FROM samples s 
-                     JOIN project_samples ps ON ps.sample_id = s.id 
-                     WHERE ps.project_id = old.id),
-                    (SELECT GROUP_CONCAT(t.name, ' ')
-                     FROM tags t 
-                     JOIN project_tags pt ON pt.tag_id = t.id 
-                     WHERE pt.project_id = old.id),
-                    old.notes
-                );
+                -- First delete the old record from FTS
+                DELETE FROM project_search WHERE project_id = old.id;
                 
+                -- Then insert the updated record
                 INSERT INTO project_search (
                     project_id, name, path, created_at, modified_at,
                     version, key_signature, tempo, time_signature,
@@ -278,14 +236,13 @@ impl LiveSetDatabase {
                      FROM tags t 
                      JOIN project_tags pt ON pt.tag_id = t.id 
                      WHERE pt.project_id = p.id),
-                    p.notes
+                    COALESCE(p.notes, '')
                 FROM projects p
                 WHERE p.id = new.id;
             END;
 
-            -- Trigger to keep FTS index updated on delete
             CREATE TRIGGER IF NOT EXISTS projects_ad AFTER DELETE ON projects BEGIN
-                INSERT INTO project_search(project_search, project_id) VALUES('delete', old.id);
+                DELETE FROM project_search WHERE project_id = old.id;
             END;
             "#,
         )?;
