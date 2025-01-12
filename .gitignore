@@ -1,6 +1,6 @@
 /target
 *.xml
 *.als
-test_data/new_age Project/
-test_output.txt
-specification.md
+/test_data/new_age Project/
+/test_output.txt
+/specification.md
