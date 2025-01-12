@@ -142,24 +142,19 @@ mod tests {
     use std::time::Instant;
     static INIT: Once = Once::new();
     fn setup() {
-        INIT.call_once(|| {
-            std::env::set_var("RUST_LOG", "debug");
-            env_logger::builder()
-                .is_test(true)
-                .filter_level(log::LevelFilter::Debug)
-                .try_init()
-                .expect("Failed to initialize logger");
+        let _ = INIT.call_once(|| {
+            let _ = std::env::set_var("RUST_LOG", "debug");
+            if let Err(_) = env_logger::try_init() {
+                // Logger already initialized, that's fine
+            }
         });
     }
-
     fn setup_no_logging() {
-        INIT.call_once(|| {
-            std::env::set_var("RUST_LOG", "error");
-            env_logger::builder()
-                .is_test(true)
-                .filter_level(log::LevelFilter::Error)
-                .try_init()
-                .expect("Failed to initialize logger");
+        let _ = INIT.call_once(|| {
+            let _ = std::env::set_var("RUST_LOG", "error");
+            if let Err(_) = env_logger::try_init() {
+                // Logger already initialized, that's fine
+            }
         });
     }
 

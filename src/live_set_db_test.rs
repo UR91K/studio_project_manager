@@ -443,6 +443,7 @@ fn test_collections() {
 }
 
 #[test]
+#[allow(unused_variables)]
 fn test_notes_and_tasks() {
     setup();
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
