@@ -13,6 +13,7 @@ use uuid::Uuid;
 use super::LiveSetDatabase;
 
 #[derive(Debug, Default)]
+#[allow(unused)]
 pub struct SearchQuery {
     // File properties
     pub path: Option<String>,
@@ -36,6 +37,7 @@ pub struct SearchQuery {
     pub text: String,
 }
 
+#[allow(unused)]
 impl SearchQuery {
     pub fn parse(input: &str) -> Self {
         let mut query = SearchQuery::default();
