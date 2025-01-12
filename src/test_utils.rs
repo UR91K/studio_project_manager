@@ -2,41 +2,52 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 use uuid::Uuid;
+use chrono::{DateTime, Local};
 
 use crate::models::{AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, TimeSignature};
 use crate::scan::scanner::ScanResult;
 
 /// Builder for creating test LiveSets with specific properties
+#[derive(Debug)]
 pub struct LiveSetBuilder {
-    samples: HashSet<Sample>,
-    plugins: HashSet<Plugin>,
-    tempo: f64,
-    time_signature: TimeSignature,
-    furthest_bar: Option<f64>,
-    key_signature: Option<KeySignature>,
-    version: AbletonVersion,
+    pub plugins: HashSet<Plugin>,
+    pub samples: HashSet<Sample>,
+    pub tempo: f64,
+    pub time_signature: TimeSignature,
+    pub furthest_bar: Option<f64>,
+    pub key_signature: Option<KeySignature>,
+    pub version: AbletonVersion,
+    pub created_time: Option<DateTime<Local>>,
+    pub modified_time: Option<DateTime<Local>>,
 }
 
 impl LiveSetBuilder {
     pub fn new() -> Self {
         Self {
-            samples: HashSet::new(),
             plugins: HashSet::new(),
+            samples: HashSet::new(),
             tempo: 120.0,
-            time_signature: TimeSignature::default(), // 4/4
+            time_signature: TimeSignature::default(),
             furthest_bar: None,
             key_signature: None,
-            version: AbletonVersion {
-                major: 11,
-                minor: 0,
-                patch: 0,
-                beta: false,
-            },
+            version: AbletonVersion::default(),
+            created_time: None,
+            modified_time: None,
         }
     }
 
+    pub fn with_created_time(mut self, time: DateTime<Local>) -> Self {
+        self.created_time = Some(time);
+        self
+    }
+
+    pub fn with_modified_time(mut self, time: DateTime<Local>) -> Self {
+        self.modified_time = Some(time);
+        self
+    }
+
     pub fn with_plugin(mut self, name: &str) -> Self {
-        let plugin = Plugin {
+        self.plugins.insert(Plugin {
             id: Uuid::new_v4(),
             name: name.to_string(),
             plugin_id: None,
@@ -50,17 +61,16 @@ impl LiveSetBuilder {
             enabled: None,
             plugin_format: PluginFormat::VST3AudioFx,
             installed: false,
-        };
-        self.plugins.insert(plugin);
+        });
         self
     }
 
     pub fn with_installed_plugin(mut self, name: &str, vendor: Option<String>) -> Self {
-        let plugin = Plugin {
+        self.plugins.insert(Plugin {
             id: Uuid::new_v4(),
             name: name.to_string(),
-            plugin_id: Some(1), // Dummy ID
-            module_id: Some(1), // Dummy ID
+            plugin_id: Some(1),
+            module_id: Some(1),
             dev_identifier: format!("device:vst3:{}", name),
             vendor,
             version: Some("1.0.0".to_string()),
@@ -70,17 +80,17 @@ impl LiveSetBuilder {
             enabled: Some(1),
             plugin_format: PluginFormat::VST3AudioFx,
             installed: true,
-        };
-        self.plugins.insert(plugin);
+        });
         self
     }
 
     pub fn with_sample(mut self, name: &str) -> Self {
-        let sample = Sample::new(
-            name.to_string(),
-            PathBuf::from(format!("/path/to/{}", name)),
-        );
-        self.samples.insert(sample);
+        self.samples.insert(Sample {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+            path: PathBuf::from(name),
+            is_present: true,
+        });
         self
     }
 
@@ -119,13 +129,13 @@ impl LiveSetBuilder {
 
     pub fn build(self) -> ScanResult {
         ScanResult {
-            version: self.version,
-            samples: self.samples,
             plugins: self.plugins,
+            samples: self.samples,
             tempo: self.tempo,
             time_signature: self.time_signature,
             furthest_bar: self.furthest_bar,
             key_signature: self.key_signature,
+            version: self.version,
         }
     }
 }

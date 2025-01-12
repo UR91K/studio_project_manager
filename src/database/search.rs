@@ -3,7 +3,7 @@ use crate::database::models::SqlDateTime;
 use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
-use chrono::{DateTime, Local, TimeZone};
+use chrono::{DateTime, Local, TimeZone, NaiveDateTime, NaiveDate, NaiveTime};
 use log::{debug, info, warn};
 use rusqlite::{params, types::ToSql, Connection, OptionalExtension, Result as SqliteResult};
 use std::collections::HashSet;
@@ -56,6 +56,8 @@ pub enum MatchReason {
     Tempo(String),
     Version(String),
     Notes(String),
+    DateCreated(String),
+    DateModified(String),
 }
 
 impl SearchQuery {
@@ -113,135 +115,147 @@ impl SearchQuery {
         let mut conditions = Vec::new();
         let mut params = Vec::new();
 
-        // Helper function to add a condition
-        let mut add_condition = |field: &str, value: &str| {
-            conditions.push(format!("{} MATCH ?", field));
+        // Helper function to add a column-specific condition
+        let mut add_column_condition = |column: &str, value: &str| {
+            conditions.push(format!("{}: {}", column, value));
             params.push(value.to_string());
         };
 
         // Add specific field conditions
         if let Some(ref path) = self.path {
-            add_condition("path", path);
+            add_column_condition("path", path);
         }
         if let Some(ref name) = self.name {
-            add_condition("name", name);
+            add_column_condition("name", name);
         }
         if let Some(ref version) = self.version {
-            add_condition("version", version);
+            add_column_condition("version", version);
         }
         if let Some(ref key) = self.key {
-            add_condition("key_signature", key);
+            add_column_condition("key_signature", key);
         }
         if let Some(ref bpm) = self.bpm {
-            add_condition("tempo", bpm);
+            add_column_condition("tempo", bpm);
         }
         if let Some(ref ts) = self.time_signature {
-            add_condition("time_signature", ts);
+            add_column_condition("time_signature", ts);
         }
         if let Some(ref plugin) = self.plugin {
-            add_condition("plugins", plugin);
+            add_column_condition("plugins", plugin);
         }
         if let Some(ref sample) = self.sample {
-            add_condition("samples", sample);
+            add_column_condition("samples", sample);
         }
         if let Some(ref tag) = self.tag {
-            add_condition("tags", tag);
+            add_column_condition("tags", tag);
+        }
+        if let Some(ref created) = self.date_created {
+            add_column_condition("created_time", created);
+        }
+        if let Some(ref modified) = self.date_modified {
+            add_column_condition("modified_time", modified);
         }
 
         // Add full text search if present
         if !self.text.is_empty() {
-            conditions.push("project_search MATCH ?".to_string());
+            conditions.push(format!("\"{}\"", self.text));
             params.push(self.text.clone());
         }
 
-        let query = if conditions.is_empty() {
-            "SELECT * FROM project_search ORDER BY rank".to_string()
+        let fts5_query = if conditions.is_empty() {
+            String::new()
         } else {
-            format!(
-                "SELECT *, rank FROM project_search WHERE {} ORDER BY rank",
-                conditions.join(" AND ")
-            )
+            conditions.join(" AND ")
         };
 
-        (query, params)
+        let query = format!(
+            "SELECT project_id, rank, name, path, plugins, samples 
+             FROM project_search 
+             WHERE project_search MATCH ? 
+             ORDER BY rank"
+        );
+
+        (query, vec![fts5_query])
     }
 }
 
 impl LiveSetDatabase {
     pub fn search_fts(&mut self, query: &SearchQuery) -> Result<Vec<SearchResult>, DatabaseError> {
         debug!("Performing FTS5 search with query: {:?}", query);
-        
-        // First get all matching project paths and ranks
-        let (fts_query, params) = query.build_fts5_query();
-        debug!("FTS5 query: {}", fts_query);
-        debug!("Query params: {:?}", params);
 
-        let params_refs: Vec<&dyn ToSql> = params.iter().map(|s| s as &dyn ToSql).collect();
-        let mut matching_projects = Vec::new();
+        // First collect all matching paths in a transaction
+        let matching_paths = {
+            let tx = self.conn.transaction()?;
+            
+            let (sql_query, params) = query.build_fts5_query();
+            debug!("FTS5 query: {}", sql_query);
+            debug!("Query params: {:?}", params);
 
-        let tx = self.conn.transaction()?;
-        
-        // Create new scope to ensure stmt is dropped before commit
-        {
-            let mut stmt = tx.prepare(&fts_query)?;
-            matching_projects = stmt.query_map(params_refs.as_slice(), |row| {
-                Ok((
-                    row.get::<_, String>("path")?,
-                    row.get::<_, f64>("rank")?,
-                    row.get::<_, String>("name")?,
-                    row.get::<_, String>("plugins")?,
-                    row.get::<_, String>("samples")?,
-                    row.get::<_, String>("tags")?,
-                ))
-            })?.collect::<SqliteResult<Vec<_>>>()?;
-        }
-        
-        tx.commit()?;
+            let results = {
+                let mut stmt = tx.prepare(&sql_query)?;
+                let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| p as &dyn ToSql).collect();
 
-        debug!("Found {} potential matches", matching_projects.len());
+                // Collect all results into a vector
+                let mut results = Vec::new();
+                let mut rows = stmt.query(param_refs.as_slice())?;
+                while let Some(row) = rows.next()? {
+                    let plugins: String = row.get(4)?;
+                    debug!("Checking row with plugins: {:?}", plugins);
+                    results.push((
+                        row.get::<_, String>(0)?, // project_id
+                        row.get::<_, f64>(1)?,    // rank
+                        row.get::<_, String>(2)?, // name
+                        row.get::<_, String>(3)?, // path
+                        plugins,                  // plugins
+                        row.get::<_, String>(5)?, // samples
+                    ));
+                }
+                debug!("Found {} potential matches", results.len());
+                results
+            };
+            
+            tx.commit()?;
+            results
+        };
         
         // Now get full project details and build search results
-        let mut results = Vec::new();
-        for (path, rank, name, plugins, samples, tags) in matching_projects {
+        let mut search_results = Vec::new();
+        #[allow(unused)]
+        for (project_id, rank, name, path, plugins, samples) in matching_paths {
+            debug!("Processing match: {} ({})", name, path);
             if let Ok(Some(project)) = self.get_project_by_path(&path) {
-                let mut match_reasons = Vec::new();
-
-                // Determine match reasons based on the query and matched columns
-                if let Some(ref name_query) = query.name {
-                    if name.contains(name_query) {
-                        match_reasons.push(MatchReason::Name(name_query.clone()));
+                let mut match_reason = Vec::new();
+                
+                // Add match reasons based on what matched
+                if let Some(plugin_query) = &query.plugin {
+                    let plugin_query = plugin_query.to_lowercase();
+                    let plugins_lower = plugins.to_lowercase();
+                    debug!("  Checking if '{}' exists in '{}'", plugin_query, plugins_lower);
+                    if plugins_lower.contains(&plugin_query) {
+                        debug!("  Found plugin match!");
+                        match_reason.push(MatchReason::Plugin(plugin_query.clone()));
                     }
                 }
-                if let Some(ref plugin_query) = query.plugin {
-                    if plugins.contains(plugin_query) {
-                        match_reasons.push(MatchReason::Plugin(plugin_query.clone()));
-                    }
+                if let Some(bpm) = &query.bpm {
+                    match_reason.push(MatchReason::Tempo(bpm.clone()));
                 }
-                if let Some(ref sample_query) = query.sample {
-                    if samples.contains(sample_query) {
-                        match_reasons.push(MatchReason::Sample(sample_query.clone()));
-                    }
+                if let Some(date_created) = &query.date_created {
+                    match_reason.push(MatchReason::DateCreated(date_created.clone()));
                 }
-                if let Some(ref tag_query) = query.tag {
-                    if tags.contains(tag_query) {
-                        match_reasons.push(MatchReason::Tag(tag_query.clone()));
-                    }
+                if let Some(date_modified) = &query.date_modified {
+                    match_reason.push(MatchReason::DateModified(date_modified.clone()));
                 }
 
-                results.push(SearchResult {
+                search_results.push(SearchResult {
                     project,
                     rank,
-                    match_reason: match_reasons,
+                    match_reason,
                 });
             }
         }
 
-        debug!("Found {} matching projects with full details", results.len());
-        
-        // Sort by rank (highest first)
-        results.sort_by(|a, b| b.rank.partial_cmp(&a.rank).unwrap_or(std::cmp::Ordering::Equal));
-        
-        Ok(results)
+        debug!("Successfully built {} search results", search_results.len());
+        Ok(search_results)
     }
 }
 
@@ -250,7 +264,6 @@ mod tests {
     use super::*;
     use crate::test_utils::LiveSetBuilder;
     use crate::live_set::LiveSet;
-
     use std::sync::Once;
 
     static INIT: Once = Once::new();
@@ -261,6 +274,103 @@ mod tests {
                 // Logger already initialized, that's fine
             }
         });
+    }
+
+    fn setup_test_projects() -> (LiveSetDatabase, DateTime<Local>, DateTime<Local>, DateTime<Local>, DateTime<Local>) {
+        let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+        // Create timestamps for testing
+        let edm_created = Local.from_local_datetime(
+            &NaiveDateTime::new(
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(10, 0, 0).unwrap()
+            )
+        ).unwrap();
+        let edm_modified = Local.from_local_datetime(
+            &NaiveDateTime::new(
+                NaiveDate::from_ymd_opt(2024, 1, 2).unwrap(),
+                NaiveTime::from_hms_opt(15, 30, 0).unwrap()
+            )
+        ).unwrap();
+        let rock_created = Local.from_local_datetime(
+            &NaiveDateTime::new(
+                NaiveDate::from_ymd_opt(2024, 1, 3).unwrap(),
+                NaiveTime::from_hms_opt(9, 0, 0).unwrap()
+            )
+        ).unwrap();
+        let rock_modified = Local.from_local_datetime(
+            &NaiveDateTime::new(
+                NaiveDate::from_ymd_opt(2024, 1, 4).unwrap(),
+                NaiveTime::from_hms_opt(14, 45, 0).unwrap()
+            )
+        ).unwrap();
+
+        // Create test projects
+        let edm_scan = LiveSetBuilder::new()
+            .with_plugin("Serum")
+            .with_plugin("Massive")
+            .with_installed_plugin("Pro-Q 3", Some("FabFilter".to_string()))
+            .with_sample("kick.wav")
+            .with_tempo(140.0)
+            .with_created_time(edm_created)
+            .with_modified_time(edm_modified)
+            .build();
+
+        let rock_scan = LiveSetBuilder::new()
+            .with_plugin("Guitar Rig 6")
+            .with_installed_plugin("Pro-R", Some("FabFilter".to_string()))
+            .with_sample("guitar_riff.wav")
+            .with_tempo(120.0)
+            .with_created_time(rock_created)
+            .with_modified_time(rock_modified)
+            .build();
+
+        // Convert scan results to LiveSets
+        let edm_project = LiveSet {
+            file_path: PathBuf::from("EDM Project.als"),
+            file_name: String::from("EDM Project.als"),
+            file_hash: String::from("dummy_hash"),
+            created_time: edm_created,
+            modified_time: edm_modified,
+            last_scan_timestamp: Local::now(),
+            tempo: edm_scan.tempo,
+            time_signature: edm_scan.time_signature,
+            key_signature: None,
+            furthest_bar: None,
+            estimated_duration: None,
+            ableton_version: edm_scan.version,
+            plugins: edm_scan.plugins,
+            samples: edm_scan.samples,
+            tags: HashSet::new(),
+            id: Uuid::new_v4(),
+            xml_data: b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Ableton/>".to_vec(),
+        };
+
+        let rock_project = LiveSet {
+            file_path: PathBuf::from("Rock Band.als"),
+            file_name: String::from("Rock Band.als"),
+            file_hash: String::from("dummy_hash"),
+            created_time: rock_created,
+            modified_time: rock_modified,
+            last_scan_timestamp: Local::now(),
+            tempo: rock_scan.tempo,
+            time_signature: rock_scan.time_signature,
+            key_signature: None,
+            furthest_bar: None,
+            estimated_duration: None,
+            ableton_version: rock_scan.version,
+            plugins: rock_scan.plugins,
+            samples: rock_scan.samples,
+            tags: HashSet::new(),
+            id: Uuid::new_v4(),
+            xml_data: b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Ableton/>".to_vec(),
+        };
+
+        // Insert projects
+        db.insert_project(&edm_project).expect("Failed to insert EDM project");
+        db.insert_project(&rock_project).expect("Failed to insert rock project");
+
+        (db, edm_created, edm_modified, rock_created, rock_modified)
     }
 
     #[test]
@@ -297,85 +407,50 @@ mod tests {
     }
 
     #[test]
-    fn test_fts_search() {
+    fn test_search_plugins() {
         setup();
-        let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+        let (mut db, _, _, _, _) = setup_test_projects();
 
-        // Create test projects
-        let edm_scan = LiveSetBuilder::new()
-            .with_plugin("Serum")
-            .with_plugin("Massive")
-            .with_installed_plugin("Pro-Q 3", Some("FabFilter".to_string()))
-            .with_sample("kick.wav")
-            .with_tempo(140.0)
-            .build();
-
-        let rock_scan = LiveSetBuilder::new()
-            .with_plugin("Guitar Rig 6")
-            .with_installed_plugin("Pro-R", Some("FabFilter".to_string()))
-            .with_sample("guitar_riff.wav")
-            .with_tempo(120.0)
-            .build();
-
-        // Convert scan results to LiveSets
-        let edm_project = LiveSet {
-            file_path: PathBuf::from("EDM Project.als"),
-            file_name: String::from("EDM Project.als"),
-            file_hash: String::from("dummy_hash"),
-            created_time: Local::now(),
-            modified_time: Local::now(),
-            last_scan_timestamp: Local::now(),
-            tempo: edm_scan.tempo,
-            time_signature: edm_scan.time_signature,
-            key_signature: None,
-            furthest_bar: None,
-            estimated_duration: None,
-            ableton_version: edm_scan.version,
-            plugins: edm_scan.plugins,
-            samples: edm_scan.samples,
-            tags: HashSet::new(),
-            id: Uuid::new_v4(),
-            xml_data: b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Ableton/>".to_vec(),
-        };
-
-        let rock_project = LiveSet {
-            file_path: PathBuf::from("Rock Band.als"),
-            file_name: String::from("Rock Band.als"),
-            file_hash: String::from("dummy_hash"),
-            created_time: Local::now(),
-            modified_time: Local::now(),
-            last_scan_timestamp: Local::now(),
-            tempo: rock_scan.tempo,
-            time_signature: rock_scan.time_signature,
-            key_signature: None,
-            furthest_bar: None,
-            estimated_duration: None,
-            ableton_version: rock_scan.version,
-            plugins: rock_scan.plugins,
-            samples: rock_scan.samples,
-            tags: HashSet::new(),
-            id: Uuid::new_v4(),
-            xml_data: b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Ableton/>".to_vec(),
-        };
-
-        // Insert projects
-        db.insert_project(&edm_project).expect("Failed to insert EDM project");
-        db.insert_project(&rock_project).expect("Failed to insert rock project");
-
-        // Test various search queries
+        // Test specific plugin search
         let plugin_query = SearchQuery::parse("plugin:serum");
         let results = db.search_fts(&plugin_query).expect("Search failed");
         assert_eq!(results.len(), 1);
         assert!(results[0].match_reason.iter().any(|r| matches!(r, MatchReason::Plugin(p) if p == "serum")));
 
+        // Test vendor search
+        let vendor_query = SearchQuery::parse("FabFilter");
+        let results = db.search_fts(&vendor_query).expect("Search failed");
+        assert_eq!(results.len(), 2); // Both projects have FabFilter plugins
+    }
+
+    #[test]
+    fn test_search_tempo() {
+        setup();
+        let (mut db, _, _, _, _) = setup_test_projects();
+
         let tempo_query = SearchQuery::parse("bpm:140");
         let results = db.search_fts(&tempo_query).expect("Search failed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].project.tempo, 140.0);
+        assert!(results[0].match_reason.iter().any(|r| matches!(r, MatchReason::Tempo(t) if t == "140")));
+    }
 
-        let vendor_query = SearchQuery::parse("FabFilter");
-        let results = db.search_fts(&vendor_query).expect("Search failed");
-        assert_eq!(results.len(), 2); // Both projects have FabFilter plugins
+    #[test]
+    fn test_search_dates() {
+        setup();
+        let (mut db, edm_created, _, _, rock_modified) = setup_test_projects();
+
+        // Test creation date search
+        let date_query = SearchQuery::parse("dc:2024-01-01");
+        let results = db.search_fts(&date_query).expect("Search failed");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].project.created_time.date_naive(), edm_created.date_naive());
+
+        // Test modification date search
+        let date_query = SearchQuery::parse("dm:2024-01-04");
+        let results = db.search_fts(&date_query).expect("Search failed");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].project.modified_time.date_naive(), rock_modified.date_naive());
     }
 }
 
