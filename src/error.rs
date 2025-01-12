@@ -269,19 +269,19 @@ pub enum TempoError {
 pub enum LiveSetError {
     #[error("XML error: {0}")]
     XmlError(#[from] XmlParseError),
-    
+
     #[error("Invalid version format: {0}")]
     InvalidVersion(String),
-    
+
     #[error("Unsupported Ableton Live version: {0}")]
     UnsupportedVersion(u32),
-    
+
     #[error("Missing version in Live set file")]
     MissingVersion,
-    
+
     #[error("Tempo error: {0}")]
     TempoError(#[from] TempoError),
-    
+
     #[error("Time signature error: {0}")]
     TimeSignatureError(#[from] TimeSignatureError),
 

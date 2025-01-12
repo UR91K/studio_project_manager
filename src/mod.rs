@@ -1,3 +1,3 @@
 pub mod scan;
 #[cfg(test)]
-mod scan_test; 
+mod scan_test;

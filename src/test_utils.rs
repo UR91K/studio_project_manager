@@ -90,7 +90,10 @@ impl LiveSetBuilder {
     }
 
     pub fn with_time_signature(mut self, numerator: u8, denominator: u8) -> Self {
-        self.time_signature = TimeSignature { numerator, denominator };
+        self.time_signature = TimeSignature {
+            numerator,
+            denominator,
+        };
         self
     }
 
@@ -142,10 +145,10 @@ mod tests {
         assert_eq!(result.tempo, 140.0);
         assert_eq!(result.plugins.len(), 1);
         assert_eq!(result.samples.len(), 1);
-        
+
         let plugin = result.plugins.iter().next().unwrap();
         assert_eq!(plugin.name, "Serum");
-        
+
         let sample = result.samples.iter().next().unwrap();
         assert_eq!(sample.name, "kick.wav");
     }
@@ -161,4 +164,4 @@ mod tests {
         assert_eq!(plugin.vendor, Some("Xfer Records".to_string()));
         assert!(plugin.installed);
     }
-} 
+}

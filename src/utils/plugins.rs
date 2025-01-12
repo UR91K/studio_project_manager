@@ -1,21 +1,23 @@
-
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::{error::{DatabaseError, FileError}, models::PluginFormat};
+use crate::{
+    error::{DatabaseError, FileError},
+    models::PluginFormat,
+};
 
 // LINE TRACKER FOR DEBUGGING
 
 #[derive(Clone)]
-pub (crate) struct LineTrackingBuffer {
+pub(crate) struct LineTrackingBuffer {
     data: Arc<Vec<u8>>,
     current_line: usize,
     current_position: usize,
 }
 
 impl LineTrackingBuffer {
-    pub (crate) fn new(data: Vec<u8>) -> Self {
+    pub(crate) fn new(data: Vec<u8>) -> Self {
         Self {
             data: Arc::new(data),
             current_line: 1,
@@ -23,7 +25,7 @@ impl LineTrackingBuffer {
         }
     }
 
-    pub (crate) fn get_line_number(&mut self, byte_position: usize) -> usize {
+    pub(crate) fn get_line_number(&mut self, byte_position: usize) -> usize {
         while self.current_position < byte_position && self.current_position < self.data.len() {
             if self.data[self.current_position] == b'\n' {
                 self.current_line += 1;
@@ -34,7 +36,7 @@ impl LineTrackingBuffer {
     }
 
     #[allow(dead_code)]
-    pub (crate) fn update_position(&mut self, byte_position: usize) {
+    pub(crate) fn update_position(&mut self, byte_position: usize) {
         self.get_line_number(byte_position);
     }
 }
