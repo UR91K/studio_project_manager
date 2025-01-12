@@ -441,3 +441,107 @@ fn test_collections() {
     let collections = db.list_collections().expect("Failed to list collections after deletion");
     assert_eq!(collections.len(), 0);
 }
+
+#[test]
+fn test_notes_and_tasks() {
+    setup();
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Create a test project
+    let project = create_test_live_set();
+    let project_id = project.id.to_string();
+    db.insert_project(&project).expect("Failed to insert project");
+
+    // Create a test collection
+    let collection_id = db.create_collection(
+        "Test Collection",
+        Some("A collection for testing notes and tasks")
+    ).expect("Failed to create collection");
+
+    // Add project to collection
+    db.add_project_to_collection(&collection_id, &project_id)
+        .expect("Failed to add project to collection");
+
+    // Test project notes
+    db.set_project_notes(&project_id, "Project note: needs mixing")
+        .expect("Failed to set project notes");
+    let project_notes = db.get_project_notes(&project_id)
+        .expect("Failed to get project notes");
+    assert_eq!(project_notes, Some("Project note: needs mixing".to_string()));
+
+    // Test collection notes
+    db.set_collection_notes(&collection_id, "Collection note: work in progress")
+        .expect("Failed to set collection notes");
+    let collection_notes = db.get_collection_notes(&collection_id)
+        .expect("Failed to get collection notes");
+    assert_eq!(collection_notes, Some("Collection note: work in progress".to_string()));
+
+    // Test adding tasks to project
+    let task1_id = db.add_task(&project_id, "Fix the bass mix")
+        .expect("Failed to add task 1");
+    let task2_id = db.add_task(&project_id, "Add more reverb")
+        .expect("Failed to add task 2");
+    let task3_id = db.add_task(&project_id, "Export final version")
+        .expect("Failed to add task 3");
+
+    // Test getting project tasks
+    let project_tasks = db.get_project_tasks(&project_id)
+        .expect("Failed to get project tasks");
+    assert_eq!(project_tasks.len(), 3);
+    assert!(project_tasks.iter().any(|(_, desc, _)| desc == "Fix the bass mix"));
+    assert!(project_tasks.iter().any(|(_, desc, _)| desc == "Add more reverb"));
+    assert!(project_tasks.iter().any(|(_, desc, _)| desc == "Export final version"));
+
+    // Test completing a task
+    db.complete_task(&task1_id, true)
+        .expect("Failed to complete task");
+    let project_tasks = db.get_project_tasks(&project_id)
+        .expect("Failed to get project tasks after completion");
+    let completed_task = project_tasks.iter()
+        .find(|(id, _, _)| id == &task1_id)
+        .expect("Couldn't find completed task");
+    assert!(completed_task.2); // Check completion status
+
+    // Test removing a task
+    db.remove_task(&task2_id)
+        .expect("Failed to remove task");
+    let project_tasks = db.get_project_tasks(&project_id)
+        .expect("Failed to get project tasks after removal");
+    assert_eq!(project_tasks.len(), 2);
+    assert!(!project_tasks.iter().any(|(id, _, _)| id == &task2_id));
+
+    // Test getting collection tasks
+    let collection_tasks = db.get_collection_tasks(&collection_id)
+        .expect("Failed to get collection tasks");
+    assert_eq!(collection_tasks.len(), 2);
+    
+    // Verify collection tasks contain project name and correct completion status
+    let completed_collection_task = collection_tasks.iter()
+        .find(|(id, _, desc, _)| desc == "Fix the bass mix")
+        .expect("Couldn't find completed task in collection");
+    assert!(completed_collection_task.3); // Check completion status
+    assert_eq!(completed_collection_task.1, "test_project.als"); // Check project name
+
+    // Create a second project with tasks
+    let project2 = create_test_live_set_from_scan(
+        "Second Project.als",
+        LiveSetBuilder::new().build()
+    );
+    let project2_id = project2.id.to_string();
+    db.insert_project(&project2).expect("Failed to insert second project");
+    db.add_project_to_collection(&collection_id, &project2_id)
+        .expect("Failed to add second project to collection");
+
+    // Add tasks to second project
+    let task4_id = db.add_task(&project2_id, "Record vocals")
+        .expect("Failed to add task to second project");
+
+    // Verify collection tasks show tasks from both projects in correct order
+    let collection_tasks = db.get_collection_tasks(&collection_id)
+        .expect("Failed to get collection tasks after adding second project");
+    assert_eq!(collection_tasks.len(), 3);
+    
+    // Tasks should be ordered by project position in collection
+    assert_eq!(collection_tasks[0].1, "test_project.als");
+    assert_eq!(collection_tasks[2].1, "Second Project.als");
+}
