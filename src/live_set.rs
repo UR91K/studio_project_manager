@@ -34,6 +34,7 @@ pub struct LiveSet {
     pub(crate) furthest_bar: Option<f64>,
     pub(crate) plugins: HashSet<Plugin>,
     pub(crate) samples: HashSet<Sample>,
+    pub(crate) tags: HashSet<String>,
     
     pub(crate) estimated_duration: Option<chrono::Duration>,
 }
@@ -69,6 +70,7 @@ impl LiveSet {
             furthest_bar: scan_result.furthest_bar,
             plugins: scan_result.plugins,
             samples: scan_result.samples,
+            tags: HashSet::new(),
 
             estimated_duration: None,
         };
