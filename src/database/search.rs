@@ -75,34 +75,71 @@ impl SearchQuery {
         debug!("Parsing search query input: '{}'", input);
         let mut query = SearchQuery::default();
         let mut remaining_text = Vec::new();
+        let mut current_pos = 0;
         
-        for term in input.split_whitespace() {
-            debug!("Processing term: '{}'", term);
-            if let Some((operator, value)) = term.split_once(':') {
-                debug!("Found operator '{}' with value '{}'", operator, value);
-                let cleaned_value = Self::strip_quotes(value);
-                debug!("Cleaned value: '{}'", cleaned_value);
+        while current_pos < input.len() {
+            let rest = &input[current_pos..];
+            let mut term_end = rest.find(' ').unwrap_or(rest.len());
+            
+            // If we find a colon, check if this is a date operator
+            if let Some(colon_pos) = rest[..term_end].find(':') {
+                let operator = &rest[..colon_pos];
                 match operator {
-                    "path" => query.path = Some(cleaned_value),
-                    "name" => query.name = Some(cleaned_value),
-                    "dc" => query.date_created = Some(cleaned_value),
-                    "dm" => query.date_modified = Some(cleaned_value),
-                    "version" => query.version = Some(cleaned_value),
-                    "key" => query.key = Some(cleaned_value),
-                    "bpm" => query.bpm = Some(cleaned_value),
-                    "ts" => query.time_signature = Some(cleaned_value),
-                    "ed" => query.estimated_duration = Some(cleaned_value),
-                    "plugin" => query.plugin = Some(cleaned_value),
-                    "sample" => query.sample = Some(cleaned_value),
-                    "tag" => query.tag = Some(cleaned_value),
+                    "dc" | "dm" => {
+                        // For date operators, look for the next non-date character
+                        // This allows spaces in the date value
+                        let value_start = colon_pos + 1;
+                        let mut value_end = value_start;
+                        while value_end < rest.len() {
+                            let c = rest.as_bytes()[value_end];
+                            if !matches!(c, b'0'..=b'9' | b'-' | b':' | b' ') {
+                                break;
+                            }
+                            value_end += 1;
+                        }
+                        term_end = value_end;
+                        
+                        let value = &rest[value_start..value_end];
+                        debug!("Found date operator '{}' with value '{}'", operator, value);
+                        let cleaned_value = Self::strip_quotes(value);
+                        match operator {
+                            "dc" => query.date_created = Some(cleaned_value),
+                            "dm" => query.date_modified = Some(cleaned_value),
+                            _ => unreachable!(),
+                        }
+                    }
                     _ => {
-                        debug!("Unknown operator '{}', treating as text", operator);
-                        remaining_text.push(term)
-                    },
+                        // Handle other operators as before
+                        let value = &rest[colon_pos + 1..term_end];
+                        debug!("Found operator '{}' with value '{}'", operator, value);
+                        let cleaned_value = Self::strip_quotes(value);
+                        match operator {
+                            "path" => query.path = Some(cleaned_value),
+                            "name" => query.name = Some(cleaned_value),
+                            "version" => query.version = Some(cleaned_value),
+                            "key" => query.key = Some(cleaned_value),
+                            "bpm" => query.bpm = Some(cleaned_value),
+                            "ts" => query.time_signature = Some(cleaned_value),
+                            "ed" => query.estimated_duration = Some(cleaned_value),
+                            "plugin" => query.plugin = Some(cleaned_value),
+                            "sample" => query.sample = Some(cleaned_value),
+                            "tag" => query.tag = Some(cleaned_value),
+                            _ => {
+                                debug!("Unknown operator '{}', treating as text", operator);
+                                remaining_text.push(&rest[..term_end]);
+                            }
+                        }
+                    }
                 }
             } else {
-                debug!("No operator found, adding to remaining text: '{}'", term);
-                remaining_text.push(term);
+                debug!("No operator found, adding to remaining text: '{}'", &rest[..term_end]);
+                remaining_text.push(&rest[..term_end]);
+            }
+            
+            // Move past this term and any following whitespace
+            current_pos += term_end;
+            while current_pos < input.len() && input.as_bytes()[current_pos] == b' ' {
+                current_pos += 1;
             }
         }
         
@@ -117,7 +154,13 @@ impl SearchQuery {
 
         // Helper function to add a column-specific condition
         let mut add_column_condition = |column: &str, value: &str| {
-            conditions.push(format!("{}: {}", column, value));
+            if column == "created_at" || column == "modified_at" {
+                // For dates, use a proper FTS5 prefix match
+                // The * must be outside the quotes according to the docs
+                conditions.push(format!("{} : \"{}\" *", column, value));
+            } else {
+                conditions.push(format!("{} : \"{}\"", column, value));
+            }
             params.push(value.to_string());
         };
 
@@ -150,10 +193,10 @@ impl SearchQuery {
             add_column_condition("tags", tag);
         }
         if let Some(ref created) = self.date_created {
-            add_column_condition("created_time", created);
+            add_column_condition("created_at", created);
         }
         if let Some(ref modified) = self.date_modified {
-            add_column_condition("modified_time", modified);
+            add_column_condition("modified_at", modified);
         }
 
         // Add full text search if present
@@ -436,21 +479,86 @@ mod tests {
     }
 
     #[test]
-    fn test_search_dates() {
+    fn test_search_exact_creation_date() {
         setup();
-        let (mut db, edm_created, _, _, rock_modified) = setup_test_projects();
-
-        // Test creation date search
+        let (mut db, edm_created, _, _, _) = setup_test_projects();
+        
         let date_query = SearchQuery::parse("dc:2024-01-01");
         let results = db.search_fts(&date_query).expect("Search failed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].project.created_time.date_naive(), edm_created.date_naive());
+    }
 
-        // Test modification date search
+    #[test]
+    fn test_search_exact_modified_date() {
+        setup();
+        let (mut db, _, _, _, rock_modified) = setup_test_projects();
+        
         let date_query = SearchQuery::parse("dm:2024-01-04");
         let results = db.search_fts(&date_query).expect("Search failed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].project.modified_time.date_naive(), rock_modified.date_naive());
     }
-}
 
+    #[test]
+    fn test_search_full_timestamp() {
+        setup();
+        let (mut db, edm_created, _, _, _) = setup_test_projects();
+        
+        let date_query = SearchQuery::parse("dc:2024-01-01 08:00:00");
+        let results = db.search_fts(&date_query).expect("Search failed");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].project.created_time, edm_created);
+    }
+
+    #[test]
+    fn test_search_partial_date_match() {
+        setup();
+        let (mut db, _, edm_modified, _, _) = setup_test_projects();
+        
+        let date_query = SearchQuery::parse("dm:2024-01-02");
+        let results = db.search_fts(&date_query).expect("Search failed");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].project.modified_time.date_naive(), edm_modified.date_naive());
+    }
+
+    #[test]
+    fn test_search_nonexistent_date() {
+        setup();
+        let (mut db, _, _, _, _) = setup_test_projects();
+        
+        let date_query = SearchQuery::parse("dc:2023-12-31");
+        let results = db.search_fts(&date_query).expect("Search failed");
+        assert_eq!(results.len(), 0, "Should not find any projects for non-existent date");
+    }
+
+    #[test]
+    fn test_search_invalid_date_format() {
+        setup();
+        let (mut db, _, _, _, _) = setup_test_projects();
+        
+        let date_query = SearchQuery::parse("dc:not-a-date");
+        let results = db.search_fts(&date_query).expect("Search failed");
+        assert_eq!(results.len(), 0, "Should not find any projects for invalid date format");
+    }
+
+    #[test]
+    fn test_search_year_month_only() {
+        setup();
+        let (mut db, _, _, _, _) = setup_test_projects();
+        
+        let date_query = SearchQuery::parse("dc:2024-01");
+        let results = db.search_fts(&date_query).expect("Search failed");
+        assert_eq!(results.len(), 2, "Should find both projects from January 2024");
+    }
+
+    #[test]
+    fn test_search_year_only() {
+        setup();
+        let (mut db, _, _, _, _) = setup_test_projects();
+        
+        let date_query = SearchQuery::parse("dc:2024");
+        let results = db.search_fts(&date_query).expect("Search failed");
+        assert_eq!(results.len(), 2, "Should find both projects from 2024");
+    }
+}

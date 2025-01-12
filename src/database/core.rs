@@ -146,66 +146,71 @@ impl LiveSetDatabase {
 
             -- Full-text search
             CREATE VIRTUAL TABLE IF NOT EXISTS project_search USING fts5(
-                project_id UNINDEXED,  -- Reference to the original project
+                project_id UNINDEXED,  -- Reference to projects table
                 name,                  -- Project name
-                path,                  -- Project path
-                created_at UNINDEXED,  -- Timestamps are not searchable
-                modified_at UNINDEXED,
-                version,               -- Ableton version
-                key_signature,         -- Combined key signature
-                tempo,                 -- Project tempo
-                time_signature,        -- Combined time signature
-                plugins,               -- Concatenated plugin names and vendors
-                samples,               -- Concatenated sample names
-                tags,                  -- Concatenated tag names
-                notes,                 -- Project notes
-                tokenize = 'porter unicode61 remove_diacritics 2'
+                path,                 -- Project path
+                plugins,              -- Plugin list
+                samples,              -- Sample list
+                tags,                 -- Tags list
+                notes,                -- Project notes
+                created_at,           -- Creation timestamp
+                modified_at,          -- Modification timestamp
+                tempo,                -- Project tempo
+                tokenize='porter unicode61'
             );
 
             -- FTS5 triggers for maintaining the search index
             CREATE TRIGGER IF NOT EXISTS projects_au AFTER UPDATE ON projects BEGIN
-                -- First delete the old record from FTS
                 DELETE FROM project_search WHERE project_id = old.id;
-                
-                -- Then insert the updated record
                 INSERT INTO project_search (
-                    project_id, name, path, created_at, modified_at,
-                    version, key_signature, tempo, time_signature,
-                    plugins, samples, tags, notes
+                    project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo
                 )
                 SELECT 
                     p.id,
                     p.name,
                     p.path,
-                    p.created_at,
-                    p.modified_at,
-                    p.ableton_version_major || '.' || p.ableton_version_minor,
-                    CASE 
-                        WHEN p.key_signature_tonic IS NOT NULL 
-                        THEN p.key_signature_tonic || ' ' || p.key_signature_scale 
-                        ELSE NULL 
-                    END,
-                    p.tempo,
-                    p.time_signature_numerator || '/' || p.time_signature_denominator,
                     (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
-                     FROM plugins pl 
-                     JOIN project_plugins pp ON pp.plugin_id = pl.id 
+                     FROM plugins pl
+                     JOIN project_plugins pp ON pp.plugin_id = pl.id
                      WHERE pp.project_id = p.id),
                     (SELECT GROUP_CONCAT(s.name, ' ')
-                     FROM samples s 
-                     JOIN project_samples ps ON ps.sample_id = s.id 
+                     FROM samples s
+                     JOIN project_samples ps ON ps.sample_id = s.id
                      WHERE ps.project_id = p.id),
                     (SELECT GROUP_CONCAT(t.name, ' ')
-                     FROM tags t 
-                     JOIN project_tags pt ON pt.tag_id = t.id 
+                     FROM tags t
+                     JOIN project_tags pt ON pt.tag_id = t.id
                      WHERE pt.project_id = p.id),
-                    COALESCE(p.notes, '')
+                    COALESCE(p.notes, ''),
+                    strftime('%Y-%m-%d %H:%M:%S', datetime(p.created_at, 'unixepoch')),
+                    strftime('%Y-%m-%d %H:%M:%S', datetime(p.modified_at, 'unixepoch')),
+                    CAST(p.tempo AS TEXT)
                 FROM projects p
                 WHERE p.id = new.id;
             END;
 
             CREATE TRIGGER IF NOT EXISTS projects_ad AFTER DELETE ON projects BEGIN
                 DELETE FROM project_search WHERE project_id = old.id;
+            END;
+
+            -- Update FTS index after project insert (done manually to ensure all relations are set)
+            CREATE TRIGGER IF NOT EXISTS projects_ai AFTER INSERT ON projects BEGIN
+                INSERT INTO project_search (
+                    project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo
+                )
+                SELECT 
+                    p.id,
+                    p.name,
+                    p.path,
+                    '',  -- Empty plugins (will be updated after linking)
+                    '',  -- Empty samples (will be updated after linking)
+                    '',  -- Empty tags (will be updated after linking)
+                    COALESCE(p.notes, ''),
+                    strftime('%Y-%m-%d %H:%M:%S', datetime(p.created_at, 'unixepoch')),
+                    strftime('%Y-%m-%d %H:%M:%S', datetime(p.modified_at, 'unixepoch')),
+                    CAST(p.tempo AS TEXT)
+                FROM projects p
+                WHERE p.id = new.id;
             END;
             "#,
         )?;
@@ -214,192 +219,36 @@ impl LiveSetDatabase {
         Ok(())
     }
 
-    pub fn insert_project(&mut self, live_set: &LiveSet) -> Result<(), DatabaseError> {
-        debug!(
-            "Inserting project: {} ({})",
-            live_set.file_name,
-            live_set.file_path.display()
-        );
-        let tx = self.conn.transaction()?;
-
-        // Use the LiveSet's UUID
-        let project_id = live_set.id.to_string();
-        debug!("Using project UUID: {}", project_id);
-
-        // Insert project
+    fn insert_plugin(tx: &rusqlite::Transaction, plugin: &Plugin) -> Result<(), DatabaseError> {
         tx.execute(
-            r#"
-            INSERT OR REPLACE INTO projects (
-                id, path, name, hash, created_at, modified_at, last_scanned_at,
-                tempo, time_signature_numerator, time_signature_denominator,
-                key_signature_tonic, key_signature_scale, duration_seconds, furthest_bar,
-                ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?, ?
-            )
-            "#,
+            "INSERT OR REPLACE INTO plugins (
+                id, name, format, ableton_plugin_id, ableton_module_id, dev_identifier,
+                vendor, version, sdk_version, flags, scanstate, enabled, installed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
-                project_id,
-                live_set.file_path.to_string_lossy().to_string(),
-                live_set.file_name,
-                live_set.file_hash,
-                SqlDateTime::from(live_set.created_time),
-                SqlDateTime::from(live_set.modified_time),
-                SqlDateTime::from(live_set.last_scan_timestamp),
-                live_set.tempo,
-                live_set.time_signature.numerator,
-                live_set.time_signature.denominator,
-                live_set.key_signature.as_ref().map(|k| k.tonic.to_string()),
-                live_set.key_signature.as_ref().map(|k| k.scale.to_string()),
-                live_set.estimated_duration.map(|d| d.num_seconds()),
-                live_set.furthest_bar,
-                live_set.ableton_version.major,
-                live_set.ableton_version.minor,
-                live_set.ableton_version.patch,
-                live_set.ableton_version.beta,
-            ],
-        )?;
-
-        debug!("Inserting {} plugins", live_set.plugins.len());
-        // Insert plugins and link them
-        for plugin in &live_set.plugins {
-            let plugin_id = Uuid::new_v4().to_string();
-            Self::insert_plugin(&tx, plugin, &plugin_id)?;
-            Self::link_project_plugin(&tx, &project_id, &plugin_id)?;
-            debug!("Inserted plugin: {} ({})", plugin.name, plugin_id);
-        }
-
-        debug!("Inserting {} samples", live_set.samples.len());
-        // Insert samples and link them
-        for sample in &live_set.samples {
-            let sample_id = Uuid::new_v4().to_string();
-            Self::insert_sample(&tx, sample, &sample_id)?;
-            Self::link_project_sample(&tx, &project_id, &sample_id)?;
-            debug!("Inserted sample: {} ({})", sample.name, sample_id);
-        }
-
-        tx.commit()?;
-
-        // Update FTS5 index after everything is inserted
-        debug!("Updating FTS5 index for project {}", live_set.file_name);
-        self.conn.execute(
-            r#"
-            INSERT INTO project_search (
-                project_id, name, path, created_at, modified_at,
-                version, key_signature, tempo, time_signature,
-                plugins, samples, tags, notes
-            )
-            SELECT 
-                p.id,
-                p.name,
-                p.path,
-                p.created_at,
-                p.modified_at,
-                p.ableton_version_major || '.' || p.ableton_version_minor,
-                CASE 
-                    WHEN p.key_signature_tonic IS NOT NULL 
-                    THEN p.key_signature_tonic || ' ' || p.key_signature_scale 
-                    ELSE NULL 
-                END,
-                p.tempo,
-                p.time_signature_numerator || '/' || p.time_signature_denominator,
-                (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
-                 FROM plugins pl 
-                 JOIN project_plugins pp ON pp.plugin_id = pl.id 
-                 WHERE pp.project_id = p.id),
-                (SELECT GROUP_CONCAT(s.name, ' ')
-                 FROM samples s 
-                 JOIN project_samples ps ON ps.sample_id = s.id 
-                 WHERE ps.project_id = p.id),
-                (SELECT GROUP_CONCAT(t.name, ' ')
-                 FROM tags t 
-                 JOIN project_tags pt ON pt.tag_id = t.id 
-                 WHERE pt.project_id = p.id),
-                COALESCE(p.notes, '')
-            FROM projects p
-            WHERE p.id = ?
-            "#,
-            [project_id],
-        )?;
-
-        info!(
-            "Successfully inserted project {} with {} plugins and {} samples",
-            live_set.file_name,
-            live_set.plugins.len(),
-            live_set.samples.len()
-        );
-        
-        // After successful commit, let's inspect the FTS5 index
-        debug!("Inspecting FTS5 index for project {}", live_set.file_name);
-        match self.conn.query_row(
-            "SELECT * FROM project_search WHERE project_id = ?",
-            [live_set.id.to_string()],
-            |row| {
-                debug!("FTS5 index content:");
-                debug!("  project_id: {}", row.get::<_, String>(0)?);
-                debug!("  name: {}", row.get::<_, String>(1)?);
-                debug!("  path: {}", row.get::<_, String>(2)?);
-                let plugins: Option<String> = row.get(9)?;
-                debug!("  plugins: {:?}", plugins);
-                let samples: Option<String> = row.get(10)?;
-                debug!("  samples: {:?}", samples);
-                let tags: Option<String> = row.get(11)?;
-                debug!("  tags: {:?}", tags);
-                let notes: Option<String> = row.get(12)?;
-                debug!("  notes: {:?}", notes);
-                Ok(())
-            },
-        ) {
-            Ok(_) => debug!("Successfully inspected FTS5 index"),
-            Err(e) => warn!("Failed to inspect FTS5 index: {}", e),
-        };
-
-        Ok(())
-    }
-
-    fn insert_plugin(
-        tx: &rusqlite::Transaction,
-        plugin: &Plugin,
-        id: &str,
-    ) -> Result<(), DatabaseError> {
-        tx.execute(
-            r#"
-            INSERT OR IGNORE INTO plugins (
-                id, ableton_plugin_id, ableton_module_id, dev_identifier, name, format, installed,
-                vendor, version, sdk_version, flags, scanstate, enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-            params![
-                id,
+                plugin.id.to_string(),
+                plugin.name,
+                plugin.plugin_format.to_string(),
                 plugin.plugin_id,
                 plugin.module_id,
                 plugin.dev_identifier,
-                plugin.name,
-                format!("{:?}", plugin.plugin_format),
-                plugin.installed,
                 plugin.vendor,
                 plugin.version,
                 plugin.sdk_version,
                 plugin.flags,
                 plugin.scanstate,
                 plugin.enabled,
+                plugin.installed,
             ],
         )?;
         Ok(())
     }
 
-    fn insert_sample(
-        tx: &rusqlite::Transaction,
-        sample: &Sample,
-        id: &str,
-    ) -> Result<(), DatabaseError> {
+    fn insert_sample(tx: &rusqlite::Transaction, sample: &Sample) -> Result<(), DatabaseError> {
         tx.execute(
-            "INSERT OR IGNORE INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
             params![
-                id,
+                sample.id.to_string(),
                 sample.name,
                 sample.path.to_string_lossy().to_string(),
                 sample.is_present,
@@ -408,25 +257,17 @@ impl LiveSetDatabase {
         Ok(())
     }
 
-    fn link_project_plugin(
-        tx: &rusqlite::Transaction,
-        project_id: &str,
-        plugin_id: &str,
-    ) -> Result<(), DatabaseError> {
+    fn link_project_plugin(tx: &rusqlite::Transaction, project_id: &str, plugin_id: &str) -> Result<(), DatabaseError> {
         tx.execute(
-            "INSERT OR IGNORE INTO project_plugins (project_id, plugin_id) VALUES (?, ?)",
+            "INSERT OR REPLACE INTO project_plugins (project_id, plugin_id) VALUES (?, ?)",
             params![project_id, plugin_id],
         )?;
         Ok(())
     }
 
-    fn link_project_sample(
-        tx: &rusqlite::Transaction,
-        project_id: &str,
-        sample_id: &str,
-    ) -> Result<(), DatabaseError> {
+    fn link_project_sample(tx: &rusqlite::Transaction, project_id: &str, sample_id: &str) -> Result<(), DatabaseError> {
         tx.execute(
-            "INSERT OR IGNORE INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+            "INSERT OR REPLACE INTO project_samples (project_id, sample_id) VALUES (?, ?)",
             params![project_id, sample_id],
         )?;
         Ok(())
@@ -827,5 +668,120 @@ impl LiveSetDatabase {
             project.samples.len()
         );
         Ok(Some(project))
+    }
+
+    pub fn insert_project(&mut self, live_set: &LiveSet) -> Result<(), DatabaseError> {
+        debug!("Inserting project: {} ({})", live_set.file_name, live_set.file_path.display());
+        let tx = self.conn.transaction()?;
+
+        // Insert project
+        let project_id = live_set.id.to_string();
+        debug!("Using project UUID: {}", project_id);
+
+        tx.execute(
+            "INSERT INTO projects (
+                id, name, path, hash, created_at, modified_at,
+                last_scanned_at, tempo, time_signature_numerator,
+                time_signature_denominator, key_signature_tonic,
+                key_signature_scale, furthest_bar, duration_seconds,
+                ableton_version_major, ableton_version_minor,
+                ableton_version_patch, ableton_version_beta,
+                notes
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )",
+            params![
+                project_id,
+                live_set.file_name,
+                live_set.file_path.to_string_lossy().to_string(),
+                live_set.file_hash,
+                SqlDateTime::from(live_set.created_time),
+                SqlDateTime::from(live_set.modified_time),
+                SqlDateTime::from(live_set.last_scan_timestamp),
+                live_set.tempo,
+                live_set.time_signature.numerator,
+                live_set.time_signature.denominator,
+                live_set.key_signature.as_ref().map(|k| k.tonic.to_string()),
+                live_set.key_signature.as_ref().map(|k| k.scale.to_string()),
+                live_set.furthest_bar,
+                live_set.estimated_duration.map(|d| d.num_seconds()),
+                live_set.ableton_version.major,
+                live_set.ableton_version.minor,
+                live_set.ableton_version.patch,
+                live_set.ableton_version.beta,
+                None::<String>, // notes starts as NULL
+            ],
+        )?;
+
+        // Insert plugins
+        debug!("Inserting {} plugins", live_set.plugins.len());
+        for plugin in &live_set.plugins {
+            let plugin_id = plugin.id.to_string();
+            debug!("Inserted plugin: {} ({})", plugin.name, plugin_id);
+            Self::insert_plugin(&tx, plugin)?;
+            Self::link_project_plugin(&tx, &project_id, &plugin_id)?;
+        }
+
+        // Insert samples
+        debug!("Inserting {} samples", live_set.samples.len());
+        for sample in &live_set.samples {
+            let sample_id = sample.id.to_string();
+            debug!("Inserted sample: {} ({})", sample.name, sample_id);
+            Self::insert_sample(&tx, sample)?;
+            Self::link_project_sample(&tx, &project_id, &sample_id)?;
+        }
+
+        // Now update the FTS index with all relations set
+        tx.execute(
+            "UPDATE project_search SET
+                plugins = (
+                    SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
+                    FROM plugins pl
+                    JOIN project_plugins pp ON pp.plugin_id = pl.id
+                    WHERE pp.project_id = ?
+                ),
+                samples = (
+                    SELECT GROUP_CONCAT(s.name, ' ')
+                    FROM samples s
+                    JOIN project_samples ps ON ps.sample_id = s.id
+                    WHERE ps.project_id = ?
+                ),
+                tags = (
+                    SELECT GROUP_CONCAT(t.name, ' ')
+                    FROM tags t
+                    JOIN project_tags pt ON pt.tag_id = t.id
+                    WHERE pt.project_id = ?
+                )
+            WHERE project_id = ?",
+            params![project_id, project_id, project_id, project_id],
+        )?;
+
+        // Debug: Inspect FTS index content
+        debug!("Inspecting FTS5 index for project {}", live_set.file_name);
+        if let Ok(Some(row)) = tx.query_row(
+            "SELECT * FROM project_search WHERE project_id = ?",
+            params![project_id],
+            |row| {
+                debug!("FTS5 index content:");
+                debug!("  project_id: {}", row.get::<_, String>(0)?);
+                debug!("  name: {}", row.get::<_, String>(1)?);
+                debug!("  path: {}", row.get::<_, String>(2)?);
+                debug!("  plugins: {:?}", row.get::<_, Option<String>>(3)?);
+                debug!("  samples: {:?}", row.get::<_, Option<String>>(4)?);
+                debug!("  tags: {:?}", row.get::<_, Option<String>>(5)?);
+                debug!("  notes: {:?}", row.get::<_, Option<String>>(6)?);
+                debug!("  created_at: {:?}", row.get::<_, Option<String>>(7)?);
+                debug!("  modified_at: {:?}", row.get::<_, Option<String>>(8)?);
+                Ok(Some(()))
+            },
+        ) {
+            debug!("Successfully inspected FTS5 index");
+        }
+
+        tx.commit()?;
+        info!("Successfully inserted project {} with {} plugins and {} samples", 
+            live_set.file_name, live_set.plugins.len(), live_set.samples.len());
+
+        Ok(())
     }
 }
