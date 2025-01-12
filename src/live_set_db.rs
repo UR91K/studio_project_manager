@@ -1073,6 +1073,15 @@ impl LiveSetDatabase {
             "Adding project {} to collection {}",
             project_id, collection_id
         );
+
+        // Debug: Verify project exists
+        let project_exists: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?)",
+            [project_id],
+            |row| row.get(0),
+        )?;
+        debug!("Project exists in projects table: {}", project_exists);
+
         let now = Local::now();
 
         // Get the highest position in the collection
@@ -1095,6 +1104,17 @@ impl LiveSetDatabase {
                 SqlDateTime::from(now)
             ],
         )?;
+
+        // Debug: Verify insertion
+        let inserted_project: Option<(String, i32)> = self.conn.query_row(
+            "SELECT project_id, position FROM collection_projects WHERE collection_id = ? AND project_id = ?",
+            params![collection_id, project_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+        
+        if let Some((pid, pos)) = inserted_project {
+            debug!("Verified project {} inserted at position {}", pid, pos);
+        }
 
         // Update collection's modified timestamp
         self.conn.execute(
@@ -1222,11 +1242,15 @@ impl LiveSetDatabase {
     ) -> Result<Vec<LiveSet>, DatabaseError> {
         debug!("Getting projects in collection: {}", collection_id);
         let tx = self.conn.transaction()?;
-
-        let project_paths = {
+        let mut results = Vec::new();
+        
+        {
             let mut stmt = tx.prepare(
                 r#"
-                SELECT p.* 
+                SELECT p.id, p.path, p.name, p.hash, p.notes, p.created_at, p.modified_at, p.last_scanned_at,
+                       p.tempo, p.time_signature_numerator, p.time_signature_denominator,
+                       p.key_signature_tonic, p.key_signature_scale, p.duration_seconds, p.furthest_bar,
+                       p.ableton_version_major, p.ableton_version_minor, p.ableton_version_patch, p.ableton_version_beta
                 FROM projects p
                 JOIN collection_projects cp ON cp.project_id = p.id
                 WHERE cp.collection_id = ?
@@ -1234,13 +1258,14 @@ impl LiveSetDatabase {
                 "#,
             )?;
 
-            let mut results = Vec::new();
-            let rows = stmt.query_map([collection_id], |row| {
+            let mut rows = stmt.query([collection_id])?;
+            while let Some(row) = rows.next()? {
                 let project_id: String = row.get(0)?;
-                let duration_secs: Option<i64> = row.get(12)?;
-                let created_timestamp: i64 = row.get(4)?;
-                let modified_timestamp: i64 = row.get(5)?;
-                let scanned_timestamp: i64 = row.get(6)?;
+                debug!("Retrieved project from join query: {}", project_id);
+                let duration_secs: Option<i64> = row.get(13)?;
+                let created_timestamp: i64 = row.get(5)?;
+                let modified_timestamp: i64 = row.get(6)?;
+                let scanned_timestamp: i64 = row.get(7)?;
 
                 let mut live_set = LiveSet {
                     id: Uuid::parse_str(&project_id).map_err(|_| {
@@ -1249,34 +1274,44 @@ impl LiveSetDatabase {
                     file_path: PathBuf::from(row.get::<_, String>(1)?),
                     file_name: row.get(2)?,
                     file_hash: row.get(3)?,
-                    created_time: Local.timestamp_opt(created_timestamp, 0).single().ok_or_else(|| {
-                        rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
-                    })?,
-                    modified_time: Local.timestamp_opt(modified_timestamp, 0).single().ok_or_else(|| {
-                        rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
-                    })?,
-                    last_scan_timestamp: Local.timestamp_opt(scanned_timestamp, 0).single().ok_or_else(|| {
-                        rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
-                    })?,
+                    created_time: Local
+                        .timestamp_opt(created_timestamp, 0)
+                        .single()
+                        .ok_or_else(|| {
+                            rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                        })?,
+                    modified_time: Local
+                        .timestamp_opt(modified_timestamp, 0)
+                        .single()
+                        .ok_or_else(|| {
+                            rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                        })?,
+                    last_scan_timestamp: Local
+                        .timestamp_opt(scanned_timestamp, 0)
+                        .single()
+                        .ok_or_else(|| {
+                            rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                        })?,
                     xml_data: Vec::new(),
-                    tempo: row.get(7)?,
+
+                    tempo: row.get(8)?,
                     time_signature: TimeSignature {
-                        numerator: row.get(8)?,
-                        denominator: row.get(9)?,
+                        numerator: row.get(9)?,
+                        denominator: row.get(10)?,
                     },
-                    key_signature: match (row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?) {
+                    key_signature: match (row.get::<_, Option<String>>(11)?, row.get::<_, Option<String>>(12)?) {
                         (Some(tonic), Some(scale)) => Some(KeySignature {
                             tonic: tonic.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
                             scale: scale.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
                         }),
                         _ => None,
                     },
-                    furthest_bar: row.get(13)?,
+                    furthest_bar: row.get(14)?,
                     ableton_version: AbletonVersion {
-                        major: row.get(14)?,
-                        minor: row.get(15)?,
-                        patch: row.get(16)?,
-                        beta: row.get(17)?,
+                        major: row.get(15)?,
+                        minor: row.get(16)?,
+                        patch: row.get(17)?,
+                        beta: row.get(18)?,
                     },
                     estimated_duration: duration_secs.map(chrono::Duration::seconds),
                     plugins: HashSet::new(),
@@ -1284,12 +1319,12 @@ impl LiveSetDatabase {
                     tags: HashSet::new(),
                 };
 
-                // Get plugins
+                // Get plugins, samples, and tags in separate scopes
                 {
                     let mut stmt = tx.prepare(
                         "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
                     )?;
-                    let plugins = stmt.query_map([&project_id], |row| {
+                    live_set.plugins = stmt.query_map([&project_id], |row| {
                         Ok(Plugin {
                             id: Uuid::new_v4(),
                             plugin_id: row.get(1)?,
@@ -1307,15 +1342,13 @@ impl LiveSetDatabase {
                             enabled: row.get(12)?,
                         })
                     })?.filter_map(|r| r.ok()).collect();
-                    live_set.plugins = plugins;
                 }
 
-                // Get samples
                 {
                     let mut stmt = tx.prepare(
                         "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
                     )?;
-                    let samples = stmt.query_map([&project_id], |row| {
+                    live_set.samples = stmt.query_map([&project_id], |row| {
                         Ok(Sample {
                             id: Uuid::new_v4(),
                             name: row.get(1)?,
@@ -1323,34 +1356,23 @@ impl LiveSetDatabase {
                             is_present: row.get(3)?,
                         })
                     })?.filter_map(|r| r.ok()).collect();
-                    live_set.samples = samples;
                 }
 
-                // Get tags
                 {
                     let mut stmt = tx.prepare(
                         "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
                     )?;
-                    let tags = stmt.query_map([&project_id], |row| row.get(0))?.filter_map(|r| r.ok()).collect();
-                    live_set.tags = tags;
+                    live_set.tags = stmt.query_map([&project_id], |row| row.get(0))?.filter_map(|r| r.ok()).collect();
                 }
 
-                Ok(live_set)
-            })?;
-
-            for row in rows {
-                if let Ok(live_set) = row {
-                    debug!("Retrieved project: {}", live_set.file_name);
-                    results.push(live_set);
-                }
+                debug!("Adding project to results: {}", live_set.file_name);
+                results.push(live_set);
             }
-
-            results
-        };
+        }
 
         tx.commit()?;
-        debug!("Retrieved {} projects from collection", project_paths.len());
-        Ok(project_paths)
+        debug!("Retrieved {} projects from collection", results.len());
+        Ok(results)
     }
 
     pub fn list_collections(&mut self) -> Result<Vec<(String, String, Option<String>)>, DatabaseError> {
