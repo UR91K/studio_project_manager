@@ -204,6 +204,8 @@ mod tests {
     fn test_scan_performance() {
         setup_no_logging();
 
+        std::env::set_var("RUST_LOG", "error");
+        
         let project_paths = [
             (
                 r"C:\Users\judee\Documents\Projects\band with joel\Forkspan Project\Forkspan.als",
