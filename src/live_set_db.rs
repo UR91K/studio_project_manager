@@ -108,6 +108,25 @@ impl LiveSetDatabase {
                 FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
             );
 
+            -- Collections system
+            CREATE TABLE IF NOT EXISTS collections (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                created_at DATETIME NOT NULL,
+                modified_at DATETIME NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS collection_projects (
+                collection_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                position INTEGER NOT NULL,  -- For maintaining order
+                added_at DATETIME NOT NULL,
+                PRIMARY KEY (collection_id, project_id),
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+
             -- Junction tables
             CREATE TABLE IF NOT EXISTS project_plugins (
                 project_id TEXT NOT NULL,
@@ -130,6 +149,7 @@ impl LiveSetDatabase {
             CREATE INDEX IF NOT EXISTS idx_plugins_name ON plugins(name);
             CREATE INDEX IF NOT EXISTS idx_samples_path ON samples(path);
             CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
+            CREATE INDEX IF NOT EXISTS idx_collection_projects_position ON collection_projects(collection_id, position);
             "#,
         )?;
 
@@ -994,5 +1014,342 @@ impl LiveSetDatabase {
 
         debug!("Retrieved all tags");
         Ok(tags)
+    }
+
+    pub fn create_collection(&mut self, name: &str, description: Option<&str>) -> Result<String, DatabaseError> {
+        debug!("Creating collection: {}", name);
+        let collection_id = Uuid::new_v4().to_string();
+        let now = Local::now();
+
+        self.conn.execute(
+            "INSERT INTO collections (id, name, description, created_at, modified_at) VALUES (?, ?, ?, ?, ?)",
+            params![
+                collection_id,
+                name,
+                description,
+                SqlDateTime::from(now),
+                SqlDateTime::from(now)
+            ],
+        )?;
+
+        debug!("Successfully created collection: {} ({})", name, collection_id);
+        Ok(collection_id)
+    }
+
+    pub fn delete_collection(&mut self, collection_id: &str) -> Result<(), DatabaseError> {
+        debug!("Deleting collection: {}", collection_id);
+        self.conn.execute("DELETE FROM collections WHERE id = ?", [collection_id])?;
+        debug!("Successfully deleted collection");
+        Ok(())
+    }
+
+    pub fn add_project_to_collection(
+        &mut self,
+        collection_id: &str,
+        project_id: &str,
+    ) -> Result<(), DatabaseError> {
+        debug!(
+            "Adding project {} to collection {}",
+            project_id, collection_id
+        );
+        let now = Local::now();
+
+        // Get the highest position in the collection
+        let max_position: i32 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(position), -1) FROM collection_projects WHERE collection_id = ?",
+                [collection_id],
+                |row| row.get(0),
+            )?;
+
+        let next_position = max_position + 1;
+
+        self.conn.execute(
+            "INSERT INTO collection_projects (collection_id, project_id, position, added_at) VALUES (?, ?, ?, ?)",
+            params![
+                collection_id,
+                project_id,
+                next_position,
+                SqlDateTime::from(now)
+            ],
+        )?;
+
+        // Update collection's modified timestamp
+        self.conn.execute(
+            "UPDATE collections SET modified_at = ? WHERE id = ?",
+            params![SqlDateTime::from(now), collection_id],
+        )?;
+
+        debug!("Successfully added project to collection at position {}", next_position);
+        Ok(())
+    }
+
+    pub fn remove_project_from_collection(
+        &mut self,
+        collection_id: &str,
+        project_id: &str,
+    ) -> Result<(), DatabaseError> {
+        debug!(
+            "Removing project {} from collection {}",
+            project_id, collection_id
+        );
+        let now = Local::now();
+
+        let tx = self.conn.transaction()?;
+        
+        // Get the position of the project being removed
+        let removed_position: i32 = tx.query_row(
+            "SELECT position FROM collection_projects WHERE collection_id = ? AND project_id = ?",
+            params![collection_id, project_id],
+            |row| row.get(0),
+        )?;
+
+        // Remove the project
+        tx.execute(
+            "DELETE FROM collection_projects WHERE collection_id = ? AND project_id = ?",
+            params![collection_id, project_id],
+        )?;
+
+        // Update positions of remaining projects
+        tx.execute(
+            "UPDATE collection_projects SET position = position - 1 
+             WHERE collection_id = ? AND position > ?",
+            params![collection_id, removed_position],
+        )?;
+
+        // Update collection's modified timestamp
+        tx.execute(
+            "UPDATE collections SET modified_at = ? WHERE id = ?",
+            params![SqlDateTime::from(now), collection_id],
+        )?;
+
+        tx.commit()?;
+        debug!("Successfully removed project from collection");
+        Ok(())
+    }
+
+    pub fn reorder_project_in_collection(
+        &mut self,
+        collection_id: &str,
+        project_id: &str,
+        new_position: i32,
+    ) -> Result<(), DatabaseError> {
+        debug!(
+            "Moving project {} to position {} in collection {}",
+            project_id, new_position, collection_id
+        );
+        let now = Local::now();
+
+        let tx = self.conn.transaction()?;
+
+        // Get the current position
+        let current_position: i32 = tx.query_row(
+            "SELECT position FROM collection_projects WHERE collection_id = ? AND project_id = ?",
+            params![collection_id, project_id],
+            |row| row.get(0),
+        )?;
+
+        if current_position == new_position {
+            debug!("Project is already at position {}", new_position);
+            return Ok(());
+        }
+
+        if current_position < new_position {
+            // Moving down: shift intermediate items up
+            tx.execute(
+                "UPDATE collection_projects 
+                 SET position = position - 1
+                 WHERE collection_id = ? 
+                 AND position > ? 
+                 AND position <= ?",
+                params![collection_id, current_position, new_position],
+            )?;
+        } else {
+            // Moving up: shift intermediate items down
+            tx.execute(
+                "UPDATE collection_projects 
+                 SET position = position + 1
+                 WHERE collection_id = ? 
+                 AND position >= ? 
+                 AND position < ?",
+                params![collection_id, new_position, current_position],
+            )?;
+        }
+
+        // Set the new position
+        tx.execute(
+            "UPDATE collection_projects SET position = ? 
+             WHERE collection_id = ? AND project_id = ?",
+            params![new_position, collection_id, project_id],
+        )?;
+
+        // Update collection's modified timestamp
+        tx.execute(
+            "UPDATE collections SET modified_at = ? WHERE id = ?",
+            params![SqlDateTime::from(now), collection_id],
+        )?;
+
+        tx.commit()?;
+        debug!("Successfully moved project to new position");
+        Ok(())
+    }
+
+    pub fn get_collection_projects(
+        &mut self,
+        collection_id: &str,
+    ) -> Result<Vec<LiveSet>, DatabaseError> {
+        debug!("Getting projects in collection: {}", collection_id);
+        let tx = self.conn.transaction()?;
+
+        let project_paths = {
+            let mut stmt = tx.prepare(
+                r#"
+                SELECT p.* 
+                FROM projects p
+                JOIN collection_projects cp ON cp.project_id = p.id
+                WHERE cp.collection_id = ?
+                ORDER BY cp.position
+                "#,
+            )?;
+
+            let mut results = Vec::new();
+            let rows = stmt.query_map([collection_id], |row| {
+                let project_id: String = row.get(0)?;
+                let duration_secs: Option<i64> = row.get(12)?;
+                let created_timestamp: i64 = row.get(4)?;
+                let modified_timestamp: i64 = row.get(5)?;
+                let scanned_timestamp: i64 = row.get(6)?;
+
+                let mut live_set = LiveSet {
+                    id: Uuid::parse_str(&project_id).map_err(|_| {
+                        rusqlite::Error::InvalidParameterName("Invalid UUID".into())
+                    })?,
+                    file_path: PathBuf::from(row.get::<_, String>(1)?),
+                    file_name: row.get(2)?,
+                    file_hash: row.get(3)?,
+                    created_time: Local.timestamp_opt(created_timestamp, 0).single().ok_or_else(|| {
+                        rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                    })?,
+                    modified_time: Local.timestamp_opt(modified_timestamp, 0).single().ok_or_else(|| {
+                        rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                    })?,
+                    last_scan_timestamp: Local.timestamp_opt(scanned_timestamp, 0).single().ok_or_else(|| {
+                        rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                    })?,
+                    xml_data: Vec::new(),
+                    tempo: row.get(7)?,
+                    time_signature: TimeSignature {
+                        numerator: row.get(8)?,
+                        denominator: row.get(9)?,
+                    },
+                    key_signature: match (row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?) {
+                        (Some(tonic), Some(scale)) => Some(KeySignature {
+                            tonic: tonic.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                            scale: scale.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                        }),
+                        _ => None,
+                    },
+                    furthest_bar: row.get(13)?,
+                    ableton_version: AbletonVersion {
+                        major: row.get(14)?,
+                        minor: row.get(15)?,
+                        patch: row.get(16)?,
+                        beta: row.get(17)?,
+                    },
+                    estimated_duration: duration_secs.map(chrono::Duration::seconds),
+                    plugins: HashSet::new(),
+                    samples: HashSet::new(),
+                    tags: HashSet::new(),
+                };
+
+                // Get plugins
+                {
+                    let mut stmt = tx.prepare(
+                        "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
+                    )?;
+                    let plugins = stmt.query_map([&project_id], |row| {
+                        Ok(Plugin {
+                            id: Uuid::new_v4(),
+                            plugin_id: row.get(1)?,
+                            module_id: row.get(2)?,
+                            dev_identifier: row.get(3)?,
+                            name: row.get(4)?,
+                            plugin_format: row.get::<_, String>(5)?.parse()
+                                .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                            installed: row.get(6)?,
+                            vendor: row.get(7)?,
+                            version: row.get(8)?,
+                            sdk_version: row.get(9)?,
+                            flags: row.get(10)?,
+                            scanstate: row.get(11)?,
+                            enabled: row.get(12)?,
+                        })
+                    })?.filter_map(|r| r.ok()).collect();
+                    live_set.plugins = plugins;
+                }
+
+                // Get samples
+                {
+                    let mut stmt = tx.prepare(
+                        "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
+                    )?;
+                    let samples = stmt.query_map([&project_id], |row| {
+                        Ok(Sample {
+                            id: Uuid::new_v4(),
+                            name: row.get(1)?,
+                            path: PathBuf::from(row.get::<_, String>(2)?),
+                            is_present: row.get(3)?,
+                        })
+                    })?.filter_map(|r| r.ok()).collect();
+                    live_set.samples = samples;
+                }
+
+                // Get tags
+                {
+                    let mut stmt = tx.prepare(
+                        "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
+                    )?;
+                    let tags = stmt.query_map([&project_id], |row| row.get(0))?.filter_map(|r| r.ok()).collect();
+                    live_set.tags = tags;
+                }
+
+                Ok(live_set)
+            })?;
+
+            for row in rows {
+                if let Ok(live_set) = row {
+                    debug!("Retrieved project: {}", live_set.file_name);
+                    results.push(live_set);
+                }
+            }
+
+            results
+        };
+
+        tx.commit()?;
+        debug!("Retrieved {} projects from collection", project_paths.len());
+        Ok(project_paths)
+    }
+
+    pub fn list_collections(&mut self) -> Result<Vec<(String, String, Option<String>)>, DatabaseError> {
+        debug!("Listing all collections");
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, description FROM collections ORDER BY name"
+        )?;
+
+        let collections = stmt
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                let description: Option<String> = row.get(2)?;
+                debug!("Found collection: {} ({})", name, id);
+                Ok((id, name, description))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Retrieved all collections");
+        Ok(collections)
     }
 }
