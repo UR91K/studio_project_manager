@@ -1,11 +1,11 @@
+use chrono::Duration;
+use flate2::read::GzDecoder;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::str::from_utf8;
 use std::sync::Mutex;
-use chrono::Duration;
-use flate2::read::GzDecoder;
 
 use log::{debug, error, info, trace};
 use once_cell::sync::Lazy;
@@ -157,7 +157,6 @@ pub(crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
     Ok(())
 }
 
-
 /// Formats a file size in bytes to a human-readable string (B, KB, MB, or GB).
 ///
 /// # Examples
@@ -243,7 +242,7 @@ pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileErro
 
 static LINE_CACHE: Lazy<Mutex<Vec<(usize, usize)>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
-//TODO possibly delete this if we find it is no longer needed 
+//TODO possibly delete this if we find it is no longer needed
 #[allow(dead_code)]
 pub(crate) fn get_line_number(file_path: &Path, byte_position: usize) -> std::io::Result<usize> {
     let mut cache = LINE_CACHE.lock().unwrap();

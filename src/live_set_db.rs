@@ -1,13 +1,13 @@
 #![allow(unused_imports)]
-use rusqlite::{params, Connection, Result as SqliteResult, types::ToSql, OptionalExtension};
-use std::path::PathBuf;
-use chrono::{DateTime, Local, TimeZone};
-use uuid::Uuid;
-use std::collections::HashSet;
-use log::{debug, info, warn};
 use crate::error::DatabaseError;
-use crate::models::{Plugin, Sample, KeySignature, TimeSignature, AbletonVersion};
 use crate::live_set::LiveSet;
+use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
+use chrono::{DateTime, Local, TimeZone};
+use log::{debug, info, warn};
+use rusqlite::{params, types::ToSql, Connection, OptionalExtension, Result as SqliteResult};
+use std::collections::HashSet;
+use std::path::PathBuf;
+use uuid::Uuid;
 
 // Wrapper type for DateTime
 struct SqlDateTime(DateTime<Local>);
@@ -138,9 +138,13 @@ impl LiveSetDatabase {
     }
 
     pub fn insert_project(&mut self, live_set: &LiveSet) -> Result<(), DatabaseError> {
-        debug!("Inserting project: {} ({})", live_set.file_name, live_set.file_path.display());
+        debug!(
+            "Inserting project: {} ({})",
+            live_set.file_name,
+            live_set.file_path.display()
+        );
         let tx = self.conn.transaction()?;
-        
+
         // Use the LiveSet's UUID
         let project_id = live_set.id.to_string();
         debug!("Using project UUID: {}", project_id);
@@ -201,13 +205,17 @@ impl LiveSetDatabase {
         }
 
         tx.commit()?;
-        info!("Successfully inserted project {} with {} plugins and {} samples", 
-            live_set.file_name, live_set.plugins.len(), live_set.samples.len());
+        info!(
+            "Successfully inserted project {} with {} plugins and {} samples",
+            live_set.file_name,
+            live_set.plugins.len(),
+            live_set.samples.len()
+        );
         Ok(())
     }
 
     fn insert_plugin(
-        tx: &rusqlite::Transaction, 
+        tx: &rusqlite::Transaction,
         plugin: &Plugin,
         id: &str,
     ) -> Result<(), DatabaseError> {
@@ -238,7 +246,7 @@ impl LiveSetDatabase {
     }
 
     fn insert_sample(
-        tx: &rusqlite::Transaction, 
+        tx: &rusqlite::Transaction,
         sample: &Sample,
         id: &str,
     ) -> Result<(), DatabaseError> {
@@ -286,7 +294,7 @@ impl LiveSetDatabase {
     pub fn search(&mut self, query: &str) -> Result<Vec<LiveSet>, DatabaseError> {
         debug!("Performing search with query: {}", query);
         let tx = self.conn.transaction()?;
-        
+
         // First, get all matching project paths
         let project_paths = {
             let mut stmt = tx.prepare(
@@ -308,16 +316,17 @@ impl LiveSetDatabase {
             let pattern = format!("%{}%", query);
             debug!("Using search pattern: {}", pattern);
 
-            let paths: Vec<String> = stmt.query_map([&pattern], |row| {
-                row.get(0)
-            })?.filter_map(|r| r.ok()).collect();
-            
+            let paths: Vec<String> = stmt
+                .query_map([&pattern], |row| row.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+
             debug!("Found {} matching project paths", paths.len());
             paths
         };
 
         let mut results = Vec::new();
-        
+
         // For each path, get the full project details
         for path in project_paths {
             let project = {
@@ -336,52 +345,70 @@ impl LiveSetDatabase {
                 stmt.query_row([&path], |row| {
                     let project_id: String = row.get(0)?;
                     debug!("Found project with ID: {}", project_id);
-                    
+
                     let duration_secs: Option<i64> = row.get(12)?;
                     let created_timestamp: i64 = row.get(4)?;
                     let modified_timestamp: i64 = row.get(5)?;
                     let scanned_timestamp: i64 = row.get(6)?;
-                    
+
                     let mut live_set = LiveSet {
-                        id: Uuid::parse_str(&project_id).map_err(|_| rusqlite::Error::InvalidParameterName("Invalid UUID".into()))?,
+                        id: Uuid::parse_str(&project_id).map_err(|_| {
+                            rusqlite::Error::InvalidParameterName("Invalid UUID".into())
+                        })?,
                         file_path: PathBuf::from(row.get::<_, String>(1)?),
                         file_name: row.get(2)?,
                         file_hash: row.get(3)?,
-                        created_time: Local.timestamp_opt(created_timestamp, 0)
+                        created_time: Local
+                            .timestamp_opt(created_timestamp, 0)
                             .single()
-                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
-                        modified_time: Local.timestamp_opt(modified_timestamp, 0)
+                            .ok_or_else(|| {
+                                rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                            })?,
+                        modified_time: Local
+                            .timestamp_opt(modified_timestamp, 0)
                             .single()
-                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
-                        last_scan_timestamp: Local.timestamp_opt(scanned_timestamp, 0)
+                            .ok_or_else(|| {
+                                rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                            })?,
+                        last_scan_timestamp: Local
+                            .timestamp_opt(scanned_timestamp, 0)
                             .single()
-                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
+                            .ok_or_else(|| {
+                                rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                            })?,
                         xml_data: Vec::new(),
-                        
+
                         tempo: row.get(7)?,
                         time_signature: TimeSignature {
                             numerator: row.get(8)?,
                             denominator: row.get(9)?,
                         },
-                        key_signature: match (row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?) {
+                        key_signature: match (
+                            row.get::<_, Option<String>>(10)?,
+                            row.get::<_, Option<String>>(11)?,
+                        ) {
                             (Some(tonic), Some(scale)) => {
                                 debug!("Found key signature: {} {}", tonic, scale);
                                 Some(KeySignature {
-                                    tonic: tonic.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                                    scale: scale.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    tonic: tonic
+                                        .parse()
+                                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    scale: scale
+                                        .parse()
+                                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
                                 })
-                            },
+                            }
                             _ => None,
                         },
                         furthest_bar: row.get(13)?,
-                        
+
                         ableton_version: AbletonVersion {
                             major: row.get(14)?,
                             minor: row.get(15)?,
                             patch: row.get(16)?,
                             beta: row.get(17)?,
                         },
-                        
+
                         estimated_duration: duration_secs.map(chrono::Duration::seconds),
                         plugins: HashSet::new(),
                         samples: HashSet::new(),
@@ -399,26 +426,31 @@ impl LiveSetDatabase {
                             "#,
                         )?;
 
-                        let plugins = stmt.query_map([&project_id], |row| {
-                            let name: String = row.get(4)?;
-                            debug!("Found plugin: {}", name);
-                            Ok(Plugin {
-                                id: Uuid::new_v4(),
-                                plugin_id: row.get(1)?,
-                                module_id: row.get(2)?,
-                                dev_identifier: row.get(3)?,
-                                name,
-                                plugin_format: row.get::<_, String>(5)?.parse()
-                                    .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                                installed: row.get(6)?,
-                                vendor: row.get(7)?,
-                                version: row.get(8)?,
-                                sdk_version: row.get(9)?,
-                                flags: row.get(10)?,
-                                scanstate: row.get(11)?,
-                                enabled: row.get(12)?,
-                            })
-                        })?.filter_map(|r| r.ok()).collect::<HashSet<_>>();
+                        let plugins = stmt
+                            .query_map([&project_id], |row| {
+                                let name: String = row.get(4)?;
+                                debug!("Found plugin: {}", name);
+                                Ok(Plugin {
+                                    id: Uuid::new_v4(),
+                                    plugin_id: row.get(1)?,
+                                    module_id: row.get(2)?,
+                                    dev_identifier: row.get(3)?,
+                                    name,
+                                    plugin_format: row
+                                        .get::<_, String>(5)?
+                                        .parse()
+                                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    installed: row.get(6)?,
+                                    vendor: row.get(7)?,
+                                    version: row.get(8)?,
+                                    sdk_version: row.get(9)?,
+                                    flags: row.get(10)?,
+                                    scanstate: row.get(11)?,
+                                    enabled: row.get(12)?,
+                                })
+                            })?
+                            .filter_map(|r| r.ok())
+                            .collect::<HashSet<_>>();
 
                         debug!("Retrieved {} plugins", plugins.len());
                         live_set.plugins = plugins;
@@ -435,23 +467,27 @@ impl LiveSetDatabase {
                             "#,
                         )?;
 
-                        let samples = stmt.query_map([&project_id], |row| {
-                            let name: String = row.get(1)?;
-                            debug!("Found sample: {}", name);
-                            Ok(Sample {
-                                id: Uuid::new_v4(),
-                                name,
-                                path: PathBuf::from(row.get::<_, String>(2)?),
-                                is_present: row.get(3)?,
-                            })
-                        })?.filter_map(|r| r.ok()).collect::<HashSet<_>>();
+                        let samples = stmt
+                            .query_map([&project_id], |row| {
+                                let name: String = row.get(1)?;
+                                debug!("Found sample: {}", name);
+                                Ok(Sample {
+                                    id: Uuid::new_v4(),
+                                    name,
+                                    path: PathBuf::from(row.get::<_, String>(2)?),
+                                    is_present: row.get(3)?,
+                                })
+                            })?
+                            .filter_map(|r| r.ok())
+                            .collect::<HashSet<_>>();
 
                         debug!("Retrieved {} samples", samples.len());
                         live_set.samples = samples;
                     }
 
                     Ok(live_set)
-                }).optional()?
+                })
+                .optional()?
             };
 
             if let Some(live_set) = project {
@@ -468,7 +504,7 @@ impl LiveSetDatabase {
     pub fn get_project_by_path(&mut self, path: &str) -> Result<Option<LiveSet>, DatabaseError> {
         debug!("Retrieving project by path: {}", path);
         let tx = self.conn.transaction()?;
-        
+
         // Get project
         let mut stmt = tx.prepare(
             r#"
@@ -482,70 +518,90 @@ impl LiveSetDatabase {
             "#,
         )?;
 
-        let project = stmt.query_row([path], |row| {
-            let project_id: String = row.get(0)?;
-            debug!("Found project with ID: {}", project_id);
-            
-            let duration_secs: Option<i64> = row.get(12)?;
-            let created_timestamp: i64 = row.get(4)?;
-            let modified_timestamp: i64 = row.get(5)?;
-            let scanned_timestamp: i64 = row.get(6)?;
-            
-            // Create LiveSet instance
-            let live_set = LiveSet {
-                id: Uuid::parse_str(&project_id).map_err(|_| rusqlite::Error::InvalidParameterName("Invalid UUID".into()))?,
-                file_path: PathBuf::from(row.get::<_, String>(1)?),
-                file_name: row.get(2)?,
-                file_hash: row.get(3)?,
-                created_time: Local.timestamp_opt(created_timestamp, 0)
-                    .single()
-                    .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
-                modified_time: Local.timestamp_opt(modified_timestamp, 0)
-                    .single()
-                    .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
-                last_scan_timestamp: Local.timestamp_opt(scanned_timestamp, 0)
-                    .single()
-                    .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
-                xml_data: Vec::new(),
-                
-                tempo: row.get(7)?,
-                time_signature: TimeSignature {
-                    numerator: row.get(8)?,
-                    denominator: row.get(9)?,
-                },
-                key_signature: match (row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?) {
-                    (Some(tonic), Some(scale)) => {
-                        debug!("Found key signature: {} {}", tonic, scale);
-                        Some(KeySignature {
-                            tonic: tonic.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                            scale: scale.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                        })
-                    },
-                    _ => None,
-                },
-                furthest_bar: row.get(13)?,
-                
-                ableton_version: AbletonVersion {
-                    major: row.get(14)?,
-                    minor: row.get(15)?,
-                    patch: row.get(16)?,
-                    beta: row.get(17)?,
-                },
-                
-                estimated_duration: duration_secs.map(chrono::Duration::seconds),
-                plugins: HashSet::new(),
-                samples: HashSet::new(),
-                tags: HashSet::new(),
-            };
+        let project = stmt
+            .query_row([path], |row| {
+                let project_id: String = row.get(0)?;
+                debug!("Found project with ID: {}", project_id);
 
-            Ok(live_set)
-        }).optional()?;
+                let duration_secs: Option<i64> = row.get(12)?;
+                let created_timestamp: i64 = row.get(4)?;
+                let modified_timestamp: i64 = row.get(5)?;
+                let scanned_timestamp: i64 = row.get(6)?;
+
+                // Create LiveSet instance
+                let live_set = LiveSet {
+                    id: Uuid::parse_str(&project_id).map_err(|_| {
+                        rusqlite::Error::InvalidParameterName("Invalid UUID".into())
+                    })?,
+                    file_path: PathBuf::from(row.get::<_, String>(1)?),
+                    file_name: row.get(2)?,
+                    file_hash: row.get(3)?,
+                    created_time: Local
+                        .timestamp_opt(created_timestamp, 0)
+                        .single()
+                        .ok_or_else(|| {
+                            rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                        })?,
+                    modified_time: Local
+                        .timestamp_opt(modified_timestamp, 0)
+                        .single()
+                        .ok_or_else(|| {
+                            rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                        })?,
+                    last_scan_timestamp: Local
+                        .timestamp_opt(scanned_timestamp, 0)
+                        .single()
+                        .ok_or_else(|| {
+                            rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                        })?,
+                    xml_data: Vec::new(),
+
+                    tempo: row.get(7)?,
+                    time_signature: TimeSignature {
+                        numerator: row.get(8)?,
+                        denominator: row.get(9)?,
+                    },
+                    key_signature: match (
+                        row.get::<_, Option<String>>(10)?,
+                        row.get::<_, Option<String>>(11)?,
+                    ) {
+                        (Some(tonic), Some(scale)) => {
+                            debug!("Found key signature: {} {}", tonic, scale);
+                            Some(KeySignature {
+                                tonic: tonic
+                                    .parse()
+                                    .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                scale: scale
+                                    .parse()
+                                    .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                            })
+                        }
+                        _ => None,
+                    },
+                    furthest_bar: row.get(13)?,
+
+                    ableton_version: AbletonVersion {
+                        major: row.get(14)?,
+                        minor: row.get(15)?,
+                        patch: row.get(16)?,
+                        beta: row.get(17)?,
+                    },
+
+                    estimated_duration: duration_secs.map(chrono::Duration::seconds),
+                    plugins: HashSet::new(),
+                    samples: HashSet::new(),
+                    tags: HashSet::new(),
+                };
+
+                Ok(live_set)
+            })
+            .optional()?;
 
         let mut project = match project {
             Some(p) => {
                 debug!("Found project: {}", p.file_name);
                 p
-            },
+            }
             None => {
                 debug!("No project found at path: {}", path);
                 return Ok(None);
@@ -563,26 +619,30 @@ impl LiveSetDatabase {
             "#,
         )?;
 
-        let plugins = stmt.query_map([path], |row| {
-            let name: String = row.get(4)?;
-            debug!("Found plugin: {}", name);
-            Ok(Plugin {
-                id: Uuid::new_v4(),
-                plugin_id: row.get(1)?,
-                module_id: row.get(2)?,
-                dev_identifier: row.get(3)?,
-                name,
-                plugin_format: row.get::<_, String>(5)?.parse()
-                    .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                installed: row.get(6)?,
-                vendor: row.get(7)?,
-                version: row.get(8)?,
-                sdk_version: row.get(9)?,
-                flags: row.get(10)?,
-                scanstate: row.get(11)?,
-                enabled: row.get(12)?,
-            })
-        })?.collect::<SqliteResult<HashSet<_>>>()?;
+        let plugins = stmt
+            .query_map([path], |row| {
+                let name: String = row.get(4)?;
+                debug!("Found plugin: {}", name);
+                Ok(Plugin {
+                    id: Uuid::new_v4(),
+                    plugin_id: row.get(1)?,
+                    module_id: row.get(2)?,
+                    dev_identifier: row.get(3)?,
+                    name,
+                    plugin_format: row
+                        .get::<_, String>(5)?
+                        .parse()
+                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                    installed: row.get(6)?,
+                    vendor: row.get(7)?,
+                    version: row.get(8)?,
+                    sdk_version: row.get(9)?,
+                    flags: row.get(10)?,
+                    scanstate: row.get(11)?,
+                    enabled: row.get(12)?,
+                })
+            })?
+            .collect::<SqliteResult<HashSet<_>>>()?;
 
         debug!("Retrieved {} plugins", plugins.len());
         project.plugins = plugins;
@@ -598,22 +658,28 @@ impl LiveSetDatabase {
             "#,
         )?;
 
-        let samples = stmt.query_map([path], |row| {
-            let name: String = row.get(1)?;
-            debug!("Found sample: {}", name);
-            Ok(Sample {
-                id: Uuid::new_v4(),
-                name,
-                path: PathBuf::from(row.get::<_, String>(2)?),
-                is_present: row.get(3)?,
-            })
-        })?.collect::<SqliteResult<HashSet<_>>>()?;
+        let samples = stmt
+            .query_map([path], |row| {
+                let name: String = row.get(1)?;
+                debug!("Found sample: {}", name);
+                Ok(Sample {
+                    id: Uuid::new_v4(),
+                    name,
+                    path: PathBuf::from(row.get::<_, String>(2)?),
+                    is_present: row.get(3)?,
+                })
+            })?
+            .collect::<SqliteResult<HashSet<_>>>()?;
 
         debug!("Retrieved {} samples", samples.len());
         project.samples = samples;
 
-        info!("Successfully retrieved project {} with {} plugins and {} samples", 
-            project.file_name, project.plugins.len(), project.samples.len());
+        info!(
+            "Successfully retrieved project {} with {} plugins and {} samples",
+            project.file_name,
+            project.plugins.len(),
+            project.samples.len()
+        );
         Ok(Some(project))
     }
 
@@ -621,19 +687,20 @@ impl LiveSetDatabase {
         debug!("Adding tag: {}", name);
         let tag_id = Uuid::new_v4().to_string();
         let now = Local::now();
-        
+
         self.conn.execute(
             "INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)",
             params![tag_id, name, SqlDateTime::from(now)],
         )?;
-        
+
         debug!("Successfully added tag: {} ({})", name, tag_id);
         Ok(tag_id)
     }
 
     pub fn remove_tag(&mut self, tag_id: &str) -> Result<(), DatabaseError> {
         debug!("Removing tag: {}", tag_id);
-        self.conn.execute("DELETE FROM tags WHERE id = ?", [tag_id])?;
+        self.conn
+            .execute("DELETE FROM tags WHERE id = ?", [tag_id])?;
         debug!("Successfully removed tag: {}", tag_id);
         Ok(())
     }
@@ -641,12 +708,12 @@ impl LiveSetDatabase {
     pub fn tag_project(&mut self, project_id: &str, tag_id: &str) -> Result<(), DatabaseError> {
         debug!("Tagging project {} with tag {}", project_id, tag_id);
         let now = Local::now();
-        
+
         self.conn.execute(
             "INSERT OR IGNORE INTO project_tags (project_id, tag_id, created_at) VALUES (?, ?, ?)",
             params![project_id, tag_id, SqlDateTime::from(now)],
         )?;
-        
+
         debug!("Successfully tagged project");
         Ok(())
     }
@@ -672,11 +739,14 @@ impl LiveSetDatabase {
             "#,
         )?;
 
-        let tags = stmt.query_map([project_id], |row| {
-            let name: String = row.get(0)?;
-            debug!("Found tag: {}", name);
-            Ok(name)
-        })?.filter_map(|r| r.ok()).collect();
+        let tags = stmt
+            .query_map([project_id], |row| {
+                let name: String = row.get(0)?;
+                debug!("Found tag: {}", name);
+                Ok(name)
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
 
         debug!("Retrieved tags for project");
         Ok(tags)
@@ -685,7 +755,7 @@ impl LiveSetDatabase {
     pub fn get_projects_by_tag(&mut self, tag_id: &str) -> Result<Vec<LiveSet>, DatabaseError> {
         debug!("Getting projects with tag: {}", tag_id);
         let tx = self.conn.transaction()?;
-        
+
         let project_paths = {
             let mut stmt = tx.prepare(
                 r#"
@@ -696,11 +766,14 @@ impl LiveSetDatabase {
                 "#,
             )?;
 
-            let paths: Vec<String> = stmt.query_map([tag_id], |row| {
-                let path: String = row.get(0)?;
-                Ok(path)
-            })?.filter_map(|r| r.ok()).collect();
-            
+            let paths: Vec<String> = stmt
+                .query_map([tag_id], |row| {
+                    let path: String = row.get(0)?;
+                    Ok(path)
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+
             debug!("Found {} project paths with tag", paths.len());
             paths
         };
@@ -723,52 +796,70 @@ impl LiveSetDatabase {
                 stmt.query_row([&path], |row| {
                     let project_id: String = row.get(0)?;
                     debug!("Found project with ID: {}", project_id);
-                    
+
                     let duration_secs: Option<i64> = row.get(12)?;
                     let created_timestamp: i64 = row.get(4)?;
                     let modified_timestamp: i64 = row.get(5)?;
                     let scanned_timestamp: i64 = row.get(6)?;
-                    
+
                     let mut live_set = LiveSet {
-                        id: Uuid::parse_str(&project_id).map_err(|_| rusqlite::Error::InvalidParameterName("Invalid UUID".into()))?,
+                        id: Uuid::parse_str(&project_id).map_err(|_| {
+                            rusqlite::Error::InvalidParameterName("Invalid UUID".into())
+                        })?,
                         file_path: PathBuf::from(row.get::<_, String>(1)?),
                         file_name: row.get(2)?,
                         file_hash: row.get(3)?,
-                        created_time: Local.timestamp_opt(created_timestamp, 0)
+                        created_time: Local
+                            .timestamp_opt(created_timestamp, 0)
                             .single()
-                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
-                        modified_time: Local.timestamp_opt(modified_timestamp, 0)
+                            .ok_or_else(|| {
+                                rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                            })?,
+                        modified_time: Local
+                            .timestamp_opt(modified_timestamp, 0)
                             .single()
-                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
-                        last_scan_timestamp: Local.timestamp_opt(scanned_timestamp, 0)
+                            .ok_or_else(|| {
+                                rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                            })?,
+                        last_scan_timestamp: Local
+                            .timestamp_opt(scanned_timestamp, 0)
                             .single()
-                            .ok_or_else(|| rusqlite::Error::InvalidParameterName("Invalid timestamp".into()))?,
+                            .ok_or_else(|| {
+                                rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                            })?,
                         xml_data: Vec::new(),
-                        
+
                         tempo: row.get(7)?,
                         time_signature: TimeSignature {
                             numerator: row.get(8)?,
                             denominator: row.get(9)?,
                         },
-                        key_signature: match (row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?) {
+                        key_signature: match (
+                            row.get::<_, Option<String>>(10)?,
+                            row.get::<_, Option<String>>(11)?,
+                        ) {
                             (Some(tonic), Some(scale)) => {
                                 debug!("Found key signature: {} {}", tonic, scale);
                                 Some(KeySignature {
-                                    tonic: tonic.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                                    scale: scale.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    tonic: tonic
+                                        .parse()
+                                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    scale: scale
+                                        .parse()
+                                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
                                 })
-                            },
+                            }
                             _ => None,
                         },
                         furthest_bar: row.get(13)?,
-                        
+
                         ableton_version: AbletonVersion {
                             major: row.get(14)?,
                             minor: row.get(15)?,
                             patch: row.get(16)?,
                             beta: row.get(17)?,
                         },
-                        
+
                         estimated_duration: duration_secs.map(chrono::Duration::seconds),
                         plugins: HashSet::new(),
                         samples: HashSet::new(),
@@ -786,26 +877,31 @@ impl LiveSetDatabase {
                             "#,
                         )?;
 
-                        let plugins = stmt.query_map([&project_id], |row| {
-                            let name: String = row.get(4)?;
-                            debug!("Found plugin: {}", name);
-                            Ok(Plugin {
-                                id: Uuid::new_v4(),
-                                plugin_id: row.get(1)?,
-                                module_id: row.get(2)?,
-                                dev_identifier: row.get(3)?,
-                                name,
-                                plugin_format: row.get::<_, String>(5)?.parse()
-                                    .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                                installed: row.get(6)?,
-                                vendor: row.get(7)?,
-                                version: row.get(8)?,
-                                sdk_version: row.get(9)?,
-                                flags: row.get(10)?,
-                                scanstate: row.get(11)?,
-                                enabled: row.get(12)?,
-                            })
-                        })?.filter_map(|r| r.ok()).collect::<HashSet<_>>();
+                        let plugins = stmt
+                            .query_map([&project_id], |row| {
+                                let name: String = row.get(4)?;
+                                debug!("Found plugin: {}", name);
+                                Ok(Plugin {
+                                    id: Uuid::new_v4(),
+                                    plugin_id: row.get(1)?,
+                                    module_id: row.get(2)?,
+                                    dev_identifier: row.get(3)?,
+                                    name,
+                                    plugin_format: row
+                                        .get::<_, String>(5)?
+                                        .parse()
+                                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    installed: row.get(6)?,
+                                    vendor: row.get(7)?,
+                                    version: row.get(8)?,
+                                    sdk_version: row.get(9)?,
+                                    flags: row.get(10)?,
+                                    scanstate: row.get(11)?,
+                                    enabled: row.get(12)?,
+                                })
+                            })?
+                            .filter_map(|r| r.ok())
+                            .collect::<HashSet<_>>();
 
                         debug!("Retrieved {} plugins", plugins.len());
                         live_set.plugins = plugins;
@@ -822,16 +918,19 @@ impl LiveSetDatabase {
                             "#,
                         )?;
 
-                        let samples = stmt.query_map([&project_id], |row| {
-                            let name: String = row.get(1)?;
-                            debug!("Found sample: {}", name);
-                            Ok(Sample {
-                                id: Uuid::new_v4(),
-                                name,
-                                path: PathBuf::from(row.get::<_, String>(2)?),
-                                is_present: row.get(3)?,
-                            })
-                        })?.filter_map(|r| r.ok()).collect::<HashSet<_>>();
+                        let samples = stmt
+                            .query_map([&project_id], |row| {
+                                let name: String = row.get(1)?;
+                                debug!("Found sample: {}", name);
+                                Ok(Sample {
+                                    id: Uuid::new_v4(),
+                                    name,
+                                    path: PathBuf::from(row.get::<_, String>(2)?),
+                                    is_present: row.get(3)?,
+                                })
+                            })?
+                            .filter_map(|r| r.ok())
+                            .collect::<HashSet<_>>();
 
                         debug!("Retrieved {} samples", samples.len());
                         live_set.samples = samples;
@@ -848,18 +947,22 @@ impl LiveSetDatabase {
                             "#,
                         )?;
 
-                        let tags = stmt.query_map([&project_id], |row| {
-                            let name: String = row.get(0)?;
-                            debug!("Found tag: {}", name);
-                            Ok(name)
-                        })?.filter_map(|r| r.ok()).collect::<HashSet<_>>();
+                        let tags = stmt
+                            .query_map([&project_id], |row| {
+                                let name: String = row.get(0)?;
+                                debug!("Found tag: {}", name);
+                                Ok(name)
+                            })?
+                            .filter_map(|r| r.ok())
+                            .collect::<HashSet<_>>();
 
                         debug!("Retrieved {} tags", tags.len());
                         live_set.tags = tags;
                     }
 
                     Ok(live_set)
-                }).optional()?
+                })
+                .optional()?
             };
 
             if let Some(live_set) = project {
@@ -875,14 +978,19 @@ impl LiveSetDatabase {
 
     pub fn list_tags(&mut self) -> Result<Vec<(String, String)>, DatabaseError> {
         debug!("Listing all tags");
-        let mut stmt = self.conn.prepare("SELECT id, name FROM tags ORDER BY name")?;
-        
-        let tags = stmt.query_map([], |row| {
-            let id: String = row.get(0)?;
-            let name: String = row.get(1)?;
-            debug!("Found tag: {} ({})", name, id);
-            Ok((id, name))
-        })?.filter_map(|r| r.ok()).collect();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, name FROM tags ORDER BY name")?;
+
+        let tags = stmt
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                debug!("Found tag: {} ({})", name, id);
+                Ok((id, name))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
 
         debug!("Retrieved all tags");
         Ok(tags)

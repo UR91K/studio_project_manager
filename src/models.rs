@@ -223,7 +223,6 @@ impl FromStr for PluginFormat {
     }
 }
 
-
 impl std::fmt::Display for Tonic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
@@ -290,11 +289,7 @@ pub struct Plugin {
 
 #[allow(dead_code)]
 impl Plugin {
-    pub(crate) fn new(
-        name: String,
-        dev_identifier: String,
-        plugin_format: PluginFormat,
-    ) -> Self {
+    pub(crate) fn new(name: String, dev_identifier: String, plugin_format: PluginFormat) -> Self {
         Self {
             id: Uuid::new_v4(),
             plugin_id: None,
@@ -366,7 +361,7 @@ static INSTALLED_PLUGINS: Lazy<Arc<Result<HashSet<(String, PluginFormat)>, Datab
         })
     });
 
-    #[allow(dead_code)]
+#[allow(dead_code)]
 pub fn get_installed_plugins() -> Arc<Result<HashSet<(String, PluginFormat)>, DatabaseError>> {
     INSTALLED_PLUGINS.clone()
 }

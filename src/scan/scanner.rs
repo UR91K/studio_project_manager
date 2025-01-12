@@ -1,28 +1,29 @@
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::io::BufRead;
 #[allow(unused_imports)]
 use log::{debug, trace, warn};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use std::collections::{HashMap, HashSet};
+use std::io::BufRead;
+use std::path::PathBuf;
+use std::sync::Arc;
 use uuid::Uuid;
 
-
-use crate::error::LiveSetError;
-use crate::models::{AbletonVersion, Plugin, PluginInfo, Sample, TimeSignature, KeySignature, Scale, Tonic};
-use crate::utils::plugins::LineTrackingBuffer;
-use crate::utils::{StringResultExt, EventExt};
-use crate::config::CONFIG;
 use crate::ableton_db::AbletonDatabase;
+use crate::config::CONFIG;
+use crate::error::LiveSetError;
+use crate::models::{
+    AbletonVersion, KeySignature, Plugin, PluginInfo, Sample, Scale, TimeSignature, Tonic,
+};
 use crate::utils::plugins::get_most_recent_db_file;
+use crate::utils::plugins::LineTrackingBuffer;
+use crate::utils::{EventExt, StringResultExt};
 #[allow(unused_imports)]
 use crate::{debug_fn, trace_fn, warn_fn};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathType {
-    Direct,    // For version >= 11
-    Encoded,   // For version < 11
+    Direct,  // For version >= 11
+    Encoded, // For version < 11
 }
 
 /// Represents what type of data we're currently scanning
@@ -30,35 +31,25 @@ pub enum PathType {
 #[allow(dead_code)]
 pub enum ScannerState {
     Root,
-    
+
     // Sample scanning states
-    InSampleRef {
-        version: u32,
-    },
+    InSampleRef { version: u32 },
     InFileRef,
-    InData {
-        current_data: String,
-    },
-    InPath {
-        path_type: PathType,
-    },
-    
+    InData { current_data: String },
+    InPath { path_type: PathType },
+
     // Plugin states
     InSourceContext,
     InValue,
     InBranchSourceContext,
-    InPluginDesc {
-        device_id: String,
-    },
+    InPluginDesc { device_id: String },
     InVst3PluginInfo,
     InVstPluginInfo,
-    
+
     // Tempo states
-    InTempo {
-        version: u32,
-    },
+    InTempo { version: u32 },
     InTempoManual,
-    
+
     // Time signature state
     InTimeSignature,
 
@@ -126,19 +117,19 @@ pub struct Scanner {
     pub(crate) ableton_version: AbletonVersion,
     pub(crate) options: ScanOptions,
     pub(crate) line_tracker: LineTrackingBuffer,
-    
+
     // Sample scanning state
     pub(crate) sample_paths: HashSet<PathBuf>,
     pub(crate) current_sample_data: Option<String>,
-    pub(crate) current_file_ref: Option<PathBuf>,  // Tracks the current file reference being processed
+    pub(crate) current_file_ref: Option<PathBuf>, // Tracks the current file reference being processed
     pub(crate) current_path_type: Option<PathType>, // Tracks whether we're processing a direct or encoded path
-    
+
     // Plugin scanning state
     pub(crate) current_branch_info: Option<String>,
     pub(crate) plugin_info_tags: HashMap<String, PluginInfo>,
     pub(crate) in_source_context: bool,
     pub(crate) plugin_info_processed: bool,
-    
+
     // Tempo and timing state
     pub(crate) dev_identifiers: Arc<parking_lot::RwLock<HashMap<String, ()>>>,
     pub(crate) current_tempo: f64,
@@ -156,33 +147,37 @@ impl Scanner {
     pub fn new(xml_data: &[u8], mut options: ScanOptions) -> Result<Self, LiveSetError> {
         // First, detect and validate the version
         let version = Self::detect_version(xml_data)?;
-        
+
         // Disable features not supported in older versions
         if version.major < 11 {
-            options.scan_key = false;  // Key detection only available in v11+
-            warn_fn!("scanner", "Key detection not supported in version {}", version);
+            options.scan_key = false; // Key detection only available in v11+
+            warn_fn!(
+                "scanner",
+                "Key detection not supported in version {}",
+                version
+            );
             // Add other version-specific feature flags here
         }
-        
+
         Ok(Self {
             state: ScannerState::Root,
             depth: 0,
             ableton_version: version,
             options,
             line_tracker: LineTrackingBuffer::new(xml_data.to_vec()),
-            
+
             // Initialize sample scanning state
             sample_paths: HashSet::new(),
             current_sample_data: None,
             current_file_ref: None,
             current_path_type: None,
-            
+
             // Initialize plugin scanning state
             current_branch_info: None,
             plugin_info_tags: HashMap::new(),
             in_source_context: false,
             plugin_info_processed: false,
-            
+
             // Initialize other state
             dev_identifiers: Arc::new(parking_lot::RwLock::new(HashMap::new())),
             current_tempo: 0.0,
@@ -271,7 +266,7 @@ impl Scanner {
         let mut reader = Reader::from_reader(xml_data);
         reader.trim_text(true);
         let mut buf = Vec::new();
-        let mut byte_pos;  // Will be set in the loop
+        let mut byte_pos; // Will be set in the loop
         let result = ScanResult::default();
 
         // Skip the version tag since we've already processed it
@@ -309,12 +304,7 @@ impl Scanner {
                 }
                 Ok(Event::Eof) => break,
                 Err(e) => {
-                    warn_fn!(
-                        "scan",
-                        "Error at line {}: {:?}",
-                        line,
-                        e
-                    );
+                    warn_fn!("scan", "Error at line {}: {:?}", line, e);
                     return Err(LiveSetError::from(e));
                 }
                 _ => {}
@@ -328,15 +318,19 @@ impl Scanner {
 
     /// Converts the scanner's state into the final ScanResult
     #[cfg(test)]
-    pub(crate) fn finalize_result(&self, mut result: ScanResult) -> Result<ScanResult, LiveSetError> {
+    pub(crate) fn finalize_result(
+        &self,
+        mut result: ScanResult,
+    ) -> Result<ScanResult, LiveSetError> {
         // Set the version
         result.version = self.ableton_version;
 
         // Validate and set tempo (must be between 10 and 999 BPM)
         if self.current_tempo < 10.0 || self.current_tempo > 999.0 {
-            return Err(LiveSetError::InvalidProject(
-                format!("Invalid tempo value: {}", self.current_tempo)
-            ));
+            return Err(LiveSetError::InvalidProject(format!(
+                "Invalid tempo value: {}",
+                self.current_tempo
+            )));
         }
         result.tempo = self.current_tempo;
 
@@ -344,19 +338,21 @@ impl Scanner {
         if self.current_time_signature.is_valid() {
             result.time_signature = self.current_time_signature.clone();
         } else {
-            return Err(LiveSetError::InvalidProject(
-                format!("Invalid time signature: {}/{}", 
-                    self.current_time_signature.numerator, 
-                    self.current_time_signature.denominator)
-            ));
+            return Err(LiveSetError::InvalidProject(format!(
+                "Invalid time signature: {}/{}",
+                self.current_time_signature.numerator, self.current_time_signature.denominator
+            )));
         }
 
         // Calculate furthest bar if requested and we have end times
         if self.options.calculate_furthest_bar && !self.current_end_times.is_empty() {
             let beats_per_bar = result.time_signature.numerator as f64;
-            let max_end_time = self.current_end_times.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let max_end_time = self
+                .current_end_times
+                .iter()
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             result.furthest_bar = Some(max_end_time / beats_per_bar);
-            
+
             debug_fn!(
                 "finalize_result",
                 "Calculated furthest bar: {} (max end time: {}, beats per bar: {})",
@@ -382,10 +378,9 @@ impl Scanner {
             .as_ref()
             .map_err(|e| LiveSetError::ConfigError(e.clone()))?;
         let db_dir = &config.live_database_dir;
-        let db_path = get_most_recent_db_file(&PathBuf::from(db_dir))
-            .map_err(LiveSetError::DatabaseError)?;
-        let ableton_db = AbletonDatabase::new(db_path)
-            .map_err(LiveSetError::DatabaseError)?;
+        let db_path =
+            get_most_recent_db_file(&PathBuf::from(db_dir)).map_err(LiveSetError::DatabaseError)?;
+        let ableton_db = AbletonDatabase::new(db_path).map_err(LiveSetError::DatabaseError)?;
 
         for (dev_identifier, info) in &self.plugin_info_tags {
             let db_plugin = ableton_db
@@ -446,7 +441,8 @@ impl Scanner {
         // TODO: add fallback to key detection using midi data, use music21 python script to detect key
         if self.options.scan_key {
             // Find the most frequent key signature
-            let most_frequent_key = self.key_frequencies
+            let most_frequent_key = self
+                .key_frequencies
                 .iter()
                 .max_by_key(|&(_, count)| count)
                 .map(|(key, count)| {
@@ -459,13 +455,10 @@ impl Scanner {
                     key.clone()
                 })
                 .unwrap_or_else(|| {
-                    debug_fn!(
-                        "finalize_result",
-                        "No key signatures found, using default"
-                    );
+                    debug_fn!("finalize_result", "No key signatures found, using default");
                     KeySignature::default()
                 });
-            
+
             result.key_signature = Some(most_frequent_key);
         } else {
             result.key_signature = None;
@@ -482,9 +475,10 @@ impl Scanner {
 
         // Validate and set tempo (required for a valid project)
         if self.current_tempo < 10.0 || self.current_tempo > 999.0 {
-            return Err(LiveSetError::InvalidProject(
-                format!("Invalid tempo value: {}", self.current_tempo)
-            ));
+            return Err(LiveSetError::InvalidProject(format!(
+                "Invalid tempo value: {}",
+                self.current_tempo
+            )));
         }
         result.tempo = self.current_tempo;
 
@@ -492,19 +486,21 @@ impl Scanner {
         if self.current_time_signature.is_valid() {
             result.time_signature = self.current_time_signature.clone();
         } else {
-            return Err(LiveSetError::InvalidProject(
-                format!("Invalid time signature: {}/{}", 
-                    self.current_time_signature.numerator, 
-                    self.current_time_signature.denominator)
-            ));
+            return Err(LiveSetError::InvalidProject(format!(
+                "Invalid time signature: {}/{}",
+                self.current_time_signature.numerator, self.current_time_signature.denominator
+            )));
         }
 
         // Calculate furthest bar if requested and we have end times
         if self.options.calculate_furthest_bar && !self.current_end_times.is_empty() {
             let beats_per_bar = result.time_signature.numerator as f64;
-            let max_end_time = self.current_end_times.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let max_end_time = self
+                .current_end_times
+                .iter()
+                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             result.furthest_bar = Some(max_end_time / beats_per_bar);
-            
+
             debug_fn!(
                 "finalize_result",
                 "Calculated furthest bar: {} (max end time: {}, beats per bar: {})",
@@ -530,10 +526,9 @@ impl Scanner {
             .as_ref()
             .map_err(|e| LiveSetError::ConfigError(e.clone()))?;
         let db_dir = &config.live_database_dir;
-        let db_path = get_most_recent_db_file(&PathBuf::from(db_dir))
-            .map_err(LiveSetError::DatabaseError)?;
-        let ableton_db = AbletonDatabase::new(db_path)
-            .map_err(LiveSetError::DatabaseError)?;
+        let db_path =
+            get_most_recent_db_file(&PathBuf::from(db_dir)).map_err(LiveSetError::DatabaseError)?;
+        let ableton_db = AbletonDatabase::new(db_path).map_err(LiveSetError::DatabaseError)?;
 
         for (dev_identifier, info) in &self.plugin_info_tags {
             let db_plugin = ableton_db
@@ -593,7 +588,8 @@ impl Scanner {
         // Handle key signature if requested
         if self.options.scan_key {
             // Find the most frequent key signature
-            let most_frequent_key = self.key_frequencies
+            let most_frequent_key = self
+                .key_frequencies
                 .iter()
                 .max_by_key(|&(_, count)| count)
                 .map(|(key, count)| {
@@ -606,13 +602,10 @@ impl Scanner {
                     key.clone()
                 })
                 .unwrap_or_else(|| {
-                    debug_fn!(
-                        "finalize_result",
-                        "No key signatures found, using default"
-                    );
+                    debug_fn!("finalize_result", "No key signatures found, using default");
                     KeySignature::default()
                 });
-            
+
             result.key_signature = Some(most_frequent_key);
         } else {
             result.key_signature = None;
@@ -629,7 +622,7 @@ impl Scanner {
     ) -> Result<(), LiveSetError> {
         let name = event.name().to_string_result()?;
         let line = self.line_tracker.get_line_number(*byte_pos);
-        
+
         trace_fn!(
             "handle_start_event",
             "[{}] Processing tag: {}, state: {:?}, depth: {}",
@@ -638,7 +631,7 @@ impl Scanner {
             self.state,
             self.depth
         );
-        
+
         match name.as_str() {
             "SampleRef" => {
                 debug_fn!(
@@ -661,7 +654,10 @@ impl Scanner {
                 );
                 self.state = ScannerState::InFileRef;
             }
-            "Data" if matches!(self.state, ScannerState::InFileRef) && self.ableton_version.major < 11 => {
+            "Data"
+                if matches!(self.state, ScannerState::InFileRef)
+                    && self.ableton_version.major < 11 =>
+            {
                 debug_fn!(
                     "handle_start_event",
                     "[{}] Found Data tag for old format sample at depth {}",
@@ -673,7 +669,10 @@ impl Scanner {
                 };
                 self.current_path_type = Some(PathType::Encoded);
             }
-            "Path" if matches!(self.state, ScannerState::InFileRef) && self.ableton_version.major >= 11 => {
+            "Path"
+                if matches!(self.state, ScannerState::InFileRef)
+                    && self.ableton_version.major >= 11 =>
+            {
                 debug_fn!(
                     "handle_start_event",
                     "[{}] Found Path tag for new format sample at depth {}",
@@ -726,7 +725,7 @@ impl Scanner {
                     self.depth
                 );
                 self.state = ScannerState::InBranchSourceContext;
-                
+
                 // Look ahead for BrowserContentPath and BranchDeviceId
                 let mut buf = Vec::new();
                 let mut found_browser_content_path = false;
@@ -843,8 +842,10 @@ impl Scanner {
                         self.depth,
                         device_id
                     );
-                    self.plugin_info_processed = false;  // Reset the flag for new PluginDesc
-                    self.state = ScannerState::InPluginDesc { device_id: device_id.clone() };
+                    self.plugin_info_processed = false; // Reset the flag for new PluginDesc
+                    self.state = ScannerState::InPluginDesc {
+                        device_id: device_id.clone(),
+                    };
                 } else {
                     trace_fn!(
                         "handle_start_event",
@@ -896,7 +897,9 @@ impl Scanner {
                         ScannerState::InVst3PluginInfo | ScannerState::InVstPluginInfo => {
                             if !self.plugin_info_processed {
                                 if let Some(device_id) = &self.current_branch_info {
-                                    if let Some(plugin_format) = crate::utils::plugins::parse_plugin_format(device_id) {
+                                    if let Some(plugin_format) =
+                                        crate::utils::plugins::parse_plugin_format(device_id)
+                                    {
                                         debug_fn!(
                                             "handle_start_event",
                                             "[{}] Found plugin name at depth {}: {} for device: {}",
@@ -917,7 +920,8 @@ impl Scanner {
                                             self.depth,
                                             plugin_info
                                         );
-                                        self.plugin_info_tags.insert(device_id.clone(), plugin_info);
+                                        self.plugin_info_tags
+                                            .insert(device_id.clone(), plugin_info);
                                         self.plugin_info_processed = true;
                                     }
                                 }
@@ -980,29 +984,27 @@ impl Scanner {
 
                     // Parse the encoded time signature
                     match crate::utils::time_signature::parse_encoded_time_signature(&value_str) {
-                        Ok(encoded_value) => {
-                            match TimeSignature::from_encoded(encoded_value) {
-                                Ok(time_sig) => {
-                                    debug_fn!(
-                                        "handle_start_event",
-                                        "[{}] Successfully decoded time signature: {}/{}",
-                                        line,
-                                        time_sig.numerator,
-                                        time_sig.denominator
-                                    );
-                                    self.current_time_signature = time_sig;
-                                }
-                                Err(e) => {
-                                    warn_fn!(
-                                        "handle_start_event",
-                                        "[{}] Failed to decode time signature from value {}: {:?}",
-                                        line,
-                                        encoded_value,
-                                        e
-                                    );
-                                }
+                        Ok(encoded_value) => match TimeSignature::from_encoded(encoded_value) {
+                            Ok(time_sig) => {
+                                debug_fn!(
+                                    "handle_start_event",
+                                    "[{}] Successfully decoded time signature: {}/{}",
+                                    line,
+                                    time_sig.numerator,
+                                    time_sig.denominator
+                                );
+                                self.current_time_signature = time_sig;
                             }
-                        }
+                            Err(e) => {
+                                warn_fn!(
+                                    "handle_start_event",
+                                    "[{}] Failed to decode time signature from value {}: {:?}",
+                                    line,
+                                    encoded_value,
+                                    e
+                                );
+                            }
+                        },
                         Err(e) => {
                             warn_fn!(
                                 "handle_start_event",
@@ -1101,8 +1103,8 @@ impl Scanner {
                         self.depth
                     );
                     self.state = ScannerState::InMidiClip;
-                    self.current_clip_in_key = false;  // Reset for new clip
-                    self.current_scale_info = None;    // Reset scale info
+                    self.current_clip_in_key = false; // Reset for new clip
+                    self.current_scale_info = None; // Reset scale info
                 }
             }
             "ScaleInformation" if matches!(self.state, ScannerState::InMidiClip) => {
@@ -1142,7 +1144,7 @@ impl Scanner {
                         is_in_key
                     );
                     self.current_clip_in_key = is_in_key;
-                    
+
                     // If clip is in key and we have scale info, add to frequencies
                     if is_in_key {
                         if let Some((tonic, scale)) = self.current_scale_info.take() {
@@ -1157,9 +1159,12 @@ impl Scanner {
         Ok(())
     }
 
-    pub(crate) fn handle_end_event(&mut self, event: &quick_xml::events::BytesEnd) -> Result<(), LiveSetError> {
+    pub(crate) fn handle_end_event(
+        &mut self,
+        event: &quick_xml::events::BytesEnd,
+    ) -> Result<(), LiveSetError> {
         let name = event.name().to_string_result()?;
-        
+
         trace_fn!(
             "handle_end_event",
             "Exiting tag: {}, current state: {:?}, depth: {}",
@@ -1167,7 +1172,7 @@ impl Scanner {
             self.state,
             self.depth
         );
-        
+
         match name.as_str() {
             "SampleRef" => {
                 debug_fn!(
@@ -1177,15 +1182,11 @@ impl Scanner {
                 );
                 // If we have a current file reference, add it to our sample paths
                 if let Some(path) = self.current_file_ref.take() {
-                    debug_fn!(
-                        "handle_end_event",
-                        "Adding sample path: {:?}",
-                        path
-                    );
+                    debug_fn!("handle_end_event", "Adding sample path: {:?}", path);
                     self.sample_paths.insert(path);
                 }
                 self.current_path_type = None;
-                self.in_source_context = false;  // Reset in_source_context when exiting SampleRef
+                self.in_source_context = false; // Reset in_source_context when exiting SampleRef
                 self.current_branch_info = None; // Reset branch info to ensure next plugin is processed correctly
                 self.plugin_info_processed = false; // Reset plugin info processed flag
                 self.state = ScannerState::Root;
@@ -1219,11 +1220,7 @@ impl Scanner {
                             self.current_file_ref = Some(path);
                         }
                         Err(e) => {
-                            warn_fn!(
-                                "handle_end_event",
-                                "Failed to decode sample path: {:?}",
-                                e
-                            );
+                            warn_fn!("handle_end_event", "Failed to decode sample path: {:?}", e);
                         }
                     }
                     // After processing Data tag, return to InFileRef state
@@ -1300,7 +1297,9 @@ impl Scanner {
                         self.depth,
                         device_id
                     );
-                    self.state = ScannerState::InPluginDesc { device_id: device_id.clone() };
+                    self.state = ScannerState::InPluginDesc {
+                        device_id: device_id.clone(),
+                    };
                 } else {
                     trace_fn!(
                         "handle_end_event",
@@ -1355,8 +1354,14 @@ impl Scanner {
         Ok(())
     }
 
-    pub(crate) fn handle_text_event(&mut self, event: &quick_xml::events::BytesText) -> Result<(), LiveSetError> {
-        if let ScannerState::InData { ref mut current_data } = self.state {
+    pub(crate) fn handle_text_event(
+        &mut self,
+        event: &quick_xml::events::BytesText,
+    ) -> Result<(), LiveSetError> {
+        if let ScannerState::InData {
+            ref mut current_data,
+        } = self.state
+        {
             let text = event.unescape().map_err(LiveSetError::from)?;
             trace_fn!(
                 "handle_text_event",

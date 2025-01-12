@@ -4,4 +4,4 @@ pub mod scanner;
 mod scanner_test;
 
 // Re-export all public items from scanner
-pub use scanner::*; 
+pub use scanner::*;
