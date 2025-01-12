@@ -18,7 +18,6 @@ mod models;
 pub mod scan;
 mod live_set;
 mod utils;
-mod backup;
 pub mod live_set_db;
 mod test_utils;
 
