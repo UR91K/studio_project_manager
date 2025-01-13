@@ -314,7 +314,7 @@ impl LiveSetDatabase {
                             version: row.get(8)?,
                             sdk_version: row.get(9)?,
                             flags: row.get(10)?,
-                            scanstate: row.get(11)?,
+                            parsestate: row.get(11)?,
                             enabled: row.get(12)?,
                         })
                     })?.filter_map(|r| r.ok()).collect();

@@ -26,13 +26,13 @@ pub enum PathType {
     Encoded, // For version < 11
 }
 
-/// Represents what type of data we're currently scanning
+/// Represents what type of data we're currently parsing
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
-pub enum ScannerState {
+pub enum ParserState {
     Root,
 
-    // Sample scanning states
+    // Sample parsing states
     InSampleRef { version: u32 },
     InFileRef,
     InData { current_data: String },
@@ -53,52 +53,52 @@ pub enum ScannerState {
     // Time signature state
     InTimeSignature,
 
-    // Key scanning states
+    // Key parsing states
     InMidiClip,
     InScaleInformation,
 }
 
-/// Configuration for what should be scanned
+/// Configuration for what should be parsed
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub struct ScanOptions {
-    pub scan_plugins: bool,
-    pub scan_samples: bool,
-    pub scan_tempo: bool,
-    pub scan_time_signature: bool,
-    pub scan_midi: bool,
-    pub scan_audio: bool,
-    pub scan_automation: bool,
-    pub scan_return_tracks: bool,
-    pub scan_master_track: bool,
+pub struct ParseOptions {
+    pub parse_plugins: bool,
+    pub parse_samples: bool,
+    pub parse_tempo: bool,
+    pub parse_time_signature: bool,
+    pub parse_midi: bool,
+    pub parse_audio: bool,
+    pub parse_automation: bool,
+    pub parse_return_tracks: bool,
+    pub parse_master_track: bool,
     pub estimate_duration: bool,
     pub calculate_furthest_bar: bool,
-    pub scan_key: bool,
+    pub parse_key: bool,
 }
 
-impl Default for ScanOptions {
+impl Default for ParseOptions {
     fn default() -> Self {
         Self {
-            scan_plugins: true,
-            scan_samples: true,
-            scan_tempo: true,
-            scan_time_signature: true,
-            scan_midi: true,
-            scan_audio: true,
-            scan_automation: true,
-            scan_return_tracks: true,
-            scan_master_track: true,
+            parse_plugins: true,
+            parse_samples: true,
+            parse_tempo: true,
+            parse_time_signature: true,
+            parse_midi: true,
+            parse_audio: true,
+            parse_automation: true,
+            parse_return_tracks: true,
+            parse_master_track: true,
             estimate_duration: true,
             calculate_furthest_bar: true,
-            scan_key: true,
+            parse_key: true,
         }
     }
 }
 
-/// Holds the results of the scanning process
+/// Holds the results of the parsing process
 #[derive(Default)]
 #[allow(dead_code)]
-pub(crate) struct ScanResult {
+pub(crate) struct ParseResult {
     pub(crate) version: AbletonVersion,
     pub(crate) samples: HashSet<Sample>,
     pub(crate) plugins: HashSet<Plugin>,
@@ -108,23 +108,23 @@ pub(crate) struct ScanResult {
     pub(crate) key_signature: Option<KeySignature>,
 }
 
-/// The main scanner that processes the XML data
+/// The main parser that processes the XML data
 #[allow(dead_code)]
-pub struct Scanner {
-    // Core scanner state
-    pub(crate) state: ScannerState,
+pub struct Parser {
+    // Core parser state
+    pub(crate) state: ParserState,
     pub(crate) depth: i32,
     pub(crate) ableton_version: AbletonVersion,
-    pub(crate) options: ScanOptions,
+    pub(crate) options: ParseOptions,
     pub(crate) line_tracker: LineTrackingBuffer,
 
-    // Sample scanning state
+    // Sample parsing state
     pub(crate) sample_paths: HashSet<PathBuf>,
     pub(crate) current_sample_data: Option<String>,
     pub(crate) current_file_ref: Option<PathBuf>, // Tracks the current file reference being processed
     pub(crate) current_path_type: Option<PathType>, // Tracks whether we're processing a direct or encoded path
 
-    // Plugin scanning state
+    // Plugin parsing state
     pub(crate) current_branch_info: Option<String>,
     pub(crate) plugin_info_tags: HashMap<String, PluginInfo>,
     pub(crate) in_source_context: bool,
@@ -136,23 +136,23 @@ pub struct Scanner {
     pub(crate) current_time_signature: TimeSignature,
     pub(crate) current_end_times: Vec<f64>,
 
-    // Initialize key scanning state
+    // Initialize key parsing state
     pub(crate) key_frequencies: HashMap<KeySignature, usize>,
     current_scale_info: Option<(Tonic, Scale)>,
     current_clip_in_key: bool,
 }
 
 #[allow(dead_code)]
-impl Scanner {
-    pub fn new(xml_data: &[u8], mut options: ScanOptions) -> Result<Self, LiveSetError> {
+impl Parser {
+    pub fn new(xml_data: &[u8], mut options: ParseOptions) -> Result<Self, LiveSetError> {
         // First, detect and validate the version
         let version = Self::detect_version(xml_data)?;
 
         // Disable features not supported in older versions
         if version.major < 11 {
-            options.scan_key = false; // Key detection only available in v11+
+            options.parse_key = false; // Key detection only available in v11+
             warn_fn!(
-                "scanner",
+                "parser",
                 "Key detection not supported in version {}",
                 version
             );
@@ -160,19 +160,19 @@ impl Scanner {
         }
 
         Ok(Self {
-            state: ScannerState::Root,
+            state: ParserState::Root,
             depth: 0,
             ableton_version: version,
             options,
             line_tracker: LineTrackingBuffer::new(xml_data.to_vec()),
 
-            // Initialize sample scanning state
+            // Initialize sample parsing state
             sample_paths: HashSet::new(),
             current_sample_data: None,
             current_file_ref: None,
             current_path_type: None,
 
-            // Initialize plugin scanning state
+            // Initialize plugin parsing state
             current_branch_info: None,
             plugin_info_tags: HashMap::new(),
             in_source_context: false,
@@ -184,7 +184,7 @@ impl Scanner {
             current_time_signature: TimeSignature::default(),
             current_end_times: Vec::new(),
 
-            // Initialize key scanning state
+            // Initialize key parsing state
             key_frequencies: HashMap::new(),
             current_scale_info: None,
             current_clip_in_key: false,
@@ -261,13 +261,13 @@ impl Scanner {
         Err(LiveSetError::MissingVersion)
     }
 
-    /// Main scanning function that processes the XML data
-    pub(crate) fn scan(&mut self, xml_data: &[u8]) -> Result<ScanResult, LiveSetError> {
+    /// Main parsing function that processes the XML data
+    pub(crate) fn parse(&mut self, xml_data: &[u8]) -> Result<ParseResult, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
         reader.trim_text(true);
         let mut buf = Vec::new();
         let mut byte_pos; // Will be set in the loop
-        let result = ScanResult::default();
+        let result = ParseResult::default();
 
         // Skip the version tag since we've already processed it
         let mut skip_first = true;
@@ -304,7 +304,7 @@ impl Scanner {
                 }
                 Ok(Event::Eof) => break,
                 Err(e) => {
-                    warn_fn!("scan", "Error at line {}: {:?}", line, e);
+                    warn_fn!("parse", "Error at line {}: {:?}", line, e);
                     return Err(LiveSetError::from(e));
                 }
                 _ => {}
@@ -316,12 +316,12 @@ impl Scanner {
         self.finalize_result(result)
     }
 
-    /// Converts the scanner's state into the final ScanResult
+    /// Converts the parser's state into the final ParseResult
     #[cfg(test)]
     pub(crate) fn finalize_result(
         &self,
-        mut result: ScanResult,
-    ) -> Result<ScanResult, LiveSetError> {
+        mut result: ParseResult,
+    ) -> Result<ParseResult, LiveSetError> {
         // Set the version
         result.version = self.ableton_version;
 
@@ -405,7 +405,7 @@ impl Scanner {
                         version: db_plugin.version.clone(),
                         sdk_version: db_plugin.sdk_version.clone(),
                         flags: db_plugin.flags,
-                        scanstate: db_plugin.scanstate,
+                        parsestate: db_plugin.parsestate,
                         enabled: db_plugin.enabled,
                         plugin_format: info.plugin_format,
                         installed: true,
@@ -427,7 +427,7 @@ impl Scanner {
                         version: None,
                         sdk_version: None,
                         flags: None,
-                        scanstate: None,
+                        parsestate: None,
                         enabled: None,
                         plugin_format: info.plugin_format,
                         installed: false,
@@ -439,7 +439,7 @@ impl Scanner {
 
         // Handle key signature if requested
         // TODO: add fallback to key detection using midi data, use music21 python script to detect key
-        if self.options.scan_key {
+        if self.options.parse_key {
             // Find the most frequent key signature
             let most_frequent_key = self
                 .key_frequencies
@@ -467,9 +467,9 @@ impl Scanner {
         Ok(result)
     }
 
-    /// Converts the scanner's state into the final ScanResult
+    /// Converts the parser's state into the final ParseResult
     #[cfg(not(test))]
-    fn finalize_result(&self, mut result: ScanResult) -> Result<ScanResult, LiveSetError> {
+    fn finalize_result(&self, mut result: ParseResult) -> Result<ParseResult, LiveSetError> {
         // Set the version
         result.version = self.ableton_version;
 
@@ -553,7 +553,7 @@ impl Scanner {
                         version: db_plugin.version.clone(),
                         sdk_version: db_plugin.sdk_version.clone(),
                         flags: db_plugin.flags,
-                        scanstate: db_plugin.scanstate,
+                        parsestate: db_plugin.parsestate,
                         enabled: db_plugin.enabled,
                         plugin_format: info.plugin_format,
                         installed: true,
@@ -575,7 +575,7 @@ impl Scanner {
                         version: None,
                         sdk_version: None,
                         flags: None,
-                        scanstate: None,
+                        parsestate: None,
                         enabled: None,
                         plugin_format: info.plugin_format,
                         installed: false,
@@ -586,7 +586,7 @@ impl Scanner {
         }
 
         // Handle key signature if requested
-        if self.options.scan_key {
+        if self.options.parse_key {
             // Find the most frequent key signature
             let most_frequent_key = self
                 .key_frequencies
@@ -641,21 +641,21 @@ impl Scanner {
                     self.depth,
                     self.ableton_version.major
                 );
-                self.state = ScannerState::InSampleRef {
+                self.state = ParserState::InSampleRef {
                     version: self.ableton_version.major,
                 };
             }
-            "FileRef" if matches!(self.state, ScannerState::InSampleRef { .. }) => {
+            "FileRef" if matches!(self.state, ParserState::InSampleRef { .. }) => {
                 debug_fn!(
                     "handle_start_event",
                     "[{}] Entering FileRef at depth {}",
                     line,
                     self.depth
                 );
-                self.state = ScannerState::InFileRef;
+                self.state = ParserState::InFileRef;
             }
             "Data"
-                if matches!(self.state, ScannerState::InFileRef)
+                if matches!(self.state, ParserState::InFileRef)
                     && self.ableton_version.major < 11 =>
             {
                 debug_fn!(
@@ -664,13 +664,13 @@ impl Scanner {
                     line,
                     self.depth
                 );
-                self.state = ScannerState::InData {
+                self.state = ParserState::InData {
                     current_data: String::new(),
                 };
                 self.current_path_type = Some(PathType::Encoded);
             }
             "Path"
-                if matches!(self.state, ScannerState::InFileRef)
+                if matches!(self.state, ParserState::InFileRef)
                     && self.ableton_version.major >= 11 =>
             {
                 debug_fn!(
@@ -679,7 +679,7 @@ impl Scanner {
                     line,
                     self.depth
                 );
-                self.state = ScannerState::InPath {
+                self.state = ParserState::InPath {
                     path_type: PathType::Direct,
                 };
                 self.current_path_type = Some(PathType::Direct);
@@ -704,27 +704,27 @@ impl Scanner {
                     self.depth
                 );
                 self.in_source_context = true;
-                if !matches!(self.state, ScannerState::InPluginDesc { .. }) {
-                    self.state = ScannerState::InSourceContext;
+                if !matches!(self.state, ParserState::InPluginDesc { .. }) {
+                    self.state = ParserState::InSourceContext;
                 }
             }
-            "Value" if matches!(self.state, ScannerState::InSourceContext) => {
+            "Value" if matches!(self.state, ParserState::InSourceContext) => {
                 trace_fn!(
                     "handle_start_event",
                     "[{}] Entering Value tag inside SourceContext at depth {}",
                     line,
                     self.depth
                 );
-                self.state = ScannerState::InValue;
+                self.state = ParserState::InValue;
             }
-            "BranchSourceContext" if matches!(self.state, ScannerState::InValue) => {
+            "BranchSourceContext" if matches!(self.state, ParserState::InValue) => {
                 trace_fn!(
                     "handle_start_event",
                     "[{}] Found BranchSourceContext at depth {}, looking for device ID",
                     line,
                     self.depth
                 );
-                self.state = ScannerState::InBranchSourceContext;
+                self.state = ParserState::InBranchSourceContext;
 
                 // Look ahead for BrowserContentPath and BranchDeviceId
                 let mut buf = Vec::new();
@@ -843,7 +843,7 @@ impl Scanner {
                         device_id
                     );
                     self.plugin_info_processed = false; // Reset the flag for new PluginDesc
-                    self.state = ScannerState::InPluginDesc {
+                    self.state = ParserState::InPluginDesc {
                         device_id: device_id.clone(),
                     };
                 } else {
@@ -856,7 +856,7 @@ impl Scanner {
                 }
             }
             "Vst3PluginInfo" | "VstPluginInfo" => {
-                if let ScannerState::InPluginDesc { device_id } = &self.state {
+                if let ParserState::InPluginDesc { device_id } = &self.state {
                     if self.plugin_info_processed {
                         debug_fn!(
                             "handle_start_event",
@@ -876,9 +876,9 @@ impl Scanner {
                             device_id
                         );
                         self.state = if name.as_str() == "Vst3PluginInfo" {
-                            ScannerState::InVst3PluginInfo
+                            ParserState::InVst3PluginInfo
                         } else {
-                            ScannerState::InVstPluginInfo
+                            ParserState::InVstPluginInfo
                         };
                     }
                 } else {
@@ -894,7 +894,7 @@ impl Scanner {
             "Name" | "PlugName" => {
                 if let Some(value) = event.get_value_as_string_result()? {
                     match self.state {
-                        ScannerState::InVst3PluginInfo | ScannerState::InVstPluginInfo => {
+                        ParserState::InVst3PluginInfo | ParserState::InVstPluginInfo => {
                             if !self.plugin_info_processed {
                                 if let Some(device_id) = &self.current_branch_info {
                                     if let Some(plugin_format) =
@@ -935,7 +935,7 @@ impl Scanner {
                                 );
                             }
                         }
-                        ScannerState::InScaleInformation => {
+                        ParserState::InScaleInformation => {
                             debug_fn!(
                                 "handle_start_event",
                                 "[{}] Found scale name: {}",
@@ -968,7 +968,7 @@ impl Scanner {
             }
             "EnumEvent" => {
                 // Only process if we're looking for time signatures
-                if !self.options.scan_time_signature {
+                if !self.options.parse_time_signature {
                     return Ok(());
                 }
 
@@ -1055,11 +1055,11 @@ impl Scanner {
                     line,
                     self.depth
                 );
-                self.state = ScannerState::InTempo {
+                self.state = ParserState::InTempo {
                     version: self.ableton_version.major,
                 };
             }
-            "Manual" if matches!(self.state, ScannerState::InTempo { .. }) => {
+            "Manual" if matches!(self.state, ParserState::InTempo { .. }) => {
                 // Get the Value attribute for the tempo
                 if let Some(value) = event.try_get_attribute("Value")? {
                     let value_str = value.unescape_value()?.to_string();
@@ -1092,31 +1092,31 @@ impl Scanner {
                         }
                     }
                 }
-                self.state = ScannerState::InTempoManual;
+                self.state = ParserState::InTempoManual;
             }
             "MidiClip" => {
-                if self.options.scan_key {
+                if self.options.parse_key {
                     debug_fn!(
                         "handle_start_event",
                         "[{}] Entering MidiClip at depth {}",
                         line,
                         self.depth
                     );
-                    self.state = ScannerState::InMidiClip;
+                    self.state = ParserState::InMidiClip;
                     self.current_clip_in_key = false; // Reset for new clip
                     self.current_scale_info = None; // Reset scale info
                 }
             }
-            "ScaleInformation" if matches!(self.state, ScannerState::InMidiClip) => {
+            "ScaleInformation" if matches!(self.state, ParserState::InMidiClip) => {
                 debug_fn!(
                     "handle_start_event",
                     "[{}] Entering ScaleInformation at depth {}",
                     line,
                     self.depth
                 );
-                self.state = ScannerState::InScaleInformation;
+                self.state = ParserState::InScaleInformation;
             }
-            "RootNote" if matches!(self.state, ScannerState::InScaleInformation) => {
+            "RootNote" if matches!(self.state, ParserState::InScaleInformation) => {
                 if let Some(value) = event.try_get_attribute("Value")? {
                     if let Ok(root_note) = value.unescape_value()?.parse::<i32>() {
                         debug_fn!(
@@ -1134,7 +1134,7 @@ impl Scanner {
                     }
                 }
             }
-            "IsInKey" if matches!(self.state, ScannerState::InMidiClip) => {
+            "IsInKey" if matches!(self.state, ParserState::InMidiClip) => {
                 if let Some(value) = event.try_get_attribute("Value")? {
                     let is_in_key = value.unescape_value()?.as_ref() == "true";
                     debug_fn!(
@@ -1189,7 +1189,7 @@ impl Scanner {
                 self.in_source_context = false; // Reset in_source_context when exiting SampleRef
                 self.current_branch_info = None; // Reset branch info to ensure next plugin is processed correctly
                 self.plugin_info_processed = false; // Reset plugin info processed flag
-                self.state = ScannerState::Root;
+                self.state = ParserState::Root;
             }
             "FileRef" => {
                 debug_fn!(
@@ -1197,14 +1197,14 @@ impl Scanner {
                     "Exiting FileRef at depth {}",
                     self.depth
                 );
-                if let ScannerState::InSampleRef { version } = self.state {
-                    self.state = ScannerState::InSampleRef { version };
+                if let ParserState::InSampleRef { version } = self.state {
+                    self.state = ParserState::InSampleRef { version };
                 } else {
-                    self.state = ScannerState::Root;
+                    self.state = ParserState::Root;
                 }
             }
             "Data" => {
-                if let ScannerState::InData { ref current_data } = self.state {
+                if let ParserState::InData { ref current_data } = self.state {
                     debug_fn!(
                         "handle_end_event",
                         "Processing encoded path data of length {}",
@@ -1224,12 +1224,12 @@ impl Scanner {
                         }
                     }
                     // After processing Data tag, return to InFileRef state
-                    self.state = ScannerState::InFileRef;
+                    self.state = ParserState::InFileRef;
                 }
             }
             "Path" => {
-                if let ScannerState::InPath { .. } = self.state {
-                    self.state = ScannerState::InFileRef;
+                if let ParserState::InPath { .. } = self.state {
+                    self.state = ParserState::InFileRef;
                 }
             }
             "SourceContext" => {
@@ -1239,8 +1239,8 @@ impl Scanner {
                     self.depth
                 );
                 self.in_source_context = false;
-                if !matches!(self.state, ScannerState::InPluginDesc { .. }) {
-                    self.state = ScannerState::Root;
+                if !matches!(self.state, ParserState::InPluginDesc { .. }) {
+                    self.state = ParserState::Root;
                 }
             }
             "Value" => {
@@ -1249,8 +1249,8 @@ impl Scanner {
                     "Exiting Value at depth {}, returning to SourceContext state",
                     self.depth
                 );
-                if !matches!(self.state, ScannerState::InPluginDesc { .. }) {
-                    self.state = ScannerState::InSourceContext;
+                if !matches!(self.state, ParserState::InPluginDesc { .. }) {
+                    self.state = ParserState::InSourceContext;
                 }
             }
             "BranchSourceContext" => {
@@ -1259,8 +1259,8 @@ impl Scanner {
                     "Exiting BranchSourceContext at depth {}, returning to Value state",
                     self.depth
                 );
-                if !matches!(self.state, ScannerState::InPluginDesc { .. }) {
-                    self.state = ScannerState::InValue;
+                if !matches!(self.state, ParserState::InPluginDesc { .. }) {
+                    self.state = ParserState::InValue;
                 }
             }
             "PluginDesc" => {
@@ -1279,14 +1279,14 @@ impl Scanner {
                         "Returning to SourceContext state at depth {}",
                         self.depth
                     );
-                    ScannerState::InSourceContext
+                    ParserState::InSourceContext
                 } else {
                     trace_fn!(
                         "handle_end_event",
                         "Returning to Root state at depth {}",
                         self.depth
                     );
-                    ScannerState::Root
+                    ParserState::Root
                 };
             }
             "Vst3PluginInfo" | "VstPluginInfo" => {
@@ -1297,7 +1297,7 @@ impl Scanner {
                         self.depth,
                         device_id
                     );
-                    self.state = ScannerState::InPluginDesc {
+                    self.state = ParserState::InPluginDesc {
                         device_id: device_id.clone(),
                     };
                 } else {
@@ -1306,7 +1306,7 @@ impl Scanner {
                         "Exiting plugin info tag at depth {} but no current device ID",
                         self.depth
                     );
-                    self.state = ScannerState::Root;
+                    self.state = ParserState::Root;
                 }
             }
             "Tempo" => {
@@ -1315,15 +1315,15 @@ impl Scanner {
                     "Exiting Tempo tag at depth {}, resetting state",
                     self.depth
                 );
-                self.state = ScannerState::Root;
+                self.state = ParserState::Root;
             }
-            "Manual" if matches!(self.state, ScannerState::InTempoManual) => {
+            "Manual" if matches!(self.state, ParserState::InTempoManual) => {
                 debug_fn!(
                     "handle_end_event",
                     "Exiting Manual tag at depth {}, returning to Tempo state",
                     self.depth
                 );
-                self.state = ScannerState::InTempo {
+                self.state = ParserState::InTempo {
                     version: self.ableton_version.major,
                 };
             }
@@ -1333,8 +1333,8 @@ impl Scanner {
                     "Exiting MidiClip at depth {}, resetting state",
                     self.depth
                 );
-                if matches!(self.state, ScannerState::InMidiClip) {
-                    self.state = ScannerState::Root;
+                if matches!(self.state, ParserState::InMidiClip) {
+                    self.state = ParserState::Root;
                     self.current_clip_in_key = false;
                     self.current_scale_info = None;
                 }
@@ -1345,8 +1345,8 @@ impl Scanner {
                     "Exiting ScaleInformation at depth {}, returning to MidiClip state",
                     self.depth
                 );
-                if matches!(self.state, ScannerState::InScaleInformation) {
-                    self.state = ScannerState::InMidiClip;
+                if matches!(self.state, ParserState::InScaleInformation) {
+                    self.state = ParserState::InMidiClip;
                 }
             }
             _ => {}
@@ -1358,7 +1358,7 @@ impl Scanner {
         &mut self,
         event: &quick_xml::events::BytesText,
     ) -> Result<(), LiveSetError> {
-        if let ScannerState::InData {
+        if let ParserState::InData {
             ref mut current_data,
         } = self.state
         {

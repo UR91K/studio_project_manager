@@ -281,7 +281,7 @@ pub struct Plugin {
     pub(crate) version: Option<String>,
     pub(crate) sdk_version: Option<String>,
     pub(crate) flags: Option<i32>,
-    pub(crate) scanstate: Option<i32>,
+    pub(crate) parsestate: Option<i32>,
     pub(crate) enabled: Option<i32>,
     pub(crate) plugin_format: PluginFormat,
     pub(crate) installed: bool,
@@ -300,7 +300,7 @@ impl Plugin {
             version: None,
             sdk_version: None,
             flags: None,
-            scanstate: None,
+            parsestate: None,
             enabled: None,
             plugin_format,
             installed: false,
@@ -316,7 +316,7 @@ impl Plugin {
             self.version = db_plugin.version;
             self.sdk_version = db_plugin.sdk_version;
             self.flags = db_plugin.flags;
-            self.scanstate = db_plugin.scanstate;
+            self.parsestate = db_plugin.parsestate;
             self.enabled = db_plugin.enabled;
             self.installed = true;
         } else {

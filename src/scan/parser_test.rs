@@ -1,18 +1,18 @@
-use super::parser::{ScanOptions, Scanner, ScannerState};
+use super::parser::{ParseOptions, Parser, ParserState};
 use crate::error::LiveSetError;
 use crate::models::{PluginFormat, Scale, TimeSignature, Tonic};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::sync::Once;
 
-use super::parser::ScanResult;
+use super::parser::ParseResult;
 
 static TIME_SIGNATURE: TimeSignature = TimeSignature {
     numerator: 4,
     denominator: 4,
 };
 
-fn setup_valid_scanner(scanner: &mut Scanner) {
+fn setup_valid_scanner(scanner: &mut Parser) {
     scanner.current_tempo = 120.0;
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 }
@@ -27,7 +27,7 @@ fn setup() {
     });
 }
 
-fn create_test_scanner() -> Scanner {
+fn create_test_scanner() -> Parser {
     setup();
     let xml_data = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -50,10 +50,10 @@ fn create_test_scanner() -> Scanner {
 "#
     )
     .into_bytes();
-    Scanner::new(&xml_data, ScanOptions::default()).expect("Failed to create test scanner")
+    Parser::new(&xml_data, ParseOptions::default()).expect("Failed to create test scanner")
 }
 
-fn create_test_scanner_with_version(version: u32) -> Scanner {
+fn create_test_scanner_with_version(version: u32) -> Parser {
     setup();
     let xml_data = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -77,7 +77,7 @@ fn create_test_scanner_with_version(version: u32) -> Scanner {
         version
     )
     .into_bytes();
-    Scanner::new(&xml_data, ScanOptions::default()).expect("Failed to create test scanner")
+    Parser::new(&xml_data, ParseOptions::default()).expect("Failed to create test scanner")
 }
 
 // TESTS
@@ -128,7 +128,7 @@ fn test_furthest_bar() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert!(result.furthest_bar.is_some());
     assert_eq!(result.furthest_bar.unwrap(), 8.0); // 32.0 / 4 beats per bar = 8.0 bars
 }
@@ -144,7 +144,7 @@ fn test_furthest_bar_no_tempo() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default());
+    let result = scanner.finalize_result(ParseResult::default());
     assert!(result.is_err());
     match result {
         Err(LiveSetError::InvalidProject(msg)) => {
@@ -163,7 +163,7 @@ fn test_version_parsing() {
                 </LiveSet>
             </Ableton>"#.as_bytes();
 
-    let scanner = Scanner::new(xml_data, ScanOptions::default()).unwrap();
+    let scanner = Parser::new(xml_data, ParseOptions::default()).unwrap();
     assert_eq!(scanner.ableton_version.major, 12);
     assert_eq!(scanner.ableton_version.minor, 0);
     assert_eq!(scanner.ableton_version.patch, 12049);
@@ -179,7 +179,7 @@ fn test_invalid_version_format() {
 </Ableton>"#
         .as_bytes();
 
-    let result = Scanner::new(xml_data, ScanOptions::default());
+    let result = Parser::new(xml_data, ParseOptions::default());
     assert!(matches!(result, Err(LiveSetError::InvalidVersion(_))));
 }
 
@@ -192,7 +192,7 @@ fn test_missing_version() {
 </Ableton>"#
         .as_bytes();
 
-    let result = Scanner::new(xml_data, ScanOptions::default());
+    let result = Parser::new(xml_data, ParseOptions::default());
     assert!(matches!(result, Err(LiveSetError::MissingVersion)));
 }
 
@@ -204,7 +204,7 @@ fn test_beta_version() {
     </LiveSet>
 </Ableton>"#.as_bytes();
 
-    let scanner = Scanner::new(xml_data, ScanOptions::default()).unwrap();
+    let scanner = Parser::new(xml_data, ParseOptions::default()).unwrap();
     assert_eq!(scanner.ableton_version.major, 12);
     assert_eq!(scanner.ableton_version.minor, 0);
     assert_eq!(scanner.ableton_version.patch, 12049);
@@ -238,7 +238,7 @@ fn test_vst3_audio_fx() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert_eq!(result.plugins.len(), 1);
     let plugin = result.plugins.iter().next().unwrap();
     assert!(
@@ -280,7 +280,7 @@ fn test_vst2_audio_fx() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert_eq!(result.plugins.len(), 1);
     let plugin = result.plugins.iter().next().unwrap();
     assert!(
@@ -322,7 +322,7 @@ fn test_vst3_instrument() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert_eq!(result.plugins.len(), 1);
     let plugin = result.plugins.iter().next().unwrap();
     assert!(
@@ -385,7 +385,7 @@ fn test_interleaved_plugins_and_sample() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert_eq!(result.plugins.len(), 2);
     assert_eq!(result.samples.len(), 1);
 
@@ -650,7 +650,7 @@ fn test_sample_v12() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
 
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
     let sample = result.samples.iter().next().unwrap();
@@ -722,7 +722,7 @@ fn test_sample_v10() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
 
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
     let sample = result.samples.iter().next().unwrap();
@@ -788,7 +788,7 @@ fn test_sample_v9() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
 
     assert_eq!(result.samples.len(), 1, "Should have collected one sample");
     let sample = result.samples.iter().next().unwrap();
@@ -969,7 +969,7 @@ fn test_key_signature_v12() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert_eq!(result.key_signature.clone().unwrap().tonic, Tonic::C);
     assert_eq!(result.key_signature.clone().unwrap().scale, Scale::Major);
 }
@@ -994,7 +994,7 @@ fn test_key_signature_v9() {
 
     process_xml(&mut scanner, &mut reader);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert!(
         result.key_signature.is_none(),
         "Key signature should be None for Ableton version 9"
@@ -1127,7 +1127,7 @@ fn test_key_signature_not_in_key() {
 
     setup_valid_scanner(&mut scanner);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert_eq!(result.key_signature.clone().unwrap().tonic, Tonic::Empty);
     assert_eq!(result.key_signature.clone().unwrap().scale, Scale::Empty);
     assert_eq!(scanner.key_frequencies.len(), 0);
@@ -1166,13 +1166,13 @@ fn test_multiple_key_signatures() {
 
     setup_valid_scanner(&mut scanner);
 
-    let result = scanner.finalize_result(ScanResult::default()).unwrap();
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
     assert_eq!(result.key_signature.clone().unwrap().tonic, Tonic::C);
     assert_eq!(result.key_signature.clone().unwrap().scale, Scale::Major);
     assert_eq!(scanner.key_frequencies.len(), 2);
 }
 
-fn process_xml(scanner: &mut Scanner, reader: &mut Reader<&[u8]>) {
+fn process_xml(scanner: &mut Parser, reader: &mut Reader<&[u8]>) {
     let mut buf = Vec::new();
     let mut byte_pos = 0;
     loop {
@@ -1195,10 +1195,10 @@ fn process_xml(scanner: &mut Scanner, reader: &mut Reader<&[u8]>) {
     }
 }
 
-fn assert_clean_state(scanner: &Scanner) {
+fn assert_clean_state(scanner: &Parser) {
     assert_eq!(
         scanner.state,
-        ScannerState::Root,
+        ParserState::Root,
         "Scanner should be in Root state"
     );
     assert_eq!(

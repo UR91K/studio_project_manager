@@ -235,7 +235,7 @@ impl LiveSetDatabase {
                 plugin.version,
                 plugin.sdk_version,
                 plugin.flags,
-                plugin.scanstate,
+                plugin.parsestate,
                 plugin.enabled,
                 plugin.installed,
             ],
@@ -438,7 +438,7 @@ impl LiveSetDatabase {
                                     version: row.get(8)?,
                                     sdk_version: row.get(9)?,
                                     flags: row.get(10)?,
-                                    scanstate: row.get(11)?,
+                                    parsestate: row.get(11)?,
                                     enabled: row.get(12)?,
                                 })
                             })?
@@ -630,7 +630,7 @@ impl LiveSetDatabase {
                     version: row.get(8)?,
                     sdk_version: row.get(9)?,
                     flags: row.get(10)?,
-                    scanstate: row.get(11)?,
+                    parsestate: row.get(11)?,
                     enabled: row.get(12)?,
                 })
             })?
