@@ -758,6 +758,7 @@ impl LiveSetDatabase {
 
         // Debug: Inspect FTS index content
         debug!("Inspecting FTS5 index for project {}", live_set.file_name);
+        #[allow(unused)]
         if let Ok(Some(row)) = tx.query_row(
             "SELECT * FROM project_search WHERE project_id = ?",
             params![project_id],
