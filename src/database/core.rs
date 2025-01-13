@@ -1,14 +1,13 @@
-#![allow(unused_imports)]
+use super::models::SqlDateTime;
 use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
-use chrono::{DateTime, Local, TimeZone};
-use log::{debug, info, warn};
-use rusqlite::{params, types::ToSql, Connection, OptionalExtension, Result as SqliteResult};
+use chrono::{Local, TimeZone};
+use log::{debug, info};
+use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use uuid::Uuid;
-use super::models::SqlDateTime;
 pub struct LiveSetDatabase {
     pub conn: Connection,
 }
@@ -257,7 +256,11 @@ impl LiveSetDatabase {
         Ok(())
     }
 
-    fn link_project_plugin(tx: &rusqlite::Transaction, project_id: &str, plugin_id: &str) -> Result<(), DatabaseError> {
+    fn link_project_plugin(
+        tx: &rusqlite::Transaction,
+        project_id: &str,
+        plugin_id: &str,
+    ) -> Result<(), DatabaseError> {
         tx.execute(
             "INSERT OR REPLACE INTO project_plugins (project_id, plugin_id) VALUES (?, ?)",
             params![project_id, plugin_id],
@@ -265,7 +268,11 @@ impl LiveSetDatabase {
         Ok(())
     }
 
-    fn link_project_sample(tx: &rusqlite::Transaction, project_id: &str, sample_id: &str) -> Result<(), DatabaseError> {
+    fn link_project_sample(
+        tx: &rusqlite::Transaction,
+        project_id: &str,
+        sample_id: &str,
+    ) -> Result<(), DatabaseError> {
         tx.execute(
             "INSERT OR REPLACE INTO project_samples (project_id, sample_id) VALUES (?, ?)",
             params![project_id, sample_id],
@@ -669,7 +676,11 @@ impl LiveSetDatabase {
     }
 
     pub fn insert_project(&mut self, live_set: &LiveSet) -> Result<(), DatabaseError> {
-        debug!("Inserting project: {} ({})", live_set.file_name, live_set.file_path.display());
+        debug!(
+            "Inserting project: {} ({})",
+            live_set.file_name,
+            live_set.file_path.display()
+        );
         let tx = self.conn.transaction()?;
 
         // Insert project
@@ -778,8 +789,12 @@ impl LiveSetDatabase {
         }
 
         tx.commit()?;
-        info!("Successfully inserted project {} with {} plugins and {} samples", 
-            live_set.file_name, live_set.plugins.len(), live_set.samples.len());
+        info!(
+            "Successfully inserted project {} with {} plugins and {} samples",
+            live_set.file_name,
+            live_set.plugins.len(),
+            live_set.samples.len()
+        );
 
         Ok(())
     }

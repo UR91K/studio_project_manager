@@ -2,9 +2,8 @@
 use crate::database::models::SqlDateTime;
 use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
-use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
 use chrono::{DateTime, Local, TimeZone, NaiveDateTime, NaiveDate, NaiveTime};
-use log::{debug, info, warn};
+use log::debug;
 use rusqlite::{params, types::ToSql, Connection, OptionalExtension, Result as SqliteResult};
 use std::collections::HashSet;
 use std::path::PathBuf;
