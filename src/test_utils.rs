@@ -5,7 +5,7 @@ use uuid::Uuid;
 use chrono::{DateTime, Local};
 
 use crate::models::{AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, TimeSignature};
-use crate::scan::scanner::ScanResult;
+use crate::scan::parser::ParseResult;
 
 /// Builder for creating test LiveSets with specific properties
 #[derive(Debug)]
@@ -57,7 +57,7 @@ impl LiveSetBuilder {
             version: None,
             sdk_version: None,
             flags: None,
-            scanstate: None,
+            parsestate: None,
             enabled: None,
             plugin_format: PluginFormat::VST3AudioFx,
             installed: false,
@@ -76,7 +76,7 @@ impl LiveSetBuilder {
             version: Some("1.0.0".to_string()),
             sdk_version: Some("1.0.0".to_string()),
             flags: Some(0),
-            scanstate: Some(0),
+            parsestate: Some(0),
             enabled: Some(1),
             plugin_format: PluginFormat::VST3AudioFx,
             installed: true,
@@ -127,8 +127,8 @@ impl LiveSetBuilder {
         self
     }
 
-    pub fn build(self) -> ScanResult {
-        ScanResult {
+    pub fn build(self) -> ParseResult {
+        ParseResult {
             plugins: self.plugins,
             samples: self.samples,
             tempo: self.tempo,

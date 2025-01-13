@@ -7,7 +7,7 @@ use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::error::LiveSetError;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
-use crate::scan::{ScanOptions as ScannerOptions, Scanner};
+use crate::scan::{ParseOptions as ScannerOptions, Parser};
 use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamps};
 use crate::utils::plugins::get_most_recent_db_file;
 use crate::utils::{decompress_gzip_file, validate_ableton_file};
@@ -49,8 +49,8 @@ impl LiveSet {
         let scan_result = {
             let xml_data = decompress_gzip_file(&file_path)?;
             let scanner_options = ScannerOptions::default();
-            let mut scanner = Scanner::new(&xml_data, scanner_options)?;
-            scanner.scan(&xml_data)?
+            let mut scanner = Parser::new(&xml_data, scanner_options)?;
+            scanner.parse(&xml_data)?
             // xml_data is dropped here when the block ends
         };
 

@@ -15,7 +15,7 @@ pub struct DbPlugin {
     pub version: Option<String>,
     pub sdk_version: Option<String>,
     pub flags: Option<i32>,
-    pub scanstate: Option<i32>,
+    pub parsestate: Option<i32>,
     pub enabled: Option<i32>,
 }
 
@@ -65,7 +65,7 @@ impl AbletonDatabase {
                 version: row.get(5)?,
                 sdk_version: row.get(6)?,
                 flags: row.get(7)?,
-                scanstate: row.get(8)?,
+                parsestate: row.get(8)?,
                 enabled: row.get(9)?,
             })
         });

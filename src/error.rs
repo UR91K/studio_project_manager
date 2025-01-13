@@ -265,8 +265,20 @@ pub enum TempoError {
     InvalidTempoValue,
 }
 
+#[derive(Error, Debug)]
+pub enum PatternError {
+    #[error("Invalid regex pattern: {0}")]
+    InvalidRegex(#[from] regex::Error),
+    
+    #[error("Pattern matching failed: {0}")]
+    MatchError(String),
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum LiveSetError {
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+
     #[error("XML error: {0}")]
     XmlError(#[from] XmlParseError),
 
@@ -299,6 +311,9 @@ pub enum LiveSetError {
 
     #[error("Plugin error: {0}")]
     PluginError(#[from] PluginError),
+
+    #[error("Pattern error: {0}")]
+    PatternError(#[from] PatternError),
 
     #[error("Failed to create LiveSet: {0}")]
     CreateLiveSetError(String),

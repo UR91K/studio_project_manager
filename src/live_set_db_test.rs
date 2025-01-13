@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_imports)]
 use crate::database::LiveSetDatabase;
-use crate::scan::ScanResult;
+use crate::scan::ParseResult;
 use crate::test_utils::LiveSetBuilder;
 use chrono::Local;
 use std::collections::HashSet;
@@ -42,7 +42,7 @@ fn create_test_live_set() -> LiveSet {
         version: Some("1.0.0".to_string()),
         sdk_version: Some("1.0".to_string()),
         flags: Some(0),
-        scanstate: Some(1),
+        parsestate: Some(1),
         enabled: Some(1),
         plugin_format: PluginFormat::VST3AudioFx,
         installed: true,
@@ -89,7 +89,7 @@ fn create_test_live_set() -> LiveSet {
     }
 }
 
-fn create_test_live_set_from_scan(name: &str, scan_result: ScanResult) -> LiveSet {
+fn create_test_live_set_from_scan(name: &str, scan_result: ParseResult) -> LiveSet {
     let now = Local::now();
     LiveSet {
         id: Uuid::new_v4(),

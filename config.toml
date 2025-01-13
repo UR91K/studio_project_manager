@@ -1,8 +1,7 @@
 # config.toml
 
 # if you change this file while the program is running, you need to restart the program for changes to take effect.
-
-# I haven't added support for multiple project folders yet, so if you add multiple directories to the paths, only the first one will be scanned.
+# TODO: Add support for multiple project folders
 
 paths = [
     '{USER_HOME}\Documents\Projects\90s'
