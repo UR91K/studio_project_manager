@@ -16,13 +16,13 @@ A tool which aims to let users create an index of their Ableton Live sets and se
     - Length (bars)
     - Plugins used
     - Samples used
+    - Key + scale
+    - Estimated duration
 - Check which plugins are missing in a project
-
+- Efficient 5NF database for storing project information
+- FTS5 fuzzy searching across all project data
 
 ### Coming very soon - high priority
-- Extract Key + scale, time duration,
-- Efficient 5NF database for storing project information
-- Fast, fuzzy searching across all project data
 - GUI with a search bar, user-friendly database viewer, and ability to add folders, etc.
 
 ### Planned - lower priority
