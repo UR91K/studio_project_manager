@@ -22,7 +22,6 @@ pub struct LiveSet {
     pub(crate) file_hash: String,
     pub(crate) created_time: DateTime<Local>,
     pub(crate) modified_time: DateTime<Local>,
-    pub(crate) xml_data: Vec<u8>,
     pub(crate) last_scan_timestamp: DateTime<Local>,
 
     pub(crate) ableton_version: AbletonVersion,
@@ -45,12 +44,15 @@ impl LiveSet {
         let file_name: String = load_file_name(&file_path)?;
         let (modified_time, created_time) = load_file_timestamps(&file_path)?;
         let file_hash: String = load_file_hash(&file_path)?;
-        let xml_data: Vec<u8> = decompress_gzip_file(&file_path)?;
-
-        // Use our new scanner to load everything
-        let scanner_options = ScannerOptions::default();
-        let mut scanner = Scanner::new(&xml_data, scanner_options)?;
-        let scan_result = scanner.scan(&xml_data)?;
+        
+        // Scope the xml_data to this block so it's dropped after scanning
+        let scan_result = {
+            let xml_data = decompress_gzip_file(&file_path)?;
+            let scanner_options = ScannerOptions::default();
+            let mut scanner = Scanner::new(&xml_data, scanner_options)?;
+            scanner.scan(&xml_data)?
+            // xml_data is dropped here when the block ends
+        };
 
         let mut live_set = LiveSet {
             id: Uuid::new_v4(),
@@ -59,7 +61,6 @@ impl LiveSet {
             file_hash,
             created_time,
             modified_time,
-            xml_data,
             last_scan_timestamp: Local::now(),
 
             ableton_version: scan_result.version,
@@ -171,7 +172,6 @@ mod tests {
         assert!(!live_set.file_name.is_empty());
         assert!(live_set.created_time < live_set.modified_time);
         assert!(!live_set.file_hash.is_empty());
-        assert!(!live_set.xml_data.is_empty());
 
         // Version check
         assert!(live_set.ableton_version.major >= 9);
@@ -261,13 +261,18 @@ mod tests {
                 .blue()
             );
 
+            // Get XML size before creating LiveSet
+            let xml_data = decompress_gzip_file(&path.to_path_buf()).expect("Failed to decompress file");
+            let xml_size_mb = xml_data.len() as f64 / 1_000_000.0;
+            total_size += xml_size_mb;
+            
+            // Drop xml_data before creating LiveSet
+            drop(xml_data);
+
             let start = Instant::now();
             let live_set = LiveSet::new(path.to_path_buf()).expect("Failed to load project");
             let duration = start.elapsed();
             let duration_secs = duration.as_secs_f64();
-
-            let xml_size_mb = live_set.xml_data.len() as f64 / 1_000_000.0;
-            total_size += xml_size_mb;
             total_time += duration_secs;
 
             println!("\n{}", "Scan Performance:".yellow().bold());

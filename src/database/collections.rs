@@ -270,7 +270,6 @@ impl LiveSetDatabase {
                         .ok_or_else(|| {
                             rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
                         })?,
-                    xml_data: Vec::new(),
 
                     tempo: row.get(8)?,
                     time_signature: TimeSignature {
