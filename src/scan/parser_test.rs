@@ -1,11 +1,11 @@
-use super::scanner::{ScanOptions, Scanner, ScannerState};
+use super::parser::{ScanOptions, Scanner, ScannerState};
 use crate::error::LiveSetError;
 use crate::models::{PluginFormat, Scale, TimeSignature, Tonic};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::sync::Once;
 
-use super::scanner::ScanResult;
+use super::parser::ScanResult;
 
 static TIME_SIGNATURE: TimeSignature = TimeSignature {
     numerator: 4,
