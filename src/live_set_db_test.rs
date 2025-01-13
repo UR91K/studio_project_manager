@@ -64,7 +64,6 @@ fn create_test_live_set() -> LiveSet {
         created_time: now,
         modified_time: now,
         last_scan_timestamp: now,
-        xml_data: Vec::new(),
 
         ableton_version: AbletonVersion {
             major: 11,
@@ -100,7 +99,6 @@ fn create_test_live_set_from_scan(name: &str, scan_result: ScanResult) -> LiveSe
         created_time: now,
         modified_time: now,
         last_scan_timestamp: now,
-        xml_data: Vec::new(),
 
         ableton_version: scan_result.version,
         key_signature: scan_result.key_signature,

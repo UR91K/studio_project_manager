@@ -386,7 +386,6 @@ mod tests {
             samples: edm_scan.samples,
             tags: HashSet::new(),
             id: Uuid::new_v4(),
-            xml_data: b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Ableton/>".to_vec(),
         };
 
         let rock_project = LiveSet {
@@ -406,7 +405,6 @@ mod tests {
             samples: rock_scan.samples,
             tags: HashSet::new(),
             id: Uuid::new_v4(),
-            xml_data: b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Ableton/>".to_vec(),
         };
 
         // Insert projects
