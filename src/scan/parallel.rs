@@ -2,12 +2,10 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use colored::*;
 
 use crate::error::LiveSetError;
 use crate::live_set::LiveSet;
-use crate::config::CONFIG;
-use crate::models::{AbletonVersion, Plugin, PluginFormat};
+
 
 /// Result type for parsing operations
 type ParseResult = Result<(PathBuf, LiveSet), (PathBuf, LiveSetError)>;
@@ -113,6 +111,9 @@ mod tests {
     use crate::scan::project_scanner::ProjectPathScanner;
     use std::collections::{HashMap, HashSet};
     use std::time::Duration;
+    use colored::*;
+    use crate::config::CONFIG;
+    use crate::models::AbletonVersion;
 
     #[derive(Default)]
     struct ProjectStats {
