@@ -132,8 +132,8 @@ mod tests {
         create_test_file(temp_dir2.path(), "project2.als");
         create_test_file(temp_dir2.path(), "project2 [2023-10-15 123456].als");
         
-        let scanner = ProjectPathScanner::new().unwrap();
-        let paths = scanner.scan_directories(&[
+        let parser = ProjectPathScanner::new().unwrap();
+        let paths = parser.scan_directories(&[
             temp_dir1.path().to_path_buf(),
             temp_dir2.path().to_path_buf(),
         ]).unwrap();

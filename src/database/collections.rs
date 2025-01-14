@@ -224,7 +224,7 @@ impl LiveSetDatabase {
         {
             let mut stmt = tx.prepare(
                 r#"
-                SELECT p.id, p.path, p.name, p.hash, p.notes, p.created_at, p.modified_at, p.last_scanned_at,
+                SELECT p.id, p.path, p.name, p.hash, p.notes, p.created_at, p.modified_at, p.last_parsed_at,
                        p.tempo, p.time_signature_numerator, p.time_signature_denominator,
                        p.key_signature_tonic, p.key_signature_scale, p.duration_seconds, p.furthest_bar,
                        p.ableton_version_major, p.ableton_version_minor, p.ableton_version_patch, p.ableton_version_beta
@@ -242,7 +242,7 @@ impl LiveSetDatabase {
                 let duration_secs: Option<i64> = row.get(13)?;
                 let created_timestamp: i64 = row.get(5)?;
                 let modified_timestamp: i64 = row.get(6)?;
-                let scanned_timestamp: i64 = row.get(7)?;
+                let parsed_timestamp: i64 = row.get(7)?;
 
                 let mut live_set = LiveSet {
                     id: Uuid::parse_str(&project_id).map_err(|_| {
@@ -263,8 +263,8 @@ impl LiveSetDatabase {
                         .ok_or_else(|| {
                             rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
                         })?,
-                    last_scan_timestamp: Local
-                        .timestamp_opt(scanned_timestamp, 0)
+                    last_parsed_timestamp: Local
+                        .timestamp_opt(parsed_timestamp, 0)
                         .single()
                         .ok_or_else(|| {
                             rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
@@ -314,7 +314,7 @@ impl LiveSetDatabase {
                             version: row.get(8)?,
                             sdk_version: row.get(9)?,
                             flags: row.get(10)?,
-                            parsestate: row.get(11)?,
+                            scanstate: row.get(11)?,
                             enabled: row.get(12)?,
                         })
                     })?.filter_map(|r| r.ok()).collect();

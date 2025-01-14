@@ -42,7 +42,7 @@ fn create_test_live_set() -> LiveSet {
         version: Some("1.0.0".to_string()),
         sdk_version: Some("1.0".to_string()),
         flags: Some(0),
-        parsestate: Some(1),
+        scanstate: Some(1),
         enabled: Some(1),
         plugin_format: PluginFormat::VST3AudioFx,
         installed: true,
@@ -63,7 +63,7 @@ fn create_test_live_set() -> LiveSet {
         file_hash: "test_hash".to_string(),
         created_time: now,
         modified_time: now,
-        last_scan_timestamp: now,
+        last_parsed_timestamp: now,
 
         ableton_version: AbletonVersion {
             major: 11,
@@ -89,7 +89,7 @@ fn create_test_live_set() -> LiveSet {
     }
 }
 
-fn create_test_live_set_from_scan(name: &str, scan_result: ParseResult) -> LiveSet {
+fn create_test_live_set_from_parse(name: &str, parse_result: ParseResult) -> LiveSet {
     let now = Local::now();
     LiveSet {
         id: Uuid::new_v4(),
@@ -98,15 +98,15 @@ fn create_test_live_set_from_scan(name: &str, scan_result: ParseResult) -> LiveS
         file_hash: format!("test_hash_{}", name),
         created_time: now,
         modified_time: now,
-        last_scan_timestamp: now,
+        last_parsed_timestamp: now,
 
-        ableton_version: scan_result.version,
-        key_signature: scan_result.key_signature,
-        tempo: scan_result.tempo,
-        time_signature: scan_result.time_signature,
-        furthest_bar: scan_result.furthest_bar,
-        plugins: scan_result.plugins,
-        samples: scan_result.samples,
+        ableton_version: parse_result.version,
+        key_signature: parse_result.key_signature,
+        tempo: parse_result.tempo,
+        time_signature: parse_result.time_signature,
+        furthest_bar: parse_result.furthest_bar,
+        plugins: parse_result.plugins,
+        samples: parse_result.samples,
 
         estimated_duration: Some(chrono::Duration::seconds(60)),
         tags: HashSet::new(),
@@ -213,7 +213,7 @@ fn test_multiple_projects() {
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create three different projects with distinct characteristics
-    let edm_project = create_test_live_set_from_scan(
+    let edm_project = create_test_live_set_from_parse(
         "EDM Project.als",
         LiveSetBuilder::new()
             .with_plugin("Serum")
@@ -225,7 +225,7 @@ fn test_multiple_projects() {
             .build(),
     );
 
-    let rock_project = create_test_live_set_from_scan(
+    let rock_project = create_test_live_set_from_parse(
         "Rock Band.als",
         LiveSetBuilder::new()
             .with_plugin("Guitar Rig 6")
@@ -236,7 +236,7 @@ fn test_multiple_projects() {
             .build(),
     );
 
-    let ambient_project = create_test_live_set_from_scan(
+    let ambient_project = create_test_live_set_from_parse(
         "Ambient Soundscape.als",
         LiveSetBuilder::new()
             .with_plugin("Omnisphere")
@@ -354,7 +354,7 @@ fn test_collections() {
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create three test projects with different characteristics
-    let edm_project = create_test_live_set_from_scan(
+    let edm_project = create_test_live_set_from_parse(
         "EDM Project.als",
         LiveSetBuilder::new()
             .with_plugin("Serum")
@@ -362,7 +362,7 @@ fn test_collections() {
             .build(),
     );
 
-    let rock_project = create_test_live_set_from_scan(
+    let rock_project = create_test_live_set_from_parse(
         "Rock Band.als",
         LiveSetBuilder::new()
             .with_plugin("Guitar Rig 6")
@@ -370,7 +370,7 @@ fn test_collections() {
             .build(),
     );
 
-    let ambient_project = create_test_live_set_from_scan(
+    let ambient_project = create_test_live_set_from_parse(
         "Ambient Soundscape.als",
         LiveSetBuilder::new()
             .with_plugin("Omnisphere")
@@ -522,7 +522,7 @@ fn test_notes_and_tasks() {
     assert_eq!(completed_collection_task.1, "test_project.als"); // Check project name
 
     // Create a second project with tasks
-    let project2 = create_test_live_set_from_scan(
+    let project2 = create_test_live_set_from_parse(
         "Second Project.als",
         LiveSetBuilder::new().build()
     );

@@ -113,7 +113,7 @@ impl LiveSetDatabase {
                 let mut stmt = tx.prepare(
                     r#"
                     SELECT 
-                        id, path, name, hash, created_at, modified_at, last_scanned_at,
+                        id, path, name, hash, created_at, modified_at, last_parsed_at,
                         tempo, time_signature_numerator, time_signature_denominator,
                         key_signature_tonic, key_signature_scale, duration_seconds, furthest_bar,
                         ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta
@@ -150,7 +150,7 @@ impl LiveSetDatabase {
                             .ok_or_else(|| {
                                 rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
                             })?,
-                        last_scan_timestamp: Local
+                        last_parsed_timestamp: Local
                             .timestamp_opt(scanned_timestamp, 0)
                             .single()
                             .ok_or_else(|| {
@@ -224,7 +224,7 @@ impl LiveSetDatabase {
                                     version: row.get(8)?,
                                     sdk_version: row.get(9)?,
                                     flags: row.get(10)?,
-                                    parsestate: row.get(11)?,
+                                    scanstate: row.get(11)?,
                                     enabled: row.get(12)?,
                                 })
                             })?
