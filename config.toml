@@ -4,7 +4,7 @@
 # TODO: Add support for multiple project folders
 
 paths = [
-    '{USER_HOME}\Documents\Projects\90s'
+    'C:\Users\judee\Documents\Projects\band with joel'
 ]
 
 # use {USER_HOME} as a shortcut to your user folder

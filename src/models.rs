@@ -16,7 +16,7 @@ use crate::utils::plugins::get_most_recent_db_file;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Id(u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AbletonVersion {
     pub major: u32,
     pub minor: u32,
@@ -223,14 +223,14 @@ impl FromStr for PluginFormat {
     }
 }
 
-impl std::fmt::Display for Tonic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Tonic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl std::fmt::Display for Scale {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Scale {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
@@ -281,7 +281,7 @@ pub struct Plugin {
     pub(crate) version: Option<String>,
     pub(crate) sdk_version: Option<String>,
     pub(crate) flags: Option<i32>,
-    pub(crate) parsestate: Option<i32>,
+    pub(crate) scanstate: Option<i32>,
     pub(crate) enabled: Option<i32>,
     pub(crate) plugin_format: PluginFormat,
     pub(crate) installed: bool,
@@ -300,14 +300,14 @@ impl Plugin {
             version: None,
             sdk_version: None,
             flags: None,
-            parsestate: None,
+            scanstate: None,
             enabled: None,
             plugin_format,
             installed: false,
         }
     }
 
-    pub fn rescan(&mut self, db: &AbletonDatabase) -> Result<(), DatabaseError> {
+    pub fn reparse(&mut self, db: &AbletonDatabase) -> Result<(), DatabaseError> {
         if let Some(db_plugin) = db.get_plugin_by_dev_identifier(&self.dev_identifier)? {
             self.plugin_id = Some(db_plugin.plugin_id);
             self.module_id = db_plugin.module_id;
@@ -316,7 +316,7 @@ impl Plugin {
             self.version = db_plugin.version;
             self.sdk_version = db_plugin.sdk_version;
             self.flags = db_plugin.flags;
-            self.parsestate = db_plugin.parsestate;
+            self.scanstate = db_plugin.parsestate;
             self.enabled = db_plugin.enabled;
             self.installed = true;
         } else {

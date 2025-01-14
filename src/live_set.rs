@@ -7,7 +7,7 @@ use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
 use crate::error::LiveSetError;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
-use crate::scan::{ParseOptions as ScannerOptions, Parser};
+use crate::scan::{ParseOptions, Parser};
 use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamps};
 use crate::utils::plugins::get_most_recent_db_file;
 use crate::utils::{decompress_gzip_file, validate_ableton_file};
@@ -22,7 +22,7 @@ pub struct LiveSet {
     pub(crate) file_hash: String,
     pub(crate) created_time: DateTime<Local>,
     pub(crate) modified_time: DateTime<Local>,
-    pub(crate) last_scan_timestamp: DateTime<Local>,
+    pub(crate) last_parsed_timestamp: DateTime<Local>,
 
     pub(crate) ableton_version: AbletonVersion,
 
@@ -45,12 +45,12 @@ impl LiveSet {
         let (modified_time, created_time) = load_file_timestamps(&file_path)?;
         let file_hash: String = load_file_hash(&file_path)?;
         
-        // Scope the xml_data to this block so it's dropped after scanning
-        let scan_result = {
+        // Scope the xml_data to this block so it's dropped after parsing
+        let parse_result = {
             let xml_data = decompress_gzip_file(&file_path)?;
-            let scanner_options = ScannerOptions::default();
-            let mut scanner = Parser::new(&xml_data, scanner_options)?;
-            scanner.parse(&xml_data)?
+            let parser_options = ParseOptions::default();
+            let mut parser = Parser::new(&xml_data, parser_options)?;
+            parser.parse(&xml_data)?
             // xml_data is dropped here when the block ends
         };
 
@@ -61,15 +61,15 @@ impl LiveSet {
             file_hash,
             created_time,
             modified_time,
-            last_scan_timestamp: Local::now(),
+            last_parsed_timestamp: Local::now(),
 
-            ableton_version: scan_result.version,
-            key_signature: scan_result.key_signature,
-            tempo: scan_result.tempo,
-            time_signature: scan_result.time_signature,
-            furthest_bar: scan_result.furthest_bar,
-            plugins: scan_result.plugins,
-            samples: scan_result.samples,
+            ableton_version: parse_result.version,
+            key_signature: parse_result.key_signature,
+            tempo: parse_result.tempo,
+            time_signature: parse_result.time_signature,
+            furthest_bar: parse_result.furthest_bar,
+            plugins: parse_result.plugins,
+            samples: parse_result.samples,
             tags: HashSet::new(),
 
             estimated_duration: None,
@@ -90,7 +90,7 @@ impl LiveSet {
     }
 
     #[allow(dead_code)]
-    pub fn rescan_plugins(&mut self) -> Result<(), LiveSetError> {
+    pub fn reparse_plugins(&mut self) -> Result<(), LiveSetError> {
         let config = CONFIG
             .as_ref()
             .map_err(|e| LiveSetError::ConfigError(e.clone()))?;
@@ -105,7 +105,7 @@ impl LiveSet {
         for plugin in self.plugins.iter() {
             let mut updated_plugin = plugin.clone();
             updated_plugin
-                .rescan(&ableton_db)
+                .reparse(&ableton_db)
                 .map_err(|e| LiveSetError::DatabaseError(e))?;
             updated_plugins.insert(updated_plugin);
         }
@@ -201,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scan_performance() {
+    fn test_parse_performance() {
         setup_no_logging();
 
         std::env::set_var("RUST_LOG", "error");
@@ -275,10 +275,10 @@ mod tests {
             let duration_secs = duration.as_secs_f64();
             total_time += duration_secs;
 
-            println!("\n{}", "Scan Performance:".yellow().bold());
+            println!("\n{}", "Parse Performance:".yellow().bold());
             println!(
                 "  - {}: {}",
-                "Scan time".bright_black(),
+                "Parse time".bright_black(),
                 format!("{:.2?}", duration).green()
             );
             println!(
