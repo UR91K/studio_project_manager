@@ -203,6 +203,9 @@ pub enum DatabaseError {
 
     #[error("Configuration error: {0}")]
     ConfigError(#[from] ConfigError),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 }
 
 #[derive(Debug)]

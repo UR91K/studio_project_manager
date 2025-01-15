@@ -546,3 +546,120 @@ fn test_notes_and_tasks() {
     assert_eq!(collection_tasks[0].1, "test_project.als");
     assert_eq!(collection_tasks[2].1, "Second Project.als");
 }
+
+#[test]
+fn test_mark_project_deleted() {
+    setup();
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Create and insert a test project
+    let live_set = create_test_live_set();
+    let project_id = live_set.id;
+    db.insert_project(&live_set).expect("Failed to insert project");
+
+    // Mark project as deleted
+    db.mark_project_deleted(&project_id).expect("Failed to mark project as deleted");
+
+    // Verify project is marked as deleted
+    let deleted_projects = db.get_all_projects_with_status(Some(false))
+        .expect("Failed to get deleted projects");
+    assert_eq!(deleted_projects.len(), 1);
+    assert_eq!(deleted_projects[0].id, project_id);
+    assert!(!deleted_projects[0].is_active);
+
+    // Verify active projects list is empty
+    let active_projects = db.get_all_projects_with_status(Some(true))
+        .expect("Failed to get active projects");
+    assert!(active_projects.is_empty());
+}
+
+#[test]
+fn test_find_deleted_by_hash() {
+    setup();
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Create and insert a test project
+    let live_set = create_test_live_set();
+    let project_id = live_set.id;
+    let file_hash = live_set.file_hash.clone();
+    db.insert_project(&live_set).expect("Failed to insert project");
+
+    // Mark project as deleted
+    db.mark_project_deleted(&project_id).expect("Failed to mark project as deleted");
+
+    // Find deleted project by hash
+    let deleted_projects = db.get_all_projects_with_status(Some(false))
+        .expect("Failed to get deleted projects");
+    let found_project = deleted_projects.iter()
+        .find(|p| p.file_hash == file_hash)
+        .expect("Could not find deleted project by hash");
+    
+    assert_eq!(found_project.id, project_id);
+    assert_eq!(found_project.file_hash, file_hash);
+    assert!(!found_project.is_active);
+}
+
+#[test]
+fn test_reactivate_project() {
+    setup();
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Create and insert a test project
+    let live_set = create_test_live_set();
+    let project_id = live_set.id;
+    db.insert_project(&live_set).expect("Failed to insert project");
+
+    // Mark project as deleted
+    db.mark_project_deleted(&project_id).expect("Failed to mark project as deleted");
+
+    // Reactivate project with new path
+    let new_path = PathBuf::from("C:/test/restored_project.als");
+    db.reactivate_project(&project_id, &new_path)
+        .expect("Failed to reactivate project");
+
+    // Verify project is reactivated
+    let active_projects = db.get_all_projects_with_status(Some(true))
+        .expect("Failed to get active projects");
+    assert_eq!(active_projects.len(), 1);
+    assert_eq!(active_projects[0].id, project_id);
+    assert!(active_projects[0].is_active);
+    assert_eq!(active_projects[0].file_path, new_path);
+
+    // Verify deleted projects list is empty
+    let deleted_projects = db.get_all_projects_with_status(Some(false))
+        .expect("Failed to get deleted projects");
+    assert!(deleted_projects.is_empty());
+}
+
+#[test]
+fn test_permanent_deletion() {
+    setup();
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Create and insert a test project
+    let live_set = create_test_live_set();
+    let project_id = live_set.id;
+    db.insert_project(&live_set).expect("Failed to insert project");
+
+    // Attempt to permanently delete active project (should fail)
+    db.permanently_delete_project(&project_id)
+        .expect_err("Should not be able to permanently delete active project");
+    
+    // Verify project still exists and is active
+    let active_projects = db.get_all_projects_with_status(Some(true))
+        .expect("Failed to get active projects");
+    assert_eq!(active_projects.len(), 1, "Active project should still exist");
+    assert_eq!(active_projects[0].id, project_id);
+
+    // Mark project as deleted
+    db.mark_project_deleted(&project_id).expect("Failed to mark project as deleted");
+
+    // Now permanent deletion should succeed
+    db.permanently_delete_project(&project_id)
+        .expect("Failed to permanently delete project");
+
+    // Verify project is completely gone
+    let all_projects = db.get_all_projects_with_status(None)
+        .expect("Failed to get all projects");
+    assert!(all_projects.is_empty());
+}
