@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::error::{DatabaseError, LiveSetError};
+use crate::error::LiveSetError;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
 use crate::scan::{ParseOptions, Parser};
 use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamps};
