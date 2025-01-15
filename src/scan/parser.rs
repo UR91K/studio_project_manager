@@ -194,7 +194,7 @@ impl Parser {
     /// Detects the Ableton Live version from the XML data
     fn detect_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
-        reader.trim_text(true);
+        reader.config_mut().trim_text(true);
         let mut buf = Vec::new();
 
         loop {
@@ -264,7 +264,7 @@ impl Parser {
     /// Main parsing function that processes the XML data
     pub(crate) fn parse(&mut self, xml_data: &[u8]) -> Result<ParseResult, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
-        reader.trim_text(true);
+        reader.config_mut().trim_text(true);
         let mut buf = Vec::new();
         let mut byte_pos; // Will be set in the loop
         let result = ParseResult::default();
@@ -618,7 +618,7 @@ impl Parser {
         &mut self,
         event: &quick_xml::events::BytesStart,
         reader: &mut Reader<R>,
-        byte_pos: &mut usize,
+        byte_pos: &mut u64,
     ) -> Result<(), LiveSetError> {
         let name = event.name().to_string_result()?;
         let line = self.line_tracker.get_line_number(*byte_pos);

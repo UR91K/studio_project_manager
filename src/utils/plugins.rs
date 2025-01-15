@@ -25,8 +25,11 @@ impl LineTrackingBuffer {
         }
     }
 
-    pub(crate) fn get_line_number(&mut self, byte_position: usize) -> usize {
-        while self.current_position < byte_position && self.current_position < self.data.len() {
+    pub(crate) fn get_line_number(&mut self, byte_position: u64) -> usize {
+        let byte_position_usize = usize::try_from(byte_position)
+            .unwrap_or_else(|_| self.data.len()); // Clamp to max usize or data length
+
+        while self.current_position < byte_position_usize && self.current_position < self.data.len() {
             if self.data[self.current_position] == b'\n' {
                 self.current_line += 1;
             }
@@ -36,7 +39,7 @@ impl LineTrackingBuffer {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn update_position(&mut self, byte_position: usize) {
+    pub(crate) fn update_position(&mut self, byte_position: u64) {
         self.get_line_number(byte_position);
     }
 }
