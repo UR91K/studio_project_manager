@@ -57,6 +57,7 @@ fn create_test_live_set() -> LiveSet {
     });
 
     LiveSet {
+        is_active: true,
         id: Uuid::new_v4(),
         file_path: PathBuf::from("C:/test/test_project.als"),
         file_name: "test_project.als".to_string(),
@@ -92,6 +93,7 @@ fn create_test_live_set() -> LiveSet {
 fn create_test_live_set_from_parse(name: &str, parse_result: ParseResult) -> LiveSet {
     let now = Local::now();
     LiveSet {
+        is_active: true,
         id: Uuid::new_v4(),
         file_path: PathBuf::from(format!("C:/test/{}", name)),
         file_name: name.to_string(),

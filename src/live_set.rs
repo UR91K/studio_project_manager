@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::ableton_db::AbletonDatabase;
 use crate::config::CONFIG;
-use crate::error::LiveSetError;
+use crate::error::{DatabaseError, LiveSetError};
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
 use crate::scan::{ParseOptions, Parser};
 use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamps};
@@ -16,6 +16,8 @@ use crate::{debug_fn, info_fn};
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct LiveSet {
+    pub(crate) is_active: bool,
+
     pub(crate) id: Uuid,
     pub(crate) file_path: PathBuf,
     pub(crate) file_name: String,
@@ -55,6 +57,7 @@ impl LiveSet {
         };
 
         let mut live_set = LiveSet {
+            is_active: true,
             id: Uuid::new_v4(),
             file_path,
             file_name,

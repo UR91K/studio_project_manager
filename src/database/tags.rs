@@ -132,6 +132,7 @@ impl LiveSetDatabase {
                     let scanned_timestamp: i64 = row.get(6)?;
 
                     let mut live_set = LiveSet {
+                        is_active: true,
                         id: Uuid::parse_str(&project_id).map_err(|_| {
                             rusqlite::Error::InvalidParameterName("Invalid UUID".into())
                         })?,

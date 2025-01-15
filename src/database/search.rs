@@ -369,6 +369,7 @@ mod tests {
 
         // Convert scan results to LiveSets
         let edm_project = LiveSet {
+            is_active: true,
             file_path: PathBuf::from("EDM Project.als"),
             file_name: String::from("EDM Project.als"),
             file_hash: String::from("dummy_hash"),
@@ -388,6 +389,7 @@ mod tests {
         };
 
         let rock_project = LiveSet {
+            is_active: true,
             file_path: PathBuf::from("Rock Band.als"),
             file_name: String::from("Rock Band.als"),
             file_hash: String::from("dummy_hash"),
