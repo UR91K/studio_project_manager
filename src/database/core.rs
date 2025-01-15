@@ -2,12 +2,14 @@ use super::models::SqlDateTime;
 use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
+use crate::utils::metadata::load_file_hash;
 use chrono::{Local, TimeZone};
 use log::{debug, info};
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
+use chrono::Utc;
 pub struct LiveSetDatabase {
     pub conn: Connection,
 }
@@ -25,9 +27,11 @@ impl LiveSetDatabase {
     fn initialize(&mut self) -> Result<(), DatabaseError> {
         debug!("Initializing database tables and indexes");
         self.conn.execute_batch(
-            r#"
+            r#"--sql
             -- Core tables
             CREATE TABLE IF NOT EXISTS projects (
+                is_active BOOLEAN NOT NULL DEFAULT true,
+
                 id TEXT PRIMARY KEY,
                 path TEXT NOT NULL UNIQUE,
                 name TEXT NOT NULL,
@@ -142,6 +146,7 @@ impl LiveSetDatabase {
             CREATE INDEX IF NOT EXISTS idx_samples_path ON samples(path);
             CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
             CREATE INDEX IF NOT EXISTS idx_collection_projects_position ON collection_projects(collection_id, position);
+            CREATE INDEX IF NOT EXISTS idx_projects_is_active ON projects(is_active);
 
             -- Full-text search
             CREATE VIRTUAL TABLE IF NOT EXISTS project_search USING fts5(
@@ -799,5 +804,193 @@ impl LiveSetDatabase {
         );
 
         Ok(())
+    }
+
+    pub fn mark_project_deleted(&mut self, project_id: &Uuid) -> Result<(), DatabaseError> {
+        self.conn.execute(
+            "UPDATE projects SET is_active = false WHERE id = ?",
+            params![project_id.to_string()],
+        ).map_err(DatabaseError::from)?;
+        Ok(())
+    }
+
+    pub fn reactivate_project(
+        &mut self, 
+        project_id: &Uuid,
+        new_path: &Path,
+    ) -> Result<(), DatabaseError> {
+        self.conn.execute(
+            "UPDATE projects SET 
+                is_active = true,
+                path = ?,
+                modified_at = ?
+             WHERE id = ?",
+            params![
+                new_path.to_string_lossy().to_string(),
+                Utc::now().timestamp(),
+                project_id.to_string(),
+            ],
+        ).map_err(DatabaseError::from)?;
+        Ok(())
+    }
+
+    pub fn find_deleted_by_hash(&mut self, path: &Path) -> Result<Option<LiveSet>, DatabaseError> {
+        let hash = load_file_hash(&path.to_path_buf())?;
+        
+        self.conn.query_row(
+            "SELECT * FROM projects 
+             WHERE is_active = false AND hash = ?",
+            params![hash],
+            |row| self.row_to_live_set(row),
+        ).optional().map_err(DatabaseError::from)
+    }
+
+    pub fn get_all_projects_with_status(
+        &self,
+        is_active: Option<bool>
+    ) -> Result<Vec<LiveSet>, DatabaseError> {
+        match is_active {
+            Some(status) => {
+                let mut stmt = self.conn.prepare(
+                    "SELECT * FROM projects WHERE is_active = ?"
+                ).map_err(DatabaseError::from)?;
+                
+                let projects = stmt.query_map([status], |row| {
+                    self.row_to_live_set(row)
+                }).map_err(DatabaseError::from)?;
+                
+                projects.collect::<rusqlite::Result<Vec<_>>>().map_err(DatabaseError::from)
+            }
+            None => {
+                let mut stmt = self.conn.prepare(
+                    "SELECT * FROM projects"
+                ).map_err(DatabaseError::from)?;
+                
+                let projects = stmt.query_map([], |row| {
+                    self.row_to_live_set(row)
+                }).map_err(DatabaseError::from)?;
+                
+                projects.collect::<rusqlite::Result<Vec<_>>>().map_err(DatabaseError::from)
+            }
+        }
+    }
+
+    pub fn permanently_delete_project(&mut self, project_id: &Uuid) -> Result<(), DatabaseError> {
+        let tx = self.conn.transaction().map_err(DatabaseError::from)?;
+        
+        // Only allow deletion of inactive projects
+        let rows_affected = tx.execute(
+            "DELETE FROM projects WHERE id = ? AND is_active = false",
+            params![project_id.to_string()],
+        ).map_err(DatabaseError::from)?;
+        
+        if rows_affected == 0 {
+            return Err(DatabaseError::InvalidOperation("Cannot permanently delete an active project".to_string()));
+        }
+        
+        tx.commit().map_err(DatabaseError::from)?;
+        Ok(())
+    }
+
+    fn row_to_live_set(&self, row: &rusqlite::Row) -> rusqlite::Result<LiveSet> {
+        let id: String = row.get("id")?;
+        let created_timestamp: i64 = row.get("created_at")?;
+        let modified_timestamp: i64 = row.get("modified_at")?;
+        let parsed_timestamp: i64 = row.get("last_parsed_at")?;
+        let duration_secs: Option<i64> = row.get("duration_seconds")?;
+
+        Ok(LiveSet {
+            is_active: row.get("is_active")?,
+            id: Uuid::parse_str(&id).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?,
+            file_path: PathBuf::from(row.get::<_, String>("path")?),
+            file_name: row.get("name")?,
+            file_hash: row.get("hash")?,
+            created_time: Local
+                .timestamp_opt(created_timestamp, 0)
+                .single()
+                .ok_or_else(|| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Integer,
+                        Box::new(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Invalid timestamp",
+                        )),
+                    )
+                })?,
+            modified_time: Local
+                .timestamp_opt(modified_timestamp, 0)
+                .single()
+                .ok_or_else(|| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Integer,
+                        Box::new(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Invalid timestamp",
+                        )),
+                    )
+                })?,
+            last_parsed_timestamp: Local
+                .timestamp_opt(parsed_timestamp, 0)
+                .single()
+                .ok_or_else(|| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Integer,
+                        Box::new(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Invalid timestamp",
+                        )),
+                    )
+                })?,
+
+            tempo: row.get("tempo")?,
+            time_signature: TimeSignature {
+                numerator: row.get("time_signature_numerator")?,
+                denominator: row.get("time_signature_denominator")?,
+            },
+            key_signature: match (
+                row.get::<_, Option<String>>("key_signature_tonic")?,
+                row.get::<_, Option<String>>("key_signature_scale")?,
+            ) {
+                (Some(tonic), Some(scale)) => Some(KeySignature {
+                    tonic: tonic.parse().map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Text,
+                            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+                        )
+                    })?,
+                    scale: scale.parse().map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Text,
+                            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+                        )
+                    })?,
+                }),
+                _ => None,
+            },
+            furthest_bar: row.get("furthest_bar")?,
+
+            ableton_version: AbletonVersion {
+                major: row.get("ableton_version_major")?,
+                minor: row.get("ableton_version_minor")?,
+                patch: row.get("ableton_version_patch")?,
+                beta: row.get("ableton_version_beta")?,
+            },
+
+            estimated_duration: duration_secs.map(chrono::Duration::seconds),
+            plugins: HashSet::new(), // These will be loaded separately when needed
+            samples: HashSet::new(), // These will be loaded separately when needed
+            tags: HashSet::new(),    // These will be loaded separately when needed
+        })
     }
 }
