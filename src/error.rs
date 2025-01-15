@@ -309,6 +309,9 @@ pub enum LiveSetError {
     #[error("Attribute error: {0}")]
     AttributeError(#[from] AttributeError),
 
+    #[error("Attribute error: {0}")]
+    AttrError(#[from] AttrError),
+
     #[error("Plugin error: {0}")]
     PluginError(#[from] PluginError),
 
