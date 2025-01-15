@@ -1,9 +1,10 @@
-// /src/models.rs
 use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Arc;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use uuid::Uuid;
 
 use once_cell::sync::Lazy;
@@ -250,11 +251,32 @@ impl fmt::Display for KeySignature {
 // PLUGINS
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum PluginFormat {
+pub enum PluginFormat {
     VST2Instrument,
     VST2AudioFx,
     VST3Instrument,
     VST3AudioFx,
+}
+
+impl PluginFormat {
+    pub(crate) fn random() -> Self {
+        let variants = [
+            PluginFormat::VST2Instrument,
+            PluginFormat::VST2AudioFx,
+            PluginFormat::VST3Instrument,
+            PluginFormat::VST3AudioFx,
+        ];
+        *variants.choose(&mut thread_rng()).unwrap()
+    }
+
+    pub(crate) fn to_dev_type_and_category(self) -> (&'static str, &'static str) {
+        match self {
+            PluginFormat::VST2Instrument => ("vst", "instr"),
+            PluginFormat::VST2AudioFx => ("vst", "audiofx"),
+            PluginFormat::VST3Instrument => ("vst3", "instr"),
+            PluginFormat::VST3AudioFx => ("vst3", "audiofx"),
+        }
+    }
 }
 
 impl fmt::Display for PluginFormat {
