@@ -204,6 +204,7 @@ pub(crate) fn generate_mock_live_set(index: usize) -> LiveSet {
         .collect();
 
     LiveSet {
+        is_active: true,
         id: Uuid::new_v4(),
         file_path: path.clone(),
         file_name: path.file_name().unwrap().to_string_lossy().to_string(),
