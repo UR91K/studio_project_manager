@@ -8,7 +8,7 @@ mod models;
 pub mod scan;
 mod test_utils;
 mod utils;
-
+mod watcher;
 fn main() {
     println!("main is not implemented.");
 }
