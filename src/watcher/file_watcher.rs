@@ -105,18 +105,18 @@ impl FileWatcher {
         drop(db_guard);
         
         for project in active_projects {
-            debug!("Checking project: {}", project.file_name);
+            debug!("Checking project: {}", project.name);
             let path = &project.file_path;
             match path.metadata() {
                 Ok(metadata) => {
                     let modified: SystemTime = metadata.modified()?;
                     if modified > project.last_parsed_timestamp.into() {
-                        debug!("Project modified while offline: {}", project.file_name);
+                        debug!("Project modified while offline: {}", project.name);
                         self.event_tx.send(FileEvent::Modified(path.clone()))?;
                     }
                 }
                 Err(e) => {
-                    debug!("Project file no longer exists: {} ({})", project.file_name, e);
+                    debug!("Project file no longer exists: {} ({})", project.name, e);
                     self.event_tx.send(FileEvent::Deleted(path.clone()))?;
                 }
             }

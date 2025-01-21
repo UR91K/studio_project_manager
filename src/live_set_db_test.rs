@@ -60,7 +60,7 @@ fn create_test_live_set() -> LiveSet {
         is_active: true,
         id: Uuid::new_v4(),
         file_path: PathBuf::from("C:/test/test_project.als"),
-        file_name: "test_project.als".to_string(),
+        name: "test_project.als".to_string(),
         file_hash: "test_hash".to_string(),
         created_time: now,
         modified_time: now,
@@ -96,7 +96,7 @@ fn create_test_live_set_from_parse(name: &str, parse_result: ParseResult) -> Liv
         is_active: true,
         id: Uuid::new_v4(),
         file_path: PathBuf::from(format!("C:/test/{}", name)),
-        file_name: name.to_string(),
+        name: name.to_string(),
         file_hash: format!("test_hash_{}", name),
         created_time: now,
         modified_time: now,
@@ -156,7 +156,7 @@ fn test_insert_and_retrieve_project() {
         .expect("Project not found");
 
     // Compare relevant fields
-    assert_eq!(retrieved_live_set.file_name, original_live_set.file_name);
+    assert_eq!(retrieved_live_set.name, original_live_set.name);
     assert_eq!(retrieved_live_set.file_hash, original_live_set.file_hash);
     assert_eq!(retrieved_live_set.tempo, original_live_set.tempo);
     assert_eq!(
@@ -411,9 +411,9 @@ fn test_collections() {
     let projects = db.get_collection_projects(&collection_id)
         .expect("Failed to get collection projects");
     assert_eq!(projects.len(), 3);
-    assert_eq!(projects[0].file_name, "EDM Project.als");
-    assert_eq!(projects[1].file_name, "Ambient Soundscape.als");
-    assert_eq!(projects[2].file_name, "Rock Band.als");
+    assert_eq!(projects[0].name, "EDM Project.als");
+    assert_eq!(projects[1].name, "Ambient Soundscape.als");
+    assert_eq!(projects[2].name, "Rock Band.als");
 
     // Test reordering projects
     db.reorder_project_in_collection(&collection_id, &rock_project.id.to_string(), 0)
@@ -422,9 +422,9 @@ fn test_collections() {
     let projects = db.get_collection_projects(&collection_id)
         .expect("Failed to get collection projects after reorder");
     assert_eq!(projects.len(), 3);
-    assert_eq!(projects[0].file_name, "Rock Band.als");
-    assert_eq!(projects[1].file_name, "EDM Project.als");
-    assert_eq!(projects[2].file_name, "Ambient Soundscape.als");
+    assert_eq!(projects[0].name, "Rock Band.als");
+    assert_eq!(projects[1].name, "EDM Project.als");
+    assert_eq!(projects[2].name, "Ambient Soundscape.als");
 
     // Test removing a project
     db.remove_project_from_collection(&collection_id, &ambient_project.id.to_string())
@@ -433,8 +433,8 @@ fn test_collections() {
     let projects = db.get_collection_projects(&collection_id)
         .expect("Failed to get collection projects after removal");
     assert_eq!(projects.len(), 2);
-    assert_eq!(projects[0].file_name, "Rock Band.als");
-    assert_eq!(projects[1].file_name, "EDM Project.als");
+    assert_eq!(projects[0].name, "Rock Band.als");
+    assert_eq!(projects[1].name, "EDM Project.als");
 
     // Test deleting collection
     db.delete_collection(&collection_id).expect("Failed to delete collection");

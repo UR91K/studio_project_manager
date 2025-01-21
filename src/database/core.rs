@@ -356,7 +356,7 @@ impl LiveSetDatabase {
                             rusqlite::Error::InvalidParameterName("Invalid UUID".into())
                         })?,
                         file_path: PathBuf::from(row.get::<_, String>(1)?),
-                        file_name: row.get(2)?,
+                        name: row.get(2)?,
                         file_hash: row.get(3)?,
                         created_time: Local
                             .timestamp_opt(created_timestamp, 0)
@@ -490,7 +490,7 @@ impl LiveSetDatabase {
             };
 
             if let Some(live_set) = project {
-                debug!("Retrieved project: {}", live_set.file_name);
+                debug!("Retrieved project: {}", live_set.name);
                 results.push(live_set);
             }
         }
@@ -534,7 +534,7 @@ impl LiveSetDatabase {
                         rusqlite::Error::InvalidParameterName("Invalid UUID".into())
                     })?,
                     file_path: PathBuf::from(row.get::<_, String>(1)?),
-                    file_name: row.get(2)?,
+                    name: row.get(2)?,
                     file_hash: row.get(3)?,
                     created_time: Local
                         .timestamp_opt(created_timestamp, 0)
@@ -598,7 +598,7 @@ impl LiveSetDatabase {
 
         let mut project = match project {
             Some(p) => {
-                debug!("Found project: {}", p.file_name);
+                debug!("Found project: {}", p.name);
                 p
             }
             None => {
@@ -675,7 +675,7 @@ impl LiveSetDatabase {
 
         info!(
             "Successfully retrieved project {} with {} plugins and {} samples",
-            project.file_name,
+            project.name,
             project.plugins.len(),
             project.samples.len()
         );
@@ -685,7 +685,7 @@ impl LiveSetDatabase {
     pub fn insert_project(&mut self, live_set: &LiveSet) -> Result<(), DatabaseError> {
         debug!(
             "Inserting project: {} ({})",
-            live_set.file_name,
+            live_set.name,
             live_set.file_path.display()
         );
         let tx = self.conn.transaction()?;
@@ -708,7 +708,7 @@ impl LiveSetDatabase {
             )",
             params![
                 project_id,
-                live_set.file_name,
+                live_set.name,
                 live_set.file_path.to_string_lossy().to_string(),
                 live_set.file_hash,
                 SqlDateTime::from(live_set.created_time),
@@ -773,7 +773,7 @@ impl LiveSetDatabase {
         )?;
 
         // Debug: Inspect FTS index content
-        debug!("Inspecting FTS5 index for project {}", live_set.file_name);
+        debug!("Inspecting FTS5 index for project {}", live_set.name);
         #[allow(unused)]
         if let Ok(Some(row)) = tx.query_row(
             "SELECT * FROM project_search WHERE project_id = ?",
@@ -798,7 +798,7 @@ impl LiveSetDatabase {
         tx.commit()?;
         info!(
             "Successfully inserted project {} with {} plugins and {} samples",
-            live_set.file_name,
+            live_set.name,
             live_set.plugins.len(),
             live_set.samples.len()
         );
@@ -909,7 +909,7 @@ impl LiveSetDatabase {
                 )
             })?,
             file_path: PathBuf::from(row.get::<_, String>("path")?),
-            file_name: row.get("name")?,
+            name: row.get("name")?,
             file_hash: row.get("hash")?,
             created_time: Local
                 .timestamp_opt(created_timestamp, 0)

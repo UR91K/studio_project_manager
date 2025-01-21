@@ -250,7 +250,7 @@ impl LiveSetDatabase {
                         rusqlite::Error::InvalidParameterName("Invalid UUID".into())
                     })?,
                     file_path: PathBuf::from(row.get::<_, String>(1)?),
-                    file_name: row.get(2)?,
+                    name: row.get(2)?,
                     file_hash: row.get(3)?,
                     created_time: Local
                         .timestamp_opt(created_timestamp, 0)
@@ -342,7 +342,7 @@ impl LiveSetDatabase {
                     live_set.tags = stmt.query_map([&project_id], |row| row.get(0))?.filter_map(|r| r.ok()).collect();
                 }
 
-                debug!("Adding project to results: {}", live_set.file_name);
+                debug!("Adding project to results: {}", live_set.name);
                 results.push(live_set);
             }
         }

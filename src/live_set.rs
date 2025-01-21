@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, Local};
+use colored::Colorize;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -20,7 +21,7 @@ pub struct LiveSet {
 
     pub(crate) id: Uuid,
     pub(crate) file_path: PathBuf,
-    pub(crate) file_name: String,
+    pub(crate) name: String,
     pub(crate) file_hash: String,
     pub(crate) created_time: DateTime<Local>,
     pub(crate) modified_time: DateTime<Local>,
@@ -60,7 +61,7 @@ impl LiveSet {
             is_active: true,
             id: Uuid::new_v4(),
             file_path,
-            file_name,
+            name: file_name,
             file_hash,
             created_time,
             modified_time,
@@ -119,21 +120,123 @@ impl LiveSet {
     }
 
     pub fn log_info(&self) {
-        info_fn!(
-            "log_info",
-            "{} - {} plugins, {} samples",
-            self.file_name.bold().purple(),
-            self.plugins.len(),
-            self.samples.len()
+        println!(
+            "{}",
+            "\n=== Live Set Information ===".bold().blue()
         );
 
+        // Basic Information
+        println!(
+            "Name: {}\nPath: {}\nID: {}",
+            self.name.bold().purple(),
+            self.file_path.display().to_string().cyan(),
+            self.id.to_string().bright_black()
+        );
+
+        // File Information
+        println!(
+            "{}",
+            "\nFile Details:".bold().yellow()
+        );
+        println!(
+            "Created: {}\nModified: {}\nLast Parsed: {}\nHash: {}",
+            self.created_time.format("%Y-%m-%d %H:%M:%S").to_string().cyan(),
+            self.modified_time.format("%Y-%m-%d %H:%M:%S").to_string().cyan(),
+            self.last_parsed_timestamp.format("%Y-%m-%d %H:%M:%S").to_string().cyan(),
+            self.file_hash.bright_black()
+        );
+
+        // Version Information
+        println!(
+            "{}",
+            "\nAbleton Version:".bold().yellow()
+        );
+        println!(
+            "Version: {}.{}.{} {}",
+            self.ableton_version.major.to_string().cyan(),
+            self.ableton_version.minor.to_string().cyan(),
+            self.ableton_version.patch.to_string().cyan(),
+            if self.ableton_version.beta { "(Beta)".yellow() } else { "".normal() }
+        );
+
+        // Musical Properties
+        println!(
+            "{}",
+            "\nMusical Properties:".bold().yellow()
+        );
+        println!(
+            "Tempo: {} BPM\nTime Signature: {}/{}\nKey: {}",
+            self.tempo.to_string().cyan(),
+            self.time_signature.numerator.to_string().cyan(),
+            self.time_signature.denominator.to_string().cyan(),
+            self.key_signature
+                .as_ref()
+                .map(|k| format!("{:?} {:?}", k.tonic, k.scale).cyan().to_string())
+                .unwrap_or_else(|| "Not specified".bright_black().to_string())
+        );
+
+        // Duration Information
         if let Some(duration) = self.estimated_duration {
-            debug_fn!(
-                "log_info",
-                "Estimated duration: {}",
-                duration.to_string().green()
+            println!(
+                "Duration: {}m {}s (~ {} bars)",
+                duration.num_minutes().to_string().cyan(),
+                (duration.num_seconds() % 60).to_string().cyan(),
+                self.furthest_bar
+                    .map(|b| format!("{:.1}", b).cyan().to_string())
+                    .unwrap_or_else(|| "Unknown".bright_black().to_string())
             );
         }
+
+        // Content Summary
+        println!(
+            "{}",
+            "\nContent Summary:".bold().yellow()
+        );
+        println!(
+            "Plugins: {}\nSamples: {}\nTags: {}",
+            self.plugins.len().to_string().green(),
+            self.samples.len().to_string().green(),
+            if self.tags.is_empty() {
+                "None".bright_black().to_string()
+            } else {
+                self.tags.iter().cloned().collect::<Vec<_>>().join(", ").cyan().to_string()
+            }
+        );
+
+        // Plugin Details
+        if !self.plugins.is_empty() {
+            println!(
+                "{}",
+                "\nPlugins:".bold().yellow()
+            );
+            for plugin in &self.plugins {
+                println!(
+                    "{} {} ({})",
+                    if plugin.installed { "✓".green() } else { "✗".red() },
+                    plugin.name.cyan(),
+                    format!("{:?}", plugin.plugin_format).bright_black()
+                );
+            }
+        }
+
+        // Sample Details
+        if !self.samples.is_empty() {
+            println!(
+                "{}",
+                "\nSamples:".bold().yellow()
+            );
+            for sample in &self.samples {
+                println!(
+                    "- {}",
+                    sample.name.cyan()
+                );
+            }
+        }
+
+        println!(
+            "{}",
+            format!("\n{}\n", "=".repeat(50)).bright_black()
+        );
     }
 }
 
@@ -172,7 +275,7 @@ mod tests {
         let live_set = LiveSet::new(project_path.to_path_buf()).expect("Failed to load project");
 
         // Basic project validation
-        assert!(!live_set.file_name.is_empty());
+        assert!(!live_set.name.is_empty());
         assert!(live_set.created_time < live_set.modified_time);
         assert!(!live_set.file_hash.is_empty());
 
@@ -205,9 +308,9 @@ mod tests {
 
     #[test]
     fn test_parse_performance() {
-        setup_no_logging();
+        // setup_no_logging();
 
-        std::env::set_var("RUST_LOG", "error");
+        // std::env::set_var("RUST_LOG", "error");
         
         let project_paths = [
             (
@@ -299,7 +402,7 @@ mod tests {
             println!(
                 "  - {}: {}",
                 "Name".bright_black(),
-                live_set.file_name.cyan()
+                live_set.name.cyan()
             );
             println!(
                 "  - {}: {}",

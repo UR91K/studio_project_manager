@@ -137,7 +137,7 @@ impl LiveSetDatabase {
                             rusqlite::Error::InvalidParameterName("Invalid UUID".into())
                         })?,
                         file_path: PathBuf::from(row.get::<_, String>(1)?),
-                        file_name: row.get(2)?,
+                        name: row.get(2)?,
                         file_hash: row.get(3)?,
                         created_time: Local
                             .timestamp_opt(created_timestamp, 0)
@@ -295,7 +295,7 @@ impl LiveSetDatabase {
             };
 
             if let Some(live_set) = project {
-                debug!("Retrieved project: {}", live_set.file_name);
+                debug!("Retrieved project: {}", live_set.name);
                 results.push(live_set);
             }
         }
