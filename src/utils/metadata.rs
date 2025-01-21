@@ -65,10 +65,52 @@ pub(crate) fn load_file_hash(file_path: &PathBuf) -> Result<String, FileError> {
 }
 
 pub(crate) fn load_file_name(file_path: &PathBuf) -> Result<String, FileError> {
+    if file_path.is_dir() {
+        return Err(FileError::NameError("Path is a directory".to_string()));
+    }
+    
     file_path
         .file_name()
         .ok_or_else(|| FileError::NameError("File name is not present".to_string()))?
         .to_str()
         .ok_or_else(|| FileError::NameError("File name is not valid UTF-8".to_string()))
         .map(|s| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_load_file_name() {
+        // Test file with extension
+        let path = PathBuf::from("C:/Users/jake/Desktop/test_file.txt");
+        assert_eq!(load_file_name(&path).unwrap(), "test_file.txt");
+
+        // Test file without extension
+        let path = PathBuf::from("C:/Users/jake/Desktop/test_file");
+        assert_eq!(load_file_name(&path).unwrap(), "test_file");
+
+        // Test file with multiple extensions
+        let path = PathBuf::from("C:/Users/jake/Desktop/test_file.tar.gz");
+        assert_eq!(load_file_name(&path).unwrap(), "test_file.tar.gz");
+
+        // Test file with dots in name
+        let path = PathBuf::from("C:/Users/jake/Desktop/test.file.name.txt");
+        assert_eq!(load_file_name(&path).unwrap(), "test.file.name.txt");
+
+        // Test error cases
+        let directory_path = PathBuf::from("C:/Users/jake/Desktop/");  // Note the trailing slash
+        assert!(matches!(
+            load_file_name(&directory_path),
+            Err(FileError::NameError(_))
+        ));
+
+        let empty_path = PathBuf::from("");
+        assert!(matches!(
+            load_file_name(&empty_path),
+            Err(FileError::NameError(_))
+        ));
+    }
 }

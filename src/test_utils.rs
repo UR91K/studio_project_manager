@@ -207,7 +207,7 @@ pub(crate) fn generate_mock_live_set(index: usize) -> LiveSet {
         is_active: true,
         id: Uuid::new_v4(),
         file_path: path.clone(),
-        file_name: path.file_name().unwrap().to_string_lossy().to_string(),
+        name: path.file_name().unwrap().to_string_lossy().to_string(),
         file_hash: format!("test_hash_{}", index),
         created_time: Local::now(),
         modified_time: Local::now(),
@@ -307,7 +307,7 @@ mod tests {
         let live_set = generate_mock_live_set(1);
 
         // Basic fields
-        assert!(!live_set.file_name.is_empty(), "LiveSet should have a file name");
+        assert!(!live_set.name.is_empty(), "LiveSet should have a file name");
         assert!(live_set.file_path.to_string_lossy().ends_with(".als"), "File path should end with .als");
         assert!(!live_set.file_hash.is_empty(), "LiveSet should have a file hash");
 

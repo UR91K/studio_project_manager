@@ -118,7 +118,7 @@ impl<'a> BatchTransaction<'a> {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     project_id,
-                    live_set.file_name,
+                    live_set.name,
                     live_set.file_path.to_string_lossy().to_string(),
                     live_set.file_hash,
                     SqlDateTime::from(live_set.created_time),

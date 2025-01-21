@@ -371,7 +371,7 @@ mod tests {
         let edm_project = LiveSet {
             is_active: true,
             file_path: PathBuf::from("EDM Project.als"),
-            file_name: String::from("EDM Project.als"),
+            name: String::from("EDM Project.als"),
             file_hash: String::from("dummy_hash"),
             created_time: edm_created,
             modified_time: edm_modified,
@@ -391,7 +391,7 @@ mod tests {
         let rock_project = LiveSet {
             is_active: true,
             file_path: PathBuf::from("Rock Band.als"),
-            file_name: String::from("Rock Band.als"),
+            name: String::from("Rock Band.als"),
             file_hash: String::from("dummy_hash"),
             created_time: rock_created,
             modified_time: rock_modified,
