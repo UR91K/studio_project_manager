@@ -80,7 +80,6 @@ pub(crate) fn load_file_name(file_path: &PathBuf) -> Result<String, FileError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     fn test_load_file_name() {

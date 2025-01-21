@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use log::{debug, error, warn, info};
+use log::debug;
 
 use crate::error::LiveSetError;
 use crate::live_set::LiveSet;
