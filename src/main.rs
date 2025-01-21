@@ -20,6 +20,72 @@ use crate::database::batch::BatchInsertManager;
 use crate::scan::parallel::ParallelParser;
 use crate::scan::project_scanner::ProjectPathScanner;
 use crate::error::LiveSetError;
+use crate::live_set::LiveSetPreprocessed;
+
+fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocessed>, LiveSetError> {
+    debug!("Preprocessing {} projects", paths.len());
+    let mut preprocessed = Vec::with_capacity(paths.len());
+    
+    for path in paths {
+        match LiveSetPreprocessed::new(path.clone()) {
+            Ok(metadata) => {
+                debug!("Successfully preprocessed: {}", metadata.name);
+                preprocessed.push(metadata);
+            }
+            Err(e) => {
+                error!("Failed to preprocess {}: {}", path.display(), e);
+                // Continue with other files even if one fails
+                continue;
+            }
+        }
+    }
+    
+    debug!("Successfully preprocessed {} projects", preprocessed.len());
+    Ok(preprocessed)
+}
+
+fn filter_unchanged_projects(
+    preprocessed: Vec<LiveSetPreprocessed>, 
+    db: &LiveSetDatabase
+) -> Result<Vec<PathBuf>, LiveSetError> {
+    let total_count = preprocessed.len();
+    debug!("Filtering {} preprocessed projects", total_count);
+    let mut to_parse = Vec::new();
+    
+    for project in preprocessed.into_iter() {
+        match db.get_last_scanned_time(&project.path)? {
+            Some(last_scanned) => {
+                if project.modified_time > last_scanned {
+                    debug!(
+                        "Project needs update: {} (last scanned: {}, modified: {})",
+                        project.name,
+                        last_scanned,
+                        project.modified_time
+                    );
+                    to_parse.push(project.path);
+                } else {
+                    debug!(
+                        "Project unchanged: {} (last scanned: {}, modified: {})",
+                        project.name,
+                        last_scanned,
+                        project.modified_time
+                    );
+                }
+            }
+            None => {
+                debug!("New project found: {}", project.name);
+                to_parse.push(project.path);
+            }
+        }
+    }
+    
+    info!(
+        "Found {} projects that need parsing out of {} total",
+        to_parse.len(),
+        total_count
+    );
+    Ok(to_parse)
+}
 
 pub fn process_projects() -> Result<(), LiveSetError> {
     debug!("Starting process_projects");
@@ -28,6 +94,10 @@ pub fn process_projects() -> Result<(), LiveSetError> {
     let config = CONFIG.as_ref().map_err(|e| LiveSetError::ConfigError(e.clone()))?;
     debug!("Using database path from config: {}", config.database_path);
     debug!("Using project paths from config: {:?}", config.paths);
+    
+    // Initialize database early to use for filtering
+    debug!("Initializing database at {}", config.database_path);
+    let mut db = LiveSetDatabase::new(PathBuf::from(&config.database_path))?;
     
     let scanner = ProjectPathScanner::new()?;
     let mut found_projects = HashSet::new();
@@ -50,10 +120,19 @@ pub fn process_projects() -> Result<(), LiveSetError> {
         return Ok(());
     }
 
-    let total_projects = found_projects.len();
-    info!("Found {} projects to process", total_projects);
-    for project in &found_projects {
-        debug!("Found project: {}", project.display());
+    // Preprocess and filter projects
+    let preprocessed = preprocess_projects(found_projects)?;
+    let projects_to_parse = filter_unchanged_projects(preprocessed, &db)?;
+    
+    if projects_to_parse.is_empty() {
+        info!("No projects need updating");
+        return Ok(());
+    }
+
+    let total_projects = projects_to_parse.len();
+    info!("Found {} projects that need parsing", total_projects);
+    for project in &projects_to_parse {
+        debug!("Will parse project: {}", project.display());
     }
 
     // Create parallel parser with number of threads based on project count
@@ -61,20 +140,15 @@ pub fn process_projects() -> Result<(), LiveSetError> {
     debug!("Creating parallel parser with {} threads", thread_count);
     let parser = ParallelParser::new(thread_count);
     
-    // TODO: filter out projects that have not been modified since last scan
-
-    // Submit all found projects for parsing
+    // Submit filtered projects for parsing
     debug!("Submitting {} projects to parser", total_projects);
     let receiver = {
         let receiver = parser.get_results_receiver();
-        parser.submit_paths(found_projects.into_iter().collect())?;
+        parser.submit_paths(projects_to_parse)?;
         receiver
     };
     // Parser is dropped here, which will close the work channel
     
-    // Initialize database and keep the connection alive
-    debug!("Initializing database at {}", config.database_path);
-    let mut db = LiveSetDatabase::new(PathBuf::from(&config.database_path))?;
     let mut successful_live_sets = Vec::new();
     
     // Collect results from parser with progress tracking

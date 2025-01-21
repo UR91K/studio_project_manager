@@ -13,6 +13,33 @@ use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamp
 use crate::utils::plugins::get_most_recent_db_file;
 use crate::utils::{decompress_gzip_file, validate_ableton_file};
 
+#[derive(Debug)]
+pub struct LiveSetPreprocessed {
+    pub(crate) path: PathBuf,
+    pub(crate) name: String,
+    pub(crate) file_hash: String,
+    pub(crate) created_time: DateTime<Local>,
+    pub(crate) modified_time: DateTime<Local>,
+}
+
+impl LiveSetPreprocessed {
+    pub fn new(file_path: PathBuf) -> Result<Self, LiveSetError> {
+        validate_ableton_file(&file_path)?;
+        
+        let name = load_file_name(&file_path)?;
+        let (modified_time, created_time) = load_file_timestamps(&file_path)?;
+        let file_hash = load_file_hash(&file_path)?;
+        
+        Ok(Self {
+            path: file_path,
+            name,
+            file_hash,
+            created_time,
+            modified_time,
+        })
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct LiveSet {
@@ -41,15 +68,14 @@ pub struct LiveSet {
 
 impl LiveSet {
     pub fn new(file_path: PathBuf) -> Result<Self, LiveSetError> {
-        validate_ableton_file(&file_path)?;
+        let preprocessed = LiveSetPreprocessed::new(file_path)?;
+        Self::from_preprocessed(preprocessed)
+    }
 
-        let file_name: String = load_file_name(&file_path)?;
-        let (modified_time, created_time) = load_file_timestamps(&file_path)?;
-        let file_hash: String = load_file_hash(&file_path)?;
-        
+    pub fn from_preprocessed(preprocessed: LiveSetPreprocessed) -> Result<Self, LiveSetError> {
         // Scope the xml_data to this block so it's dropped after parsing
         let parse_result = {
-            let xml_data = decompress_gzip_file(&file_path)?;
+            let xml_data = decompress_gzip_file(&preprocessed.path)?;
             let parser_options = ParseOptions::default();
             let mut parser = Parser::new(&xml_data, parser_options)?;
             parser.parse(&xml_data)?
@@ -59,11 +85,11 @@ impl LiveSet {
         let mut live_set = LiveSet {
             is_active: true,
             id: Uuid::new_v4(),
-            file_path,
-            name: file_name,
-            file_hash,
-            created_time,
-            modified_time,
+            file_path: preprocessed.path,
+            name: preprocessed.name,
+            file_hash: preprocessed.file_hash,
+            created_time: preprocessed.created_time,
+            modified_time: preprocessed.modified_time,
             last_parsed_timestamp: Local::now(),
 
             ableton_version: parse_result.version,
