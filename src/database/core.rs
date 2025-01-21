@@ -226,23 +226,23 @@ impl LiveSetDatabase {
     fn insert_plugin(tx: &rusqlite::Transaction, plugin: &Plugin) -> Result<(), DatabaseError> {
         tx.execute(
             "INSERT OR REPLACE INTO plugins (
-                id, name, format, ableton_plugin_id, ableton_module_id, dev_identifier,
-                vendor, version, sdk_version, flags, scanstate, enabled, installed
+                id, ableton_plugin_id, ableton_module_id, dev_identifier, name, format,
+                installed, vendor, version, sdk_version, flags, scanstate, enabled
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 plugin.id.to_string(),
-                plugin.name,
-                plugin.plugin_format.to_string(),
-                plugin.plugin_id,
+                plugin. plugin_id,
                 plugin.module_id,
                 plugin.dev_identifier,
+                plugin.name,
+                plugin.plugin_format.to_string(),
+                plugin.installed,
                 plugin.vendor,
                 plugin.version,
                 plugin.sdk_version,
                 plugin.flags,
                 plugin.scanstate,
                 plugin.enabled,
-                plugin.installed,
             ],
         )?;
         Ok(())

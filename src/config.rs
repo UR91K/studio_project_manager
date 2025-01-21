@@ -41,6 +41,15 @@ impl Config {
 }
 
 fn find_config_file() -> Result<PathBuf, ConfigError> {
+    // First check environment variable
+    if let Ok(config_path) = std::env::var("STUDIO_PROJECT_MANAGER_CONFIG") {
+        let path = PathBuf::from(config_path);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    // Fall back to searching relative to executable
     let mut dir = std::env::current_exe().map_err(|e| ConfigError::ReadError(e))?;
 
     // Navigate up the directory tree until we find the config file or reach the root

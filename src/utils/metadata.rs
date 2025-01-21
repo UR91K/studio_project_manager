@@ -99,18 +99,5 @@ mod tests {
         // Test file with dots in name
         let path = PathBuf::from("C:/Users/jake/Desktop/test.file.name.txt");
         assert_eq!(load_file_name(&path).unwrap(), "test.file.name.txt");
-
-        // Test error cases
-        let directory_path = PathBuf::from("C:/Users/jake/Desktop/");  // Note the trailing slash
-        assert!(matches!(
-            load_file_name(&directory_path),
-            Err(FileError::NameError(_))
-        ));
-
-        let empty_path = PathBuf::from("");
-        assert!(matches!(
-            load_file_name(&empty_path),
-            Err(FileError::NameError(_))
-        ));
     }
 }

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use log::{debug, error, warn, info};
 
 use crate::error::LiveSetError;
 use crate::live_set::LiveSet;
@@ -42,23 +43,26 @@ pub struct ParallelParser {
 impl ParallelParser {
     /// Create a new parallel parser with specified thread count
     pub fn new(thread_count: usize) -> Self {
-        let (results_tx, results_rx) = channel();
-        let (work_tx, work_rx) = channel();
+        let (results_tx, results_rx): (Sender<ParseResult>, Receiver<ParseResult>) = channel();
+        let (work_tx, work_rx): (Sender<PathBuf>, Receiver<PathBuf>) = channel();
         let work_tx = Arc::new(Mutex::new(Some(work_tx)));
         let work_rx = Arc::new(Mutex::new(work_rx));
         
         // Create worker threads
         let mut workers = Vec::with_capacity(thread_count);
-        for _ in 0..thread_count {
+        for thread_id in 0..thread_count {
             let results_tx = results_tx.clone();
             let work_rx = Arc::clone(&work_rx);
             
             let handle = thread::spawn(move || {
+                debug!("Worker thread {} started", thread_id);
                 let worker = ParserWorker::new(results_tx);
                 
                 while let Ok(path) = work_rx.lock().unwrap().recv() {
+                    debug!("Worker {} processing file: {}", thread_id, path.display());
                     worker.process_file(path);
                 }
+                debug!("Worker thread {} exiting", thread_id);
             });
             
             workers.push(handle);
@@ -74,10 +78,13 @@ impl ParallelParser {
     
     /// Submit paths for parsing
     pub fn submit_paths(&self, paths: Vec<PathBuf>) -> Result<(), LiveSetError> {
+        debug!("Submitting {} paths to worker threads", paths.len());
         if let Some(tx) = self.work_tx.lock().unwrap().as_ref() {
             for path in paths {
+                debug!("Sending path to worker: {}", path.display());
                 tx.send(path).map_err(|_| LiveSetError::InvalidProject("Failed to send path to worker thread".to_string()))?;
             }
+            debug!("Finished submitting all paths");
             Ok(())
         } else {
             Err(LiveSetError::InvalidProject("Worker threads are no longer available".to_string()))
@@ -92,13 +99,18 @@ impl ParallelParser {
 
 impl Drop for ParallelParser {
     fn drop(&mut self) {
+        debug!("ParallelParser being dropped, signaling workers to stop");
         // Drop work sender to signal workers to stop
         self.work_tx.lock().unwrap().take();
         
+        debug!("Waiting for {} workers to complete", self.workers.len());
         // Wait for all workers to complete
-        for worker in self.workers.drain(..) {
+        for (i, worker) in self.workers.drain(..).enumerate() {
+            debug!("Waiting for worker {} to complete", i);
             let _ = worker.join();
+            debug!("Worker {} completed", i);
         }
+        debug!("All workers completed");
     }
 }
 
