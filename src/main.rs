@@ -13,12 +13,6 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use log::{info, debug, error, warn};
 use std::time::Duration;
-use std::fs;
-use std::io::Write;
-use tempfile::tempdir;
-use std::sync::Once;
-use std::env;
-use walkdir;
 
 use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
@@ -67,6 +61,8 @@ pub fn process_projects() -> Result<(), LiveSetError> {
     debug!("Creating parallel parser with {} threads", thread_count);
     let parser = ParallelParser::new(thread_count);
     
+    // TODO: filter out projects that have not been modified since last scan
+
     // Submit all found projects for parsing
     debug!("Submitting {} projects to parser", total_projects);
     let receiver = {
@@ -224,5 +220,5 @@ mod tests {
 }
 
 fn main() {
-    process_projects();
+    process_projects().unwrap();
 }

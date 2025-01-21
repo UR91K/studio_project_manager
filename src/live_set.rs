@@ -12,7 +12,6 @@ use crate::scan::{ParseOptions, Parser};
 use crate::utils::metadata::{load_file_hash, load_file_name, load_file_timestamps};
 use crate::utils::plugins::get_most_recent_db_file;
 use crate::utils::{decompress_gzip_file, validate_ableton_file};
-use crate::{debug_fn, info_fn};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -243,7 +242,6 @@ impl LiveSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use colored::*;
     use std::path::Path;
     use std::sync::Once;
     use std::time::Instant;
@@ -256,6 +254,7 @@ mod tests {
             }
         });
     }
+    #[allow(unused)]
     fn setup_no_logging() {
         let _ = INIT.call_once(|| {
             let _ = std::env::set_var("RUST_LOG", "error");
