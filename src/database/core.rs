@@ -3,7 +3,7 @@ use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
 use crate::utils::metadata::load_file_hash;
-use chrono::{Local, TimeZone};
+use chrono::{DateTime, Local, TimeZone};
 use log::{debug, info};
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use std::collections::HashSet;
@@ -992,5 +992,23 @@ impl LiveSetDatabase {
             samples: HashSet::new(), // These will be loaded separately when needed
             tags: HashSet::new(),    // These will be loaded separately when needed
         })
+    }
+
+    pub fn get_last_scanned_time(&self, path: &Path) -> Result<Option<DateTime<Local>>, DatabaseError> {
+        let path_str = path.to_string_lossy().to_string();
+        
+        let last_parsed: Option<i64> = self.conn
+            .query_row(
+                "SELECT last_parsed_at FROM projects WHERE path = ? AND is_active = true",
+                params![path_str],
+                |row| row.get(0)
+            )
+            .optional()?;
+            
+        Ok(last_parsed.map(|timestamp| {
+            Local.timestamp_opt(timestamp, 0)
+                .single()
+                .expect("Invalid timestamp in database")
+        }))
     }
 }
