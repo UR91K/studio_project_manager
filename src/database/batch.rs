@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use log::{debug, info};
 use rusqlite::{params, Connection, Transaction};
-
+use uuid::Uuid;
+use std::path::PathBuf;
 
 use super::models::SqlDateTime;
 use crate::error::DatabaseError;
@@ -11,8 +12,10 @@ use crate::models::{Plugin, Sample};
 
 struct BatchTransaction<'a> {
     tx: Transaction<'a>,
-    unique_plugins: HashMap<String, Plugin>,
-    unique_samples: HashMap<String, Sample>,
+    unique_plugins: HashMap<String, Plugin>,  // dev_identifier -> Plugin
+    unique_samples: HashMap<String, Sample>,  // path -> Sample
+    plugin_id_map: HashMap<String, String>,   // old_uuid -> canonical_uuid
+    sample_id_map: HashMap<String, String>,   // old_uuid -> canonical_uuid
     stats: BatchStats,
 }
 
@@ -22,24 +25,136 @@ impl<'a> BatchTransaction<'a> {
             tx: conn.transaction()?,
             unique_plugins: HashMap::new(),
             unique_samples: HashMap::new(),
+            plugin_id_map: HashMap::new(),
+            sample_id_map: HashMap::new(),
             stats: BatchStats::default(),
         })
     }
 
-    fn collect_items(&mut self, live_sets: &[LiveSet]) {
+    fn load_existing_plugins(&mut self) -> Result<(), DatabaseError> {
+        debug!("Loading existing plugins from database");
+        let mut stmt = self.tx.prepare(
+            "SELECT id, ableton_plugin_id, ableton_module_id, dev_identifier, name, format,
+                    installed, vendor, version, sdk_version, flags, scanstate, enabled
+             FROM plugins"
+        )?;
+
+        let existing_plugins = stmt.query_map([], |row| {
+            Ok(Plugin {
+                id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                plugin_id: row.get(1)?,
+                module_id: row.get(2)?,
+                dev_identifier: row.get(3)?,
+                name: row.get(4)?,
+                plugin_format: row.get::<_, String>(5)?.parse().unwrap(),
+                installed: row.get(6)?,
+                vendor: row.get(7)?,
+                version: row.get(8)?,
+                sdk_version: row.get(9)?,
+                flags: row.get(10)?,
+                scanstate: row.get(11)?,
+                enabled: row.get(12)?,
+            })
+        })?;
+
+        for plugin in existing_plugins {
+            let plugin = plugin?;
+            self.unique_plugins.insert(plugin.dev_identifier.clone(), plugin);
+        }
+        debug!("Loaded {} existing plugins", self.unique_plugins.len());
+        Ok(())
+    }
+
+    fn load_existing_samples(&mut self) -> Result<(), DatabaseError> {
+        debug!("Loading existing samples from database");
+        let mut stmt = self.tx.prepare(
+            "SELECT id, name, path, is_present FROM samples"
+        )?;
+
+        let existing_samples = stmt.query_map([], |row| {
+            Ok(Sample {
+                id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap(),
+                name: row.get(1)?,
+                path: PathBuf::from(row.get::<_, String>(2)?),
+                is_present: row.get(3)?,
+            })
+        })?;
+
+        for sample in existing_samples {
+            let sample = sample?;
+            self.unique_samples.insert(sample.path.to_string_lossy().to_string(), sample);
+        }
+        debug!("Loaded {} existing samples", self.unique_samples.len());
+        Ok(())
+    }
+
+    fn merge_plugin_metadata(existing: &mut Plugin, new: &Plugin) {
+        // Keep non-null values from new plugin if they exist
+        if new.plugin_id.is_some() {
+            existing.plugin_id = new.plugin_id;
+        }
+        if new.module_id.is_some() {
+            existing.module_id = new.module_id;
+        }
+        if new.vendor.is_some() {
+            existing.vendor = new.vendor.clone();
+        }
+        if new.version.is_some() {
+            existing.version = new.version.clone();
+        }
+        if new.sdk_version.is_some() {
+            existing.sdk_version = new.sdk_version.clone();
+        }
+        if new.flags.is_some() {
+            existing.flags = new.flags;
+        }
+        if new.scanstate.is_some() {
+            existing.scanstate = new.scanstate;
+        }
+        if new.enabled.is_some() {
+            existing.enabled = new.enabled;
+        }
+        // Update installed status if the new plugin is installed
+        if new.installed {
+            existing.installed = true;
+        }
+    }
+
+    fn collect_items(&mut self, live_sets: &[LiveSet]) -> Result<(), DatabaseError> {
+        // First load existing items
+        self.load_existing_plugins()?;
+        self.load_existing_samples()?;
+
         for live_set in live_sets {
-            // Collect unique plugins
+            // Collect and merge plugins
             for plugin in &live_set.plugins {
-                self.unique_plugins
+                let old_id = plugin.id.to_string();
+                let entry = self.unique_plugins
                     .entry(plugin.dev_identifier.clone())
+                    .and_modify(|existing| Self::merge_plugin_metadata(existing, plugin))
                     .or_insert_with(|| plugin.clone());
+                
+                // Map the old UUID to the canonical UUID
+                self.plugin_id_map.insert(old_id, entry.id.to_string());
             }
             
-            // Collect unique samples
+            // Collect and merge samples
             for sample in &live_set.samples {
-                self.unique_samples
-                    .entry(sample.path.to_string_lossy().to_string())
+                let old_id = sample.id.to_string();
+                let path_str = sample.path.to_string_lossy().to_string();
+                
+                // Only update is_present status for existing samples
+                let entry = self.unique_samples
+                    .entry(path_str)
+                    .and_modify(|existing| {
+                        if sample.is_present {
+                            existing.is_present = true;
+                        }
+                    })
                     .or_insert_with(|| sample.clone());
+                
+                // Map the old UUID to the canonical UUID
+                self.sample_id_map.insert(old_id, entry.id.to_string());
             }
         }
         
@@ -48,31 +163,47 @@ impl<'a> BatchTransaction<'a> {
             self.unique_plugins.len(),
             self.unique_samples.len()
         );
+        Ok(())
     }
 
     fn insert_plugins(&mut self) -> Result<(), DatabaseError> {
-        debug!("Inserting {} unique plugins", self.unique_plugins.len());
+        debug!("Upserting {} plugins", self.unique_plugins.len());
         
         for plugin in self.unique_plugins.values() {
             let plugin_id = plugin.id.to_string();
             self.tx.execute(
-                "INSERT OR IGNORE INTO plugins (
-                    id, name, dev_identifier, format,
-                    vendor, version, sdk_version, flags,
-                    scanstate, enabled, installed
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO plugins (
+                    id, ableton_plugin_id, ableton_module_id, dev_identifier,
+                    name, format, installed, vendor, version, sdk_version,
+                    flags, scanstate, enabled
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(dev_identifier) DO UPDATE SET
+                    ableton_plugin_id = COALESCE(EXCLUDED.ableton_plugin_id, ableton_plugin_id),
+                    ableton_module_id = COALESCE(EXCLUDED.ableton_module_id, ableton_module_id),
+                    name = EXCLUDED.name,
+                    format = EXCLUDED.format,
+                    installed = EXCLUDED.installed OR plugins.installed,
+                    vendor = COALESCE(EXCLUDED.vendor, vendor),
+                    version = COALESCE(EXCLUDED.version, version),
+                    sdk_version = COALESCE(EXCLUDED.sdk_version, sdk_version),
+                    flags = COALESCE(EXCLUDED.flags, flags),
+                    scanstate = COALESCE(EXCLUDED.scanstate, scanstate),
+                    enabled = COALESCE(EXCLUDED.enabled, enabled)
+                ",
                 params![
                     plugin_id,
-                    plugin.name,
+                    plugin.plugin_id,
+                    plugin.module_id,
                     plugin.dev_identifier,
+                    plugin.name,
                     plugin.plugin_format.to_string(),
+                    plugin.installed,
                     plugin.vendor,
                     plugin.version,
                     plugin.sdk_version,
                     plugin.flags,
                     plugin.scanstate,
                     plugin.enabled,
-                    plugin.installed,
                 ],
             )?;
             self.stats.plugins_inserted += 1;
@@ -81,14 +212,18 @@ impl<'a> BatchTransaction<'a> {
     }
 
     fn insert_samples(&mut self) -> Result<(), DatabaseError> {
-        debug!("Inserting {} unique samples", self.unique_samples.len());
+        debug!("Upserting {} samples", self.unique_samples.len());
         
         for sample in self.unique_samples.values() {
             let sample_id = sample.id.to_string();
             self.tx.execute(
-                "INSERT OR IGNORE INTO samples (
+                "INSERT INTO samples (
                     id, name, path, is_present
-                ) VALUES (?, ?, ?, ?)",
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    is_present = EXCLUDED.is_present OR samples.is_present
+                ",
                 params![
                     sample_id,
                     sample.name,
@@ -139,21 +274,25 @@ impl<'a> BatchTransaction<'a> {
                 ],
             )?;
             
-            // Link plugins
+            // Link plugins using the mapped IDs
             for plugin in &live_set.plugins {
+                let old_id = plugin.id.to_string();
+                let canonical_id = self.plugin_id_map.get(&old_id).unwrap();
                 self.tx.execute(
                     "INSERT OR IGNORE INTO project_plugins (project_id, plugin_id)
                      VALUES (?, ?)",
-                    params![project_id, plugin.id.to_string()],
+                    params![project_id, canonical_id],
                 )?;
             }
             
-            // Link samples
+            // Link samples using the mapped IDs
             for sample in &live_set.samples {
+                let old_id = sample.id.to_string();
+                let canonical_id = self.sample_id_map.get(&old_id).unwrap();
                 self.tx.execute(
                     "INSERT OR IGNORE INTO project_samples (project_id, sample_id)
                      VALUES (?, ?)",
-                    params![project_id, sample.id.to_string()],
+                    params![project_id, canonical_id],
                 )?;
             }
             
@@ -223,12 +362,16 @@ impl<'a> BatchInsertManager<'a> {
         let mut batch = BatchTransaction::new(self.conn)?;
         
         // Collect all unique items
-        batch.collect_items(&self.live_sets);
+        batch.collect_items(&self.live_sets)?;
         
-        // Insert all items
+        // First insert all plugins and samples
         batch.insert_plugins()?;
         batch.insert_samples()?;
+        
+        // Then insert projects and their relationships
         batch.insert_projects(&self.live_sets)?;
+        
+        // Finally update search indexes
         batch.update_search_indexes(&self.live_sets)?;
         
         // Commit and get stats
