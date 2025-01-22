@@ -3,16 +3,39 @@ import { Button } from '@/components/ui/button'
 import { FolderPlus, Folder, RefreshCw } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { invoke } from '@tauri-apps/api/tauri'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 export function Sidebar() {
+  const [isScanning, setIsScanning] = useState(false)
+
+  const handleRefresh = async () => {
+    try {
+      setIsScanning(true)
+      await invoke('start_scan')
+      toast.success('Started scanning projects')
+    } catch (error) {
+      toast.error(error as string)
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Header with actions */}
       <div className="p-2 flex items-center justify-between">
         <h2 className="text-sm font-medium">Project Folders</h2>
         <div className="flex gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <RefreshCw className="h-4 w-4" />
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8"
+            onClick={handleRefresh}
+            disabled={isScanning}
+          >
+            <RefreshCw className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <FolderPlus className="h-4 w-4" />

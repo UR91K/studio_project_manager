@@ -25,6 +25,52 @@ use crate::live_set::LiveSetPreprocessed;
 
 // Tauri imports
 use tauri::Manager;
+use tauri::State;
+
+// Add command imports
+use std::sync::Arc;
+use std::sync::Mutex;
+
+// Add state struct
+pub struct ScanState {
+    is_scanning: Arc<Mutex<bool>>
+}
+
+// Add command
+#[tauri::command]
+async fn start_scan(state: State<'_, ScanState>) -> Result<(), String> {
+    info!("Received scan request");
+    
+    // Check if already scanning
+    let mut is_scanning = state.is_scanning.lock().unwrap();
+    if *is_scanning {
+        info!("Scan already in progress, ignoring request");
+        return Err("Scan already in progress".to_string());
+    }
+    
+    // Set scanning flag
+    *is_scanning = true;
+    info!("Starting new scan");
+    
+    // Clone Arc for the async task
+    let is_scanning = Arc::clone(&state.is_scanning);
+    
+    // Run process_projects in a separate thread
+    tokio::spawn(async move {
+        info!("Starting process_projects in background");
+        if let Err(e) = process_projects() {
+            error!("Scan failed: {}", e);
+        } else {
+            info!("Scan completed successfully");
+        }
+        let mut is_scanning = is_scanning.lock().unwrap();
+        *is_scanning = false;
+        info!("Scan state reset");
+    });
+    
+    info!("Scan initiated");
+    Ok(())
+}
 
 fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocessed>, LiveSetError> {
     debug!("Preprocessing {} projects", paths.len());
@@ -300,12 +346,17 @@ mod tests {
 // Tauri entry point
 #[tokio::main]
 async fn main() {
-    // Initialize logging
+    // Initialize logging with INFO level
+    std::env::set_var("RUST_LOG", "info");
     env_logger::init();
     info!("Starting Studio Project Manager");
 
     // Initialize Tauri application
     tauri::Builder::default()
+        .manage(ScanState {
+            is_scanning: Arc::new(Mutex::new(false))
+        })
+        .invoke_handler(tauri::generate_handler![start_scan])
         .setup(|app| {
             info!("Setting up Tauri application");
             
@@ -314,6 +365,7 @@ async fn main() {
                 error!("Failed to load config: {}", e);
                 return Err(e.into());
             }
+            info!("Configuration loaded successfully");
             
             #[cfg(debug_assertions)]
             {
