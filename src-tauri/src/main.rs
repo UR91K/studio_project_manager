@@ -9,6 +9,7 @@ pub mod scan;
 mod test_utils;
 mod utils;
 mod watcher;
+
 use std::collections::HashSet;
 use std::path::PathBuf;
 use log::{info, debug, error, warn};
@@ -21,6 +22,9 @@ use crate::scan::parallel::ParallelParser;
 use crate::scan::project_scanner::ProjectPathScanner;
 use crate::error::LiveSetError;
 use crate::live_set::LiveSetPreprocessed;
+
+// Tauri imports
+use tauri::Manager;
 
 fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocessed>, LiveSetError> {
     debug!("Preprocessing {} projects", paths.len());
@@ -293,6 +297,32 @@ mod tests {
     }
 }
 
-fn main() {
-    process_projects().unwrap();
+// Tauri entry point
+#[tokio::main]
+async fn main() {
+    // Initialize logging
+    env_logger::init();
+    info!("Starting Studio Project Manager");
+
+    // Initialize Tauri application
+    tauri::Builder::default()
+        .setup(|app| {
+            info!("Setting up Tauri application");
+            
+            // Initialize your config and database here if needed
+            if let Err(e) = CONFIG.as_ref() {
+                error!("Failed to load config: {}", e);
+                return Err(e.into());
+            }
+            
+            #[cfg(debug_assertions)]
+            {
+                let window = app.get_window("main").unwrap();
+                window.open_devtools();
+            }
+            
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

@@ -1,17 +1,22 @@
 {
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/tooling/cli/schema.json",
   "build": {
     "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run dev",
     "devPath": "http://localhost:5173",
-    "distDir": "../build"
+    "distDir": "../dist"
   },
   "package": {
-    "productName": "studio_project_manager",
+    "productName": "Studio Project Manager",
     "version": "0.1.0"
   },
   "tauri": {
     "allowlist": {
-      "all": false
+      "all": false,
+      "fs": {
+        "all": true,
+        "scope": ["**"]
+      }
     },
     "bundle": {
       "active": true,
@@ -28,7 +33,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.tauri.dev",
+      "identifier": "com.studio-project-manager",
       "longDescription": "",
       "macOS": {
         "entitlements": null,
@@ -55,10 +60,10 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 600,
+        "height": 800,
         "resizable": true,
         "title": "Studio Project Manager",
-        "width": 800
+        "width": 1200
       }
     ]
   }
