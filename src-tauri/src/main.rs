@@ -29,6 +29,7 @@ use crate::error::LiveSetError;
 use crate::live_set::LiveSetPreprocessed;
 use crate::commands::AppState;
 use crate::commands::{start_scan, list_projects, search_projects};
+use crate::commands::scan::ScanProgress;
 
 fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocessed>, LiveSetError> {
     debug!("Preprocessing {} projects", paths.len());
@@ -95,7 +96,7 @@ fn filter_unchanged_projects(
     Ok(to_parse)
 }
 
-pub fn process_projects() -> Result<(), LiveSetError> {
+pub fn process_projects(window: Option<tauri::Window>) -> Result<(), LiveSetError> {
     debug!("Starting process_projects");
     
     // Get paths from config
@@ -168,6 +169,17 @@ pub fn process_projects() -> Result<(), LiveSetError> {
             Ok(result) => {
                 completed_count += 1;
                 info!("Progress: {}/{} projects processed", completed_count, total_projects);
+                
+                // Emit progress update if window is available
+                if let Some(window) = &window {
+                    let percentage = (completed_count * 100) / total_projects;
+                    let _ = window.emit("scan:progress", ScanProgress {
+                        status: "scanning".into(),
+                        current: completed_count,
+                        total: Some(total_projects),
+                        message: format!("Processing projects ({}%)", percentage),
+                    });
+                }
                 
                 match result {
                     Ok((path, live_set)) => {
@@ -256,8 +268,8 @@ mod tests {
             .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
             .collect();
 
-        // Run process_projects
-        process_projects().expect("process_projects failed");
+        // Run process_projects without window for testing
+        process_projects(None).expect("process_projects failed");
 
         // Open database and verify contents
         let db = LiveSetDatabase::new(PathBuf::from(&config.database_path))
@@ -305,7 +317,7 @@ mod tests {
 #[tokio::main]
 async fn main() {
     // Initialize logging with INFO level
-    std::env::set_var("RUST_LOG", "info");
+    std::env::set_var("RUST_LOG", "error");
     env_logger::init();
     info!("Starting Studio Project Manager");
 
