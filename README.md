@@ -8,7 +8,7 @@ A tool which aims to let users create an index of their Ableton Live sets and se
 
 ### Currently implemented
 
-- Extremely fast scanning and analyzing of Ableton Live Set (.als) files (~270 MB/s)
+- Efficient parsing of Ableton Live Set (.als) files (~130-270 MB/s)
 - Extract the following project data:
     - Tempo
     - Ableton version
@@ -18,12 +18,12 @@ A tool which aims to let users create an index of their Ableton Live sets and se
     - Samples used
     - Key + scale
     - Estimated duration
-- Check which plugins are missing in a project
+- Check which of the plugins in a project are installed
 - Efficient 5NF database for storing project information
 - FTS5 fuzzy searching across all project data
-- Tags system for organizing projects
+- Tags
 - Collections for planning albums and EPs
-- Tauri 
+- Clean Tauri GUI (work in progress)
 
 ### Planned - lower priority
 
