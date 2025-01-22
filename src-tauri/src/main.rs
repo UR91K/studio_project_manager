@@ -9,11 +9,16 @@ pub mod scan;
 mod test_utils;
 mod utils;
 mod watcher;
+mod commands;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
 use log::{info, debug, error, warn};
 use std::time::Duration;
+use tauri::Manager;
+use tauri::State;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
@@ -22,55 +27,8 @@ use crate::scan::parallel::ParallelParser;
 use crate::scan::project_scanner::ProjectPathScanner;
 use crate::error::LiveSetError;
 use crate::live_set::LiveSetPreprocessed;
-
-// Tauri imports
-use tauri::Manager;
-use tauri::State;
-
-// Add command imports
-use std::sync::Arc;
-use std::sync::Mutex;
-
-// Add state struct
-pub struct ScanState {
-    is_scanning: Arc<Mutex<bool>>
-}
-
-// Add command
-#[tauri::command]
-async fn start_scan(state: State<'_, ScanState>) -> Result<(), String> {
-    info!("Received scan request");
-    
-    // Check if already scanning
-    let mut is_scanning = state.is_scanning.lock().unwrap();
-    if *is_scanning {
-        info!("Scan already in progress, ignoring request");
-        return Err("Scan already in progress".to_string());
-    }
-    
-    // Set scanning flag
-    *is_scanning = true;
-    info!("Starting new scan");
-    
-    // Clone Arc for the async task
-    let is_scanning = Arc::clone(&state.is_scanning);
-    
-    // Run process_projects in a separate thread
-    tokio::spawn(async move {
-        info!("Starting process_projects in background");
-        if let Err(e) = process_projects() {
-            error!("Scan failed: {}", e);
-        } else {
-            info!("Scan completed successfully");
-        }
-        let mut is_scanning = is_scanning.lock().unwrap();
-        *is_scanning = false;
-        info!("Scan state reset");
-    });
-    
-    info!("Scan initiated");
-    Ok(())
-}
+use crate::commands::AppState;
+use crate::commands::{start_scan, list_projects, search_projects};
 
 fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocessed>, LiveSetError> {
     debug!("Preprocessing {} projects", paths.len());
@@ -351,30 +309,16 @@ async fn main() {
     env_logger::init();
     info!("Starting Studio Project Manager");
 
-    // Initialize Tauri application
+    let config = CONFIG.as_ref().expect("Failed to load config");
+    let db_path = PathBuf::from(&config.database_path);
+    
     tauri::Builder::default()
-        .manage(ScanState {
-            is_scanning: Arc::new(Mutex::new(false))
-        })
-        .invoke_handler(tauri::generate_handler![start_scan])
-        .setup(|app| {
-            info!("Setting up Tauri application");
-            
-            // Initialize your config and database here if needed
-            if let Err(e) = CONFIG.as_ref() {
-                error!("Failed to load config: {}", e);
-                return Err(e.into());
-            }
-            info!("Configuration loaded successfully");
-            
-            #[cfg(debug_assertions)]
-            {
-                let window = app.get_window("main").unwrap();
-                window.open_devtools();
-            }
-            
-            Ok(())
-        })
+        .manage(AppState::new(db_path).expect("Failed to create app state"))
+        .invoke_handler(tauri::generate_handler![
+            start_scan,
+            list_projects,
+            search_projects,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
