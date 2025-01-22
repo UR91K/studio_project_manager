@@ -37,8 +37,9 @@ A tool which aims to let users create an index of their Ableton Live sets and se
 
 ### Prerequisites
 
-- Rust 1.54 or higher
-- SQLite 3.35.0 or higher
+- Rust 1.84 or higher (for building the project)
+- Ableton Live - any version, 8-12 are officially supported
+  - the Ableton Live database is used to check which plugins are installed.
 
 ### Building from source
 
