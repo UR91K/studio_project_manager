@@ -217,7 +217,7 @@ mod tests {
 
     fn setup() {
         let _ = INIT.call_once(|| {
-            let _ = env::set_var("RUST_LOG", "debug");
+            let _ = env::set_var("RUST_LOG", "info");
             if let Err(_) = env_logger::try_init() {
                 // Logger already initialized, that's fine
             }
