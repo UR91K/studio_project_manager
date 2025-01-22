@@ -1,69 +1,50 @@
-# Ableton Live Project Manager
+# React + TypeScript + Vite
 
-## Overview
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-A tool which aims to let users create an index of their Ableton Live sets and search them based on their contents. As far as I know, this has the fastest ableton live set parser out there.
+Currently, two official plugins are available:
 
-## Features
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-### Currently implemented
+## Expanding the ESLint configuration
 
-- Extremely fast scanning and analyzing of Ableton Live Set (.als) files (~270 MB/s)
-- Extract the following project data:
-    - Tempo
-    - Ableton version
-    - Time signature
-    - Length (bars)
-    - Plugins used
-    - Samples used
-    - Key + scale
-    - Estimated duration
-- Check which plugins are missing in a project
-- Efficient 5NF database for storing project information
-- FTS5 fuzzy searching across all project data
+If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
 
-### Coming very soon - high priority
-- GUI with a search bar, user-friendly database viewer, and ability to add folders, etc.
+- Configure the top-level `parserOptions` property like this:
 
-### Planned - lower priority
-
-- Version control system
-- Album management system for creating albums of Ableton Live sets, notes, album art, etc.
-- Ability to reference and play demo audio files to audition sets.
-- Statistics tab, almost like "Ableton Wrapped" with information on things like plugin usage, most common tempos, etc.
-- macOS support
-
-## Installation
-
-### Prerequisites
-
-- Rust 1.54 or higher
-- SQLite 3.35.0 or higher
-
-### Building from source
-
-Warning: the project is not ready to be run on other people's machines and currently won't do anything unless you change the hard-coded file paths in the main function.
-
-Just clone, then build and run with cargo.
-
-## Configuration
-
-Edit the `config.toml` file to set up your project directories and database location:
-
-```toml
-paths = [
-    '{USER_HOME}\Documents\Ableton Live Projects'
-]
-
-database_path = '{USER_HOME}\Documents\ableton_manager\ableton_live_sets.db'
-
-live_database_dir = '{USER_HOME}\AppData\Local\Ableton\Live Database'
+```js
+export default tseslint.config({
+  languageOptions: {
+    // other options...
+    parserOptions: {
+      project: ['./tsconfig.node.json', './tsconfig.app.json'],
+      tsconfigRootDir: import.meta.dirname,
+    },
+  },
+})
 ```
 
-## Usage
+- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
+- Optionally add `...tseslint.configs.stylisticTypeChecked`
+- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
 
-Usage will be provided once the app is functional.
+```js
+// eslint.config.js
+import react from 'eslint-plugin-react'
 
-## Contributing
-
-Contributions are welcome! Feel free to submit a PR, but please rather open an issue for large contributions.
+export default tseslint.config({
+  // Set the react version
+  settings: { react: { version: '18.3' } },
+  plugins: {
+    // Add the react plugin
+    react,
+  },
+  rules: {
+    // other rules...
+    // Enable its recommended rules
+    ...react.configs.recommended.rules,
+    ...react.configs['jsx-runtime'].rules,
+  },
+})
+```
