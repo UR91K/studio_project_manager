@@ -538,3 +538,40 @@ impl Default for Id {
         Id(0)
     }
 }
+
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
+pub struct PluginTableInfo {
+    pub id: String,
+    pub name: String,
+    pub vendor: Option<String>,
+    pub version: Option<String>,
+    pub format: String,
+    pub installed: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SampleTableInfo {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub is_present: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectTableInfo {
+    pub id: String,
+    pub name: String,
+    pub filename: String,
+    pub modified: String,
+    pub created: String,
+    pub last_scanned: String,
+    pub time_signature: String,
+    pub key_scale: Option<String>,
+    pub duration: Option<String>,
+    pub ableton_version: String,
+    pub plugins: Vec<PluginTableInfo>,
+    pub samples: Vec<SampleTableInfo>,
+    pub demo: bool,
+} 

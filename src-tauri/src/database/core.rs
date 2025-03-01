@@ -1,7 +1,7 @@
 use super::models::SqlDateTime;
 use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
-use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
+use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature, PluginFormat};
 use crate::utils::metadata::load_file_hash;
 use chrono::{DateTime, Local, TimeZone};
 use log::{debug, info};
@@ -10,6 +10,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use chrono::Utc;
+use crate::models::{ProjectTableInfo, PluginTableInfo, SampleTableInfo};
+
 pub struct LiveSetDatabase {
     pub conn: Connection,
 }
@@ -435,10 +437,7 @@ impl LiveSetDatabase {
                                     module_id: row.get(2)?,
                                     dev_identifier: row.get(3)?,
                                     name,
-                                    plugin_format: row
-                                        .get::<_, String>(5)?
-                                        .parse()
-                                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    plugin_format: PluginFormat::VST3AudioFx,
                                     installed: row.get(6)?,
                                     vendor: row.get(7)?,
                                     version: row.get(8)?,
@@ -628,10 +627,7 @@ impl LiveSetDatabase {
                     module_id: row.get(2)?,
                     dev_identifier: row.get(3)?,
                     name,
-                    plugin_format: row
-                        .get::<_, String>(5)?
-                        .parse()
-                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                    plugin_format: PluginFormat::VST3AudioFx,
                     installed: row.get(6)?,
                     vendor: row.get(7)?,
                     version: row.get(8)?,
@@ -852,11 +848,62 @@ impl LiveSetDatabase {
         match is_active {
             Some(status) => {
                 let mut stmt = self.conn.prepare(
-                    "SELECT * FROM projects WHERE is_active = ?"
+                    r#"
+                    SELECT 
+                        p.*,
+                        GROUP_CONCAT(DISTINCT pl.name) as plugin_names,
+                        GROUP_CONCAT(DISTINCT s.name) as sample_names
+                    FROM projects p
+                    LEFT JOIN project_plugins pp ON pp.project_id = p.id
+                    LEFT JOIN plugins pl ON pl.id = pp.plugin_id
+                    LEFT JOIN project_samples ps ON ps.project_id = p.id
+                    LEFT JOIN samples s ON s.id = ps.sample_id
+                    WHERE p.is_active = ?
+                    GROUP BY p.id
+                    "#
                 ).map_err(DatabaseError::from)?;
                 
                 let projects = stmt.query_map([status], |row| {
-                    self.row_to_live_set(row)
+                    let mut project = self.row_to_live_set(row)?;
+                    
+                    // Parse plugin names (column index is number of base columns + 1)
+                    if let Ok(plugin_names) = row.get::<_, Option<String>>(14) {
+                        if let Some(names) = plugin_names {
+                            project.plugins = names.split(',')
+                                .map(|name| Plugin {
+                                    id: Uuid::new_v4(),
+                                    plugin_id: None,
+                                    module_id: None,
+                                    dev_identifier: name.to_string(),
+                                    name: name.to_string(),
+                                    plugin_format: PluginFormat::VST3AudioFx,
+                                    installed: true,
+                                    vendor: None,
+                                    version: None,
+                                    sdk_version: None,
+                                    flags: Some(0),
+                                    scanstate: Some(0),
+                                    enabled: Some(1),
+                                })
+                                .collect();
+                        }
+                    }
+                    
+                    // Parse sample names (column index is number of base columns + 2)
+                    if let Ok(sample_names) = row.get::<_, Option<String>>(15) {
+                        if let Some(names) = sample_names {
+                            project.samples = names.split(',')
+                                .map(|name| Sample {
+                                    id: Uuid::new_v4(),
+                                    name: name.to_string(),
+                                    path: PathBuf::new(),
+                                    is_present: true,
+                                })
+                                .collect();
+                        }
+                    }
+                    
+                    Ok(project)
                 }).map_err(DatabaseError::from)?;
                 
                 projects.collect::<rusqlite::Result<Vec<_>>>().map_err(DatabaseError::from)
@@ -1010,5 +1057,231 @@ impl LiveSetDatabase {
                 .single()
                 .expect("Invalid timestamp in database")
         }))
+    }
+
+    fn row_to_project_table_info(
+        &self,
+        row: &rusqlite::Row,
+        tx: &rusqlite::Transaction,
+    ) -> rusqlite::Result<ProjectTableInfo> {
+        let project_id: String = row.get("id")?;
+        
+        // Get plugins for this project
+        let mut stmt = tx.prepare(
+            r#"
+            SELECT p.* 
+            FROM plugins p
+            JOIN project_plugins pp ON pp.plugin_id = p.id
+            WHERE pp.project_id = ?
+            "#
+        )?;
+        
+        let plugins = stmt.query_map([&project_id], |row| {
+            Ok(PluginTableInfo {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                vendor: row.get("vendor")?,
+                version: row.get("version")?,
+                format: row.get("format")?,
+                installed: row.get("installed")?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+
+        // Get samples for this project
+        let mut stmt = tx.prepare(
+            r#"
+            SELECT s.* 
+            FROM samples s
+            JOIN project_samples ps ON ps.sample_id = s.id
+            WHERE ps.project_id = ?
+            "#
+        )?;
+        
+        let samples = stmt.query_map([&project_id], |row| {
+            Ok(SampleTableInfo {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                path: row.get("path")?,
+                is_present: row.get("is_present")?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+
+        // Format timestamps
+        let created_timestamp: i64 = row.get("created_at")?;
+        let modified_timestamp: i64 = row.get("modified_at")?;
+        let parsed_timestamp: i64 = row.get("last_parsed_at")?;
+        let duration_secs: Option<i64> = row.get("duration_seconds")?;
+
+        Ok(ProjectTableInfo {
+            id: project_id,
+            name: row.get("name")?,
+            filename: row.get::<_, String>("path")?
+                .split('/')
+                .last()
+                .unwrap_or_default()
+                .to_string(),
+            modified: Local.timestamp_opt(modified_timestamp, 0)
+                .single()
+                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                .unwrap_or_default(),
+            created: Local.timestamp_opt(created_timestamp, 0)
+                .single()
+                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                .unwrap_or_default(),
+            last_scanned: Local.timestamp_opt(parsed_timestamp, 0)
+                .single()
+                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                .unwrap_or_default(),
+            time_signature: format!("{}/{}", 
+                row.get::<_, i32>("time_signature_numerator")?,
+                row.get::<_, i32>("time_signature_denominator")?
+            ),
+            key_scale: match (
+                row.get::<_, Option<String>>("key_signature_tonic")?,
+                row.get::<_, Option<String>>("key_signature_scale")?
+            ) {
+                (Some(tonic), Some(scale)) => Some(format!("{} {}", tonic, scale)),
+                _ => None,
+            },
+            duration: duration_secs.map(|secs| {
+                let duration = chrono::Duration::seconds(secs);
+                format!("{}:{:02}", duration.num_minutes(), duration.num_seconds() % 60)
+            }),
+            ableton_version: format!("{}.{}.{}{}",
+                row.get::<_, i32>("ableton_version_major")?,
+                row.get::<_, i32>("ableton_version_minor")?,
+                row.get::<_, i32>("ableton_version_patch")?,
+                if row.get::<_, bool>("ableton_version_beta")? { " beta" } else { "" }
+            ),
+            plugins,
+            samples,
+            demo: false, // This will be implemented later
+        })
+    }
+
+    pub fn get_all_projects_for_table(
+        &mut self,
+        is_active: Option<bool>
+    ) -> Result<Vec<ProjectTableInfo>, DatabaseError> {
+        debug!("Getting all projects for table display");
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        
+        {
+            let mut stmt = tx.prepare(
+                r#"
+                SELECT * FROM projects
+                WHERE is_active = ?
+                "#
+            )?;
+            
+            let mut rows = stmt.query([is_active.unwrap_or(true)])?;
+            while let Some(row) = rows.next()? {
+                let project_id: String = row.get("id")?;
+                debug!("Processing project: {}", project_id);
+                
+                let mut project_info = ProjectTableInfo {
+                    id: project_id.clone(),
+                    name: row.get("name")?,
+                    filename: row.get::<_, String>("path")?
+                        .split('/')
+                        .last()
+                        .unwrap_or_default()
+                        .to_string(),
+                    modified: Local.timestamp_opt(row.get::<_, i64>("modified_at")?, 0)
+                        .single()
+                        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_default(),
+                    created: Local.timestamp_opt(row.get::<_, i64>("created_at")?, 0)
+                        .single()
+                        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_default(),
+                    last_scanned: Local.timestamp_opt(row.get::<_, i64>("last_parsed_at")?, 0)
+                        .single()
+                        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_default(),
+                    time_signature: format!("{}/{}", 
+                        row.get::<_, i32>("time_signature_numerator")?,
+                        row.get::<_, i32>("time_signature_denominator")?
+                    ),
+                    key_scale: match (
+                        row.get::<_, Option<String>>("key_signature_tonic")?,
+                        row.get::<_, Option<String>>("key_signature_scale")?
+                    ) {
+                        (Some(tonic), Some(scale)) => Some(format!("{} {}", tonic, scale)),
+                        _ => None,
+                    },
+                    duration: row.get::<_, Option<i64>>("duration_seconds")?
+                        .map(|secs| {
+                            let duration = chrono::Duration::seconds(secs);
+                            format!("{}:{:02}", duration.num_minutes(), duration.num_seconds() % 60)
+                        }),
+                    ableton_version: format!("{}.{}.{}{}",
+                        row.get::<_, i32>("ableton_version_major")?,
+                        row.get::<_, i32>("ableton_version_minor")?,
+                        row.get::<_, i32>("ableton_version_patch")?,
+                        if row.get::<_, bool>("ableton_version_beta")? { " beta" } else { "" }
+                    ),
+                    plugins: Vec::new(),
+                    samples: Vec::new(),
+                    demo: false,
+                };
+
+                // Get plugins in a separate scope
+                {
+                    let mut stmt = tx.prepare(
+                        r#"
+                        SELECT p.* 
+                        FROM plugins p
+                        JOIN project_plugins pp ON pp.plugin_id = p.id
+                        WHERE pp.project_id = ?
+                        "#
+                    )?;
+                    
+                    let plugins = stmt.query_map([&project_id], |row| {
+                        Ok(PluginTableInfo {
+                            id: row.get("id")?,
+                            name: row.get("name")?,
+                            vendor: row.get("vendor")?,
+                            version: row.get("version")?,
+                            format: row.get("format")?,
+                            installed: row.get("installed")?,
+                        })
+                    })?.filter_map(|r| r.ok()).collect::<Vec<_>>();
+                    
+                    project_info.plugins = plugins;
+                }
+
+                // Get samples in a separate scope
+                {
+                    let mut stmt = tx.prepare(
+                        r#"
+                        SELECT s.* 
+                        FROM samples s
+                        JOIN project_samples ps ON ps.sample_id = s.id
+                        WHERE ps.project_id = ?
+                        "#
+                    )?;
+                    
+                    let samples = stmt.query_map([&project_id], |row| {
+                        Ok(SampleTableInfo {
+                            id: row.get("id")?,
+                            name: row.get("name")?,
+                            path: row.get("path")?,
+                            is_present: row.get("is_present")?,
+                        })
+                    })?.filter_map(|r| r.ok()).collect::<Vec<_>>();
+                    
+                    project_info.samples = samples;
+                }
+
+                debug!("Adding project to results: {}", project_info.name);
+                results.push(project_info);
+            }
+        }
+
+        tx.commit()?;
+        debug!("Retrieved {} projects for table display", results.len());
+        Ok(results)
     }
 }

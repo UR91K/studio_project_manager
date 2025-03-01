@@ -33,7 +33,7 @@ export function StatusBar() {
     : progress.message
 
   return (
-    <div className="h-6 border-t border-border/40 px-2 text-xs flex items-center bg-background/50 text-muted-foreground font-mono">
+    <div className="h-6 border-t border-border/40 px-2 text-xs flex items-center bg-background/50 text-muted-foreground">
       <span>{progressMessage}</span>
     </div>
   )

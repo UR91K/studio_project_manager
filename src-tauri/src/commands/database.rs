@@ -3,7 +3,8 @@ use serde::Serialize;
 use crate::commands::state::AppState;
 use crate::live_set::LiveSet;
 use crate::database::search::{SearchQuery, SearchResult};
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, TimeZone, NaiveDateTime};
+use crate::models::ProjectTableInfo;
 
 #[derive(Serialize)]
 pub struct ProjectInfo {
@@ -60,11 +61,10 @@ impl From<LiveSet> for ProjectInfo {
 }
 
 #[tauri::command]
-pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectInfo>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.get_all_projects_with_status(Some(true))
+pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectTableInfo>, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_all_projects_for_table(Some(true))
         .map_err(|e| e.to_string())
-        .map(|projects| projects.into_iter().map(ProjectInfo::from).collect())
 }
 
 #[tauri::command]
@@ -74,7 +74,29 @@ pub async fn search_projects(
 ) -> Result<Vec<ProjectInfo>, String> {
     // Validate query length
     if query.trim().is_empty() {
-        return list_projects(state).await;
+        return list_projects(state).await
+            .map(|projects| projects.into_iter()
+                .map(|p| ProjectInfo {
+                    id: p.id,
+                    name: p.name,
+                    filename: p.filename,
+                    modified: NaiveDateTime::parse_from_str(&p.modified, "%Y-%m-%d %H:%M:%S")
+                        .map(|dt| Local.from_local_datetime(&dt).single().unwrap())
+                        .unwrap_or_else(|_| Local::now()),
+                    created: NaiveDateTime::parse_from_str(&p.created, "%Y-%m-%d %H:%M:%S")
+                        .map(|dt| Local.from_local_datetime(&dt).single().unwrap())
+                        .unwrap_or_else(|_| Local::now()),
+                    last_scanned: NaiveDateTime::parse_from_str(&p.last_scanned, "%Y-%m-%d %H:%M:%S")
+                        .map(|dt| Local.from_local_datetime(&dt).single().unwrap())
+                        .unwrap_or_else(|_| Local::now()),
+                    time_signature: p.time_signature,
+                    key_scale: p.key_scale,
+                    duration: p.duration,
+                    ableton_version: p.ableton_version,
+                    plugins: p.plugins.into_iter().map(|plugin| plugin.name).collect(),
+                    samples: p.samples.into_iter().map(|sample| sample.name).collect(),
+                })
+                .collect());
     }
     
     if query.len() > 100 {
