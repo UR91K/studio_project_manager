@@ -9,6 +9,7 @@ pub mod scan;
 mod test_utils;
 mod utils;
 mod watcher;
+pub mod ui;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use log::{info, debug, error, warn};
@@ -293,6 +294,13 @@ mod tests {
     }
 }
 
-fn main() {
-    process_projects().unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    env_logger::init();
+    info!("Starting Studio Project Manager");
+    
+    // Run the Iced application
+    ui::StudioProjectManager::run(iced::Settings::default())?;
+    
+    Ok(())
 }

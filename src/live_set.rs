@@ -41,7 +41,7 @@ impl LiveSetPreprocessed {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LiveSet {
     pub(crate) is_active: bool,
 

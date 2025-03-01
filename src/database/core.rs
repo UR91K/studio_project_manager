@@ -10,6 +10,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use chrono::Utc;
+
+#[derive(Debug)]
 pub struct LiveSetDatabase {
     pub conn: Connection,
 }
@@ -843,6 +845,11 @@ impl LiveSetDatabase {
             params![hash],
             |row| self.row_to_live_set(row),
         ).optional().map_err(DatabaseError::from)
+    }
+
+    pub fn get_all_projects(&self) -> Result<Vec<LiveSet>, DatabaseError> {
+        // Return all active projects
+        self.get_all_projects_with_status(Some(true))
     }
 
     pub fn get_all_projects_with_status(

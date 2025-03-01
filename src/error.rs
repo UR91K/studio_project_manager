@@ -43,6 +43,23 @@ pub enum XmlParseError {
     UnknownPluginFormat(String),
 }
 
+impl Clone for XmlParseError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::DataNotFound => Self::DataNotFound,
+            Self::RootTagNotFound => Self::RootTagNotFound,
+            Self::Utf8Error(e) => Self::Utf8Error(*e),
+            Self::AttrError(e) => Self::AttrError(e.clone()),
+            Self::InvalidStructure => Self::InvalidStructure,
+            Self::QuickXmlError(e) => Self::QuickXmlError(e.clone()),
+            Self::ElementTreeError(_) => Self::InvalidStructure, // Convert to a similar error since ElementTreeError doesn't implement Clone
+            Self::EventNotFound(s) => Self::EventNotFound(s.clone()),
+            Self::MissingRequiredAttribute(s) => Self::MissingRequiredAttribute(s.clone()),
+            Self::UnknownPluginFormat(s) => Self::UnknownPluginFormat(s.clone()),
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum FileError {
     #[error("Invalid file format: {0}")]
@@ -88,7 +105,33 @@ pub enum FileError {
     },
 }
 
-#[derive(Error, Debug)]
+impl Clone for FileError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::InvalidFormat(s) => Self::InvalidFormat(s.clone()),
+            Self::NameError(s) => Self::NameError(s.clone()),
+            Self::NotFound(p) => Self::NotFound(p.clone()),
+            Self::NotAFile(p) => Self::NotAFile(p.clone()),
+            Self::InvalidExtension(p) => Self::InvalidExtension(p.clone()),
+            Self::InvalidLiveSetFile(p) => Self::InvalidLiveSetFile(p.clone()),
+            Self::XmlError(e) => Self::XmlError(e.clone()),
+            Self::MetadataError { path, source } => Self::MetadataError {
+                path: path.clone(),
+                source: io::Error::new(source.kind(), source.to_string()),
+            },
+            Self::HashingError { path, source } => Self::HashingError {
+                path: path.clone(),
+                source: io::Error::new(source.kind(), source.to_string()),
+            },
+            Self::GzipDecompressionError { path, source } => Self::GzipDecompressionError {
+                path: path.clone(),
+                source: io::Error::new(source.kind(), source.to_string()),
+            },
+        }
+    }
+}
+
+#[derive(Error, Debug, Clone)]
 pub enum VersionError {
     #[error("Failed to parse version: {0}")]
     ParseError(#[from] std::num::ParseIntError),
@@ -115,7 +158,7 @@ pub enum VersionError {
     AttrError(#[from] AttrError),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum AttributeError {
     #[error("'Value' attribute not found")]
     ValueNotFound(String),
@@ -148,7 +191,21 @@ pub enum SampleError {
     AttributeError(#[from] AttributeError),
 }
 
-#[derive(Error, Debug)]
+impl Clone for SampleError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::HexDecodeError(e) => Self::HexDecodeError(e.clone()),
+            Self::InvalidUtf16Encoding => Self::InvalidUtf16Encoding,
+            Self::PathProcessingError(s) => Self::PathProcessingError(s.clone()),
+            Self::FileNotFound(p) => Self::FileNotFound(p.clone()),
+            Self::FileReadError(e) => Self::PathProcessingError(e.to_string()),
+            Self::XmlError(e) => Self::XmlError(e.clone()),
+            Self::AttributeError(e) => Self::AttributeError(e.clone()),
+        }
+    }
+}
+
+#[derive(Error, Debug, Clone)]
 pub enum TimeSignatureError {
     #[error("Failed to parse encoded time signature: {0}")]
     ParseEncodedError(#[from] std::num::ParseIntError),
@@ -160,7 +217,7 @@ pub enum TimeSignatureError {
     ValueAttributeNotFound,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PluginError {
     #[error("XML parsing error: {0}")]
     XmlError(#[from] XmlParseError),
@@ -206,6 +263,22 @@ pub enum DatabaseError {
 
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
+}
+
+impl Clone for DatabaseError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::SqliteError(_) => Self::QueryError("SQLite error occurred".to_string()),
+            Self::DatabaseNotFound(p) => Self::DatabaseNotFound(p.clone()),
+            Self::ConnectionError(s) => Self::ConnectionError(s.clone()),
+            Self::QueryError(s) => Self::QueryError(s.clone()),
+            Self::ParseError(s) => Self::ParseError(s.clone()),
+            Self::InvalidSchema(s) => Self::InvalidSchema(s.clone()),
+            Self::FileError(e) => Self::FileError(e.clone()),
+            Self::ConfigError(e) => Self::ConfigError(e.clone()),
+            Self::InvalidOperation(s) => Self::InvalidOperation(s.clone()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -256,7 +329,7 @@ impl From<toml::de::Error> for ConfigError {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum TempoError {
     #[error("XML parsing error: {0}")]
     XmlError(#[from] XmlParseError),
@@ -268,7 +341,7 @@ pub enum TempoError {
     InvalidTempoValue,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PatternError {
     #[error("Invalid regex pattern: {0}")]
     InvalidRegex(#[from] regex::Error),
@@ -277,7 +350,7 @@ pub enum PatternError {
     MatchError(String),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Error, Debug)]
 pub enum LiveSetError {
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
@@ -332,6 +405,31 @@ pub enum LiveSetError {
 
     #[error("Invalid project: {0}")]
     InvalidProject(String),
+}
+
+impl Clone for LiveSetError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::IoError(e) => Self::CreateLiveSetError(format!("IO error: {}", e)),
+            Self::XmlError(e) => Self::XmlError(e.clone()),
+            Self::InvalidVersion(s) => Self::InvalidVersion(s.clone()),
+            Self::UnsupportedVersion(v) => Self::UnsupportedVersion(*v),
+            Self::MissingVersion => Self::MissingVersion,
+            Self::TempoError(e) => Self::TempoError(e.clone()),
+            Self::TimeSignatureError(e) => Self::TimeSignatureError(e.clone()),
+            Self::SampleError(e) => Self::SampleError(e.clone()),
+            Self::FileError(e) => Self::FileError(e.clone()),
+            Self::VersionError(e) => Self::VersionError(e.clone()),
+            Self::AttributeError(e) => Self::AttributeError(e.clone()),
+            Self::AttrError(e) => Self::AttrError(e.clone()),
+            Self::PluginError(e) => Self::PluginError(e.clone()),
+            Self::PatternError(e) => Self::PatternError(e.clone()),
+            Self::CreateLiveSetError(s) => Self::CreateLiveSetError(s.clone()),
+            Self::DatabaseError(e) => Self::DatabaseError(e.clone()),
+            Self::ConfigError(e) => Self::ConfigError(e.clone()),
+            Self::InvalidProject(s) => Self::InvalidProject(s.clone()),
+        }
+    }
 }
 
 impl From<quick_xml::Error> for LiveSetError {
