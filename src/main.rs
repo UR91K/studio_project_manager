@@ -14,6 +14,8 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use log::{info, debug, error, warn};
 use std::time::Duration;
+use std::sync::{Mutex, Arc};
+use once_cell::sync::Lazy;
 
 use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
@@ -22,6 +24,25 @@ use crate::scan::parallel::ParallelParser;
 use crate::scan::project_scanner::ProjectPathScanner;
 use crate::error::LiveSetError;
 use crate::live_set::LiveSetPreprocessed;
+
+// Define a global progress callback
+type ProgressCallback = Box<dyn Fn(f32) + Send + 'static>;
+static PROGRESS_CALLBACK: Lazy<Mutex<Option<ProgressCallback>>> = Lazy::new(|| Mutex::new(None));
+
+// Function to set the progress callback
+pub fn set_progress_callback<F>(callback: F)
+where
+    F: Fn(f32) + Send + 'static,
+{
+    let mut progress_callback = PROGRESS_CALLBACK.lock().unwrap();
+    *progress_callback = Some(Box::new(callback));
+}
+
+// Function to clear the progress callback
+pub fn clear_progress_callback() {
+    let mut progress_callback = PROGRESS_CALLBACK.lock().unwrap();
+    *progress_callback = None;
+}
 
 fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocessed>, LiveSetError> {
     debug!("Preprocessing {} projects", paths.len());
@@ -160,7 +181,14 @@ pub fn process_projects() -> Result<(), LiveSetError> {
         match receiver.recv_timeout(Duration::from_secs(5)) {
             Ok(result) => {
                 completed_count += 1;
+                let progress = completed_count as f32 / total_projects as f32;
                 info!("Progress: {}/{} projects processed", completed_count, total_projects);
+                
+                // Send progress update to UI if we have a callback
+                let progress_callback = PROGRESS_CALLBACK.lock().unwrap();
+                if let Some(callback) = &*progress_callback {
+                    callback(progress);
+                }
                 
                 match result {
                     Ok((path, live_set)) => {

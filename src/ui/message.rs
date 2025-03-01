@@ -23,4 +23,10 @@ pub enum Message {
     // Scanning
     ScanFoldersClicked,
     ScanCompleted(Result<(), String>),
+    ScanProgress(f32), // Progress value between 0.0 and 1.0
+    
+    // Status
+    UpdateStatus(String),
+    UpdateStatusWithProgress(String, f32),
+    ClearStatus,
 } 

@@ -26,12 +26,30 @@ impl Default for AppState {
 #[derive(Debug, Clone)]
 pub struct UiState {
     pub search_query: String,
+    pub status: StatusInfo,
+}
+
+// Status information for the status bar
+#[derive(Debug, Clone)]
+pub struct StatusInfo {
+    pub message: String,
+    pub progress: Option<f32>, // 0.0 to 1.0 for progress bar
+}
+
+impl Default for StatusInfo {
+    fn default() -> Self {
+        Self {
+            message: "Ready".to_string(),
+            progress: None,
+        }
+    }
 }
 
 impl Default for UiState {
     fn default() -> Self {
         Self {
             search_query: String::new(),
+            status: StatusInfo::default(),
         }
     }
 }

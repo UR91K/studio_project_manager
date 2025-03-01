@@ -1,8 +1,9 @@
-use iced::{Application, Command, Element, Length, Settings, Theme};
+use iced::{Application, Command, Element, Length, Theme};
 use iced::widget::{Button, Column, Container, Row, Scrollable, Text, TextInput};
 use log::{debug, error, info};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use futures::stream::StreamExt;
 
 use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
@@ -70,6 +71,9 @@ impl Application for StudioProjectManager {
         match message {
             Message::Initialize => {
                 debug!("Initializing application");
+                self.ui_state.status.message = "Initializing...".to_string();
+                self.ui_state.status.progress = None;
+                
                 let db_path = self.db_path.clone();
                 
                 Command::perform(
@@ -77,7 +81,7 @@ impl Application for StudioProjectManager {
                         LiveSetDatabase::new(db_path)
                     },
                     |result| match result {
-                        Ok(db) => Message::DatabaseLoaded(Ok(())),
+                        Ok(_) => Message::DatabaseLoaded(Ok(())),
                         Err(e) => Message::DatabaseLoaded(Err(e.to_string())),
                     }
                 )
@@ -86,6 +90,8 @@ impl Application for StudioProjectManager {
                 match result {
                     Ok(()) => {
                         info!("Database loaded successfully");
+                        self.ui_state.status.message = "Loading projects...".to_string();
+                        
                         // Create the database connection
                         match LiveSetDatabase::new(self.db_path.clone()) {
                             Ok(db) => {
@@ -96,7 +102,7 @@ impl Application for StudioProjectManager {
                                     
                                     Command::perform(
                                         async move {
-                                            let mut db_guard = db_clone.lock().unwrap();
+                                            let db_guard = db_clone.lock().unwrap();
                                             match db_guard.get_all_projects() {
                                                 Ok(projects) => Ok(projects),
                                                 Err(e) => Err(e.to_string()),
@@ -110,6 +116,7 @@ impl Application for StudioProjectManager {
                             },
                             Err(e) => {
                                 error!("Failed to load database: {}", e);
+                                self.ui_state.status.message = format!("Error: {}", e);
                                 self.state = AppState::Error(format!("Failed to load database: {}", e));
                                 Command::none()
                             }
@@ -117,6 +124,7 @@ impl Application for StudioProjectManager {
                     },
                     Err(e) => {
                         error!("Failed to load database: {}", e);
+                        self.ui_state.status.message = format!("Error: {}", e);
                         self.state = AppState::Error(format!("Failed to load database: {}", e));
                         Command::none()
                     }
@@ -126,6 +134,9 @@ impl Application for StudioProjectManager {
                 match result {
                     Ok(projects) => {
                         info!("Loaded {} projects", projects.len());
+                        self.ui_state.status.message = format!("Ready - {} projects loaded", projects.len());
+                        self.ui_state.status.progress = None;
+                        
                         self.state = AppState::Ready {
                             projects,
                             search_results: Vec::new(),
@@ -135,6 +146,7 @@ impl Application for StudioProjectManager {
                     },
                     Err(e) => {
                         error!("Failed to load projects: {}", e);
+                        self.ui_state.status.message = format!("Error: {}", e);
                         self.state = AppState::Error(format!("Failed to load projects: {}", e));
                         Command::none()
                     }
@@ -142,6 +154,8 @@ impl Application for StudioProjectManager {
             },
             Message::ViewAllProjects => {
                 if let AppState::Ready { projects, selected_project_id, .. } = &self.state {
+                    self.ui_state.status.message = "Showing all projects".to_string();
+                    
                     self.state = AppState::Ready {
                         projects: projects.clone(),
                         search_results: Vec::new(),
@@ -152,6 +166,12 @@ impl Application for StudioProjectManager {
             },
             Message::ProjectSelected(project_id) => {
                 if let AppState::Ready { projects, search_results, .. } = &self.state {
+                    if let Some(id) = &project_id {
+                        self.ui_state.status.message = format!("Selected project: {}", id);
+                    } else {
+                        self.ui_state.status.message = "No project selected".to_string();
+                    }
+                    
                     self.state = AppState::Ready {
                         projects: projects.clone(),
                         search_results: search_results.clone(),
@@ -165,6 +185,8 @@ impl Application for StudioProjectManager {
                 
                 if query.is_empty() {
                     if let AppState::Ready { projects, selected_project_id, .. } = &self.state {
+                        self.ui_state.status.message = "Ready".to_string();
+                        
                         self.state = AppState::Ready {
                             projects: projects.clone(),
                             search_results: Vec::new(),
@@ -173,6 +195,8 @@ impl Application for StudioProjectManager {
                     }
                     return Command::none();
                 }
+                
+                self.ui_state.status.message = format!("Searching for '{}'...", query);
                 
                 if let Some(db) = &self.db {
                     let db_clone = Arc::clone(db);
@@ -195,6 +219,8 @@ impl Application for StudioProjectManager {
             Message::SearchPerformed(result) => {
                 match result {
                     Ok(search_results) => {
+                        self.ui_state.status.message = format!("Found {} results", search_results.len());
+                        
                         if let AppState::Ready { projects, selected_project_id, .. } = &self.state {
                             self.state = AppState::Ready {
                                 projects: projects.clone(),
@@ -205,36 +231,87 @@ impl Application for StudioProjectManager {
                     },
                     Err(e) => {
                         error!("Search failed: {}", e);
+                        self.ui_state.status.message = format!("Search error: {}", e);
                         // Keep the current state but show an error message
-                        // In a more complete implementation, we might want to show a toast or notification
                     }
                 }
                 Command::none()
             },
             Message::ScanFoldersClicked => {
                 info!("Scanning folders");
+                self.ui_state.status.message = "Scanning folders...".to_string();
+                self.ui_state.status.progress = Some(0.0);
                 
-                Command::perform(
+                // Create a channel for progress updates
+                let (sender, _receiver) = iced::futures::channel::mpsc::unbounded();
+                
+                // Set the progress callback
+                crate::set_progress_callback(move |progress| {
+                    let _ = sender.unbounded_send(progress);
+                });
+                
+                // Create a command that will periodically update progress
+                let progress_command = Command::perform(
                     async {
-                        process_projects()
+                        // Use std::thread::sleep to simulate initial delay
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        
+                        // Return a default progress to start
+                        0.1
+                    },
+                    |progress| Message::ScanProgress(progress)
+                );
+                
+                // Start the actual scan process
+                let scan_command = Command::perform(
+                    async {
+                        let result = process_projects();
+                        // Clear the callback when done
+                        crate::clear_progress_callback();
+                        result
                     },
                     |result| match result {
                         Ok(()) => Message::ScanCompleted(Ok(())),
                         Err(e) => Message::ScanCompleted(Err(e.to_string())),
                     }
-                )
+                );
+                
+                Command::batch(vec![progress_command, scan_command])
+            },
+            Message::ScanProgress(progress) => {
+                self.ui_state.status.progress = Some(progress);
+                self.ui_state.status.message = format!("Scanning folders... {}%", (progress * 100.0) as i32);
+                
+                // If progress is less than 100%, schedule another update in case we don't get callbacks
+                if progress < 0.99 {
+                    Command::perform(
+                        async move {
+                            // Wait a bit before checking again
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                            // Return the current progress + a small increment as a fallback
+                            // The real progress from the callback will override this if available
+                            (progress + 0.01).min(0.99)
+                        },
+                        Message::ScanProgress
+                    )
+                } else {
+                    Command::none()
+                }
             },
             Message::ScanCompleted(result) => {
                 match result {
                     Ok(_) => {
                         info!("Scan completed successfully");
+                        self.ui_state.status.message = "Scan completed. Reloading projects...".to_string();
+                        self.ui_state.status.progress = None;
+                        
                         // Reload projects after scanning
                         if let Some(db) = &self.db {
                             let db_clone = Arc::clone(db);
                             
                             Command::perform(
                                 async move {
-                                    let mut db_guard = db_clone.lock().unwrap();
+                                    let db_guard = db_clone.lock().unwrap();
                                     match db_guard.get_all_projects() {
                                         Ok(projects) => Ok(projects),
                                         Err(e) => Err(e.to_string()),
@@ -248,10 +325,41 @@ impl Application for StudioProjectManager {
                     },
                     Err(e) => {
                         error!("Scan failed: {}", e);
+                        self.ui_state.status.message = format!("Scan failed: {}", e);
+                        self.ui_state.status.progress = None;
                         self.state = AppState::Error(format!("Scan failed: {}", e));
                         Command::none()
                     }
                 }
+            },
+            Message::UpdateStatus(message) => {
+                self.ui_state.status.message = message;
+                self.ui_state.status.progress = None;
+                Command::none()
+            },
+            Message::UpdateStatusWithProgress(message, progress) => {
+                self.ui_state.status.message = message.clone();
+                self.ui_state.status.progress = Some(progress);
+                
+                // If we're still scanning and progress is less than 0.9, continue updating
+                if message.contains("Scanning") && progress < 0.9 {
+                    let next_progress = (progress + 0.1).min(0.9);
+                    
+                    Command::perform(
+                        async {
+                            // Use std::thread::sleep instead of tokio
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                        },
+                        move |_| Message::UpdateStatusWithProgress("Scanning folders...".to_string(), next_progress)
+                    )
+                } else {
+                    Command::none()
+                }
+            },
+            Message::ClearStatus => {
+                self.ui_state.status.message = "Ready".to_string();
+                self.ui_state.status.progress = None;
+                Command::none()
             },
         }
     }
@@ -291,17 +399,23 @@ impl Application for StudioProjectManager {
                 let content = Row::new()
                     .push(left_panel)
                     .push(center_panel)
-                    .push(right_panel);
+                    .push(right_panel)
+                    .height(Length::Fill);
                 
                 // Top bar with search
                 let search_bar = self.view_search_bar();
+                
+                // Status bar
+                let status_bar = self.view_status_bar();
                 
                 // Combine everything
                 Container::new(
                     Column::new()
                         .push(search_bar)
                         .push(content)
+                        .push(status_bar)
                         .spacing(10)
+                        .height(Length::Fill)
                 )
                 .width(Length::Fill)
                 .height(Length::Fill)
@@ -495,5 +609,51 @@ impl StudioProjectManager {
         .width(Length::Fill)
         .style(iced::theme::Container::Box)
         .into()
+    }
+
+    // Helper method to create the status bar
+    fn view_status_bar(&self) -> Element<Message> {
+        let status_text = Text::new(&self.ui_state.status.message)
+            .size(14);
+        
+        let status_row = if let Some(progress) = self.ui_state.status.progress {
+            // If we have progress, show a progress bar
+            let progress_bar = iced::widget::ProgressBar::new(0.0..=1.0, progress)
+                .width(Length::Fixed(200.0));
+                
+            Row::new()
+                .push(status_text)
+                .push(iced::widget::Space::with_width(Length::Fill))
+                .push(progress_bar)
+                .align_items(iced::Alignment::Center)
+        } else {
+            // Otherwise just show the status text
+            Row::new()
+                .push(status_text)
+                .align_items(iced::Alignment::Center)
+        };
+        
+        Container::new(status_row)
+            .width(Length::Fill)
+            .padding(10)
+            .style(iced::theme::Container::Custom(Box::new(StatusBarStyle)))
+            .into()
+    }
+}
+
+// Custom style for the status bar to make it more visible
+struct StatusBarStyle;
+
+impl iced::widget::container::StyleSheet for StatusBarStyle {
+    type Style = iced::Theme;
+
+    fn appearance(&self, _style: &Self::Style) -> iced::widget::container::Appearance {
+        iced::widget::container::Appearance {
+            text_color: Some(iced::Color::from_rgb(0.0, 0.0, 0.0)),
+            background: Some(iced::Background::Color(iced::Color::from_rgb(0.9, 0.9, 0.95))),
+            border_radius: 0.0.into(),
+            border_width: 1.0,
+            border_color: iced::Color::from_rgb(0.8, 0.8, 0.85),
+        }
     }
 } 

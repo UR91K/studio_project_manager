@@ -2787,6 +2787,7 @@ dependencies = [
  "encoding_rs",
  "env_logger",
  "flate2",
+ "futures",
  "hex",
  "iced",
  "lazy_static",
