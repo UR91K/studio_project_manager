@@ -1,0 +1,44 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Launch in Release Mode",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--release"
+                ]
+            },
+            "program": "${workspaceFolder}/target/release/studio_project_manager",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Launch in Debug Mode",
+            "cargo": {
+                "args": [
+                    "build"
+                ]
+            },
+            "program": "${workspaceFolder}/target/debug/studio_project_manager",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
+        }
+    ]
+} 

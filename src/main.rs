@@ -14,7 +14,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use log::{info, debug, error, warn};
 use std::time::Duration;
-use std::sync::{Mutex, Arc};
+use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
 use crate::config::CONFIG;

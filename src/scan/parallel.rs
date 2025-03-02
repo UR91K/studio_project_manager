@@ -308,12 +308,19 @@ mod tests {
 
     #[test]
     fn test_integrated_scanning_and_parsing() {
+        // Added: Track start time
+        let test_start = std::time::Instant::now();
+        let mut timing_stats = Vec::new();
+
         // Create a scanner
         let scanner = ProjectPathScanner::new().unwrap();
         
         // Get paths from config
         let config = CONFIG.as_ref().expect("Failed to load config");
         let mut found_projects = HashSet::new();
+        
+        // Added: Measure scan time
+        let scan_start = std::time::Instant::now();
         
         // Scan all configured directories
         for path in &config.paths {
@@ -323,6 +330,10 @@ mod tests {
                 found_projects.extend(projects);
             }
         }
+        
+        // Added: Record scan timing
+        let scan_duration = scan_start.elapsed();
+        timing_stats.push(("Directory scanning", scan_duration));
         
         // Skip test if no projects found
         if found_projects.is_empty() {
@@ -334,7 +345,11 @@ mod tests {
         let thread_count = (found_projects.len() / 2).max(1).min(4);
         let parser = ParallelParser::new(thread_count);
         
+        // Added: Measure parsing time
+        let parse_start = std::time::Instant::now();
+        
         // Submit all found projects for parsing
+        let project_count = found_projects.len();
         parser.submit_paths(found_projects.into_iter().collect()).unwrap();
         
         // Collect results with timeout
@@ -353,8 +368,31 @@ mod tests {
             }
         }
         
+        // Added: Record parsing timing
+        let parse_duration = parse_start.elapsed();
+        timing_stats.push(("Project parsing", parse_duration));
+        
+        // Added: Measure summary generation time
+        let summary_start = std::time::Instant::now();
+        
         // Print the summary
         stats.print_summary();
+        
+        // Added: Record summary timing
+        let summary_duration = summary_start.elapsed();
+        timing_stats.push(("Summary generation", summary_duration));
+        
+        // Added: Print timing statistics
+        let total_duration = test_start.elapsed();
+        println!("\n=== PERFORMANCE METRICS ===");
+        println!("Projects processed: {}", project_count);
+        for (stage, duration) in timing_stats {
+            println!("{}: {:.2?}", stage, duration);
+        }
+        println!("Total test time: {:.2?}", total_duration);
+        println!("Average time per project: {:.2?}", 
+            if project_count > 0 { total_duration / project_count as u32 } else { Duration::from_secs(0) });
+        println!("==========================\n");
         
         // Assert that we processed at least one file
         assert!(stats.successful_parses + stats.failed_parses > 0, "No files were processed");

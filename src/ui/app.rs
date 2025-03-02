@@ -3,17 +3,14 @@ use iced::widget::{Button, Column, Container, Row, Scrollable, Text, TextInput};
 use log::{debug, error, info};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use futures::stream::StreamExt;
 
 use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
-use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
 use crate::process_projects;
 
 use super::message::Message;
 use super::state::{AppState, UiState};
-use super::style;
 
 pub struct StudioProjectManager {
     // Database connection
@@ -376,6 +373,7 @@ impl Application for StudioProjectManager {
                 .height(Length::Fill)
                 .center_x()
                 .center_y()
+                .style(iced::theme::Container::Custom(Box::new(super::style::AbletonBackgroundStyle)))
                 .into()
             },
             AppState::Ready { projects, search_results, selected_project_id } => {
@@ -400,6 +398,7 @@ impl Application for StudioProjectManager {
                     .push(left_panel)
                     .push(center_panel)
                     .push(right_panel)
+                    .spacing(10)
                     .height(Length::Fill);
                 
                 // Top bar with search
@@ -409,17 +408,19 @@ impl Application for StudioProjectManager {
                 let status_bar = self.view_status_bar();
                 
                 // Combine everything
-                Container::new(
-                    Column::new()
-                        .push(search_bar)
-                        .push(content)
-                        .push(status_bar)
-                        .spacing(10)
-                        .height(Length::Fill)
-                )
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into()
+                let content = Column::new()
+                    .push(search_bar)
+                    .push(content)
+                    .push(status_bar)
+                    .spacing(10)
+                    .padding(10)
+                    .height(Length::Fill);
+                
+                Container::new(content)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(iced::theme::Container::Custom(Box::new(super::style::AbletonBackgroundStyle)))
+                    .into()
             },
             AppState::Error(error) => {
                 // Error screen
@@ -433,6 +434,7 @@ impl Application for StudioProjectManager {
                 .height(Length::Fill)
                 .center_x()
                 .center_y()
+                .style(iced::theme::Container::Custom(Box::new(super::style::AbletonBackgroundStyle)))
                 .into()
             }
         }
@@ -447,75 +449,128 @@ impl StudioProjectManager {
 
     // Helper method to create the left panel
     fn view_left_panel(&self) -> Element<Message> {
-        let column = Column::new()
-            .push(Text::new("Navigation").size(20))
+        let title = Container::new(
+            Text::new("Navigation").size(20)
+        )
+        .width(Length::Fill)
+        .padding(10)
+        .style(iced::theme::Container::Custom(Box::new(super::style::AbletonHeaderStyle)));
+        
+        let content = Column::new()
             .push(Button::new(Text::new("All Projects")).on_press(Message::ViewAllProjects))
-            .push(Text::new("Collections").size(20))
+            .push(
+                Container::new(
+                    Text::new("Collections").size(20)
+                )
+                .width(Length::Fill)
+                .padding(10)
+                .style(iced::theme::Container::Custom(Box::new(super::style::AbletonHeaderStyle)))
+            )
             .push(Button::new(Text::new("Scan Folders")).on_press(Message::ScanFoldersClicked))
             .spacing(10)
-            .padding(20);
+            .padding(10);
+        
+        let column = Column::new()
+            .push(title)
+            .push(content)
+            .spacing(1);
         
         Container::new(column)
             .width(Length::Fixed(200.0))
             .height(Length::Fill)
-            .style(iced::theme::Container::Box)
+            .padding(1)
+            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonPanelStyle)))
             .into()
     }
     
     // Helper method to create the project list
     fn view_project_list<'a>(&self, projects: &'a [LiveSet]) -> Element<'a, Message> {
         // Create column headers
-        let header_row = Row::new()
-            .push(Text::new("Name").width(Length::Fill))
-            .push(Text::new("DAW").width(Length::Fixed(80.0)))
-            .push(Text::new("Tempo").width(Length::Fixed(80.0)))
-            .push(Text::new("Key").width(Length::Fixed(80.0)))
-            .push(Text::new("Modified").width(Length::Fixed(120.0)))
-            .padding(10);
+        let header_row = Container::new(
+            Row::new()
+                .push(Text::new("Name").width(Length::Fill).style(super::style::TEXT))
+                .push(Text::new("Ableton Version").width(Length::Fixed(80.0)).style(super::style::TEXT))
+                .push(Text::new("Tempo").width(Length::Fixed(80.0)).style(super::style::TEXT))
+                .push(Text::new("Key").width(Length::Fixed(80.0)).style(super::style::TEXT))
+                .push(Text::new("Modified").width(Length::Fixed(120.0)).style(super::style::TEXT))
+                .padding(10)
+        )
+        .width(Length::Fill)
+        .style(iced::theme::Container::Custom(Box::new(super::style::AbletonHeaderStyle)));
         
         // Create scrollable list of projects
-        let mut project_list = Column::new().spacing(2);
+        let mut project_list = Column::new().spacing(1);
         
-        for project in projects {
-            let row = Button::new(
-                Row::new()
-                    .push(Text::new(&project.name).width(Length::Fill))
-                    .push(Text::new(format!("{}.{}", 
-                        project.ableton_version.major, 
-                        project.ableton_version.minor
-                    )).width(Length::Fixed(80.0)))
-                    .push(Text::new(format!("{:.1}", project.tempo))
-                        .width(Length::Fixed(80.0)))
-                    .push(Text::new(
-                        project.key_signature
-                            .as_ref()
-                            .map(|k| k.to_string())
-                            .unwrap_or_else(|| "-".to_string())
-                    ).width(Length::Fixed(80.0)))
-                    .push(Text::new(
-                        project.modified_time.format("%Y-%m-%d").to_string()
-                    ).width(Length::Fixed(120.0)))
-                    .padding(5)
+        for (index, project) in projects.iter().enumerate() {
+            // Alternate row styles
+            let row_style = if index % 2 == 0 {
+                iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1))
+            } else {
+                iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle2))
+            };
+            
+            let project_row = Row::new()
+                .push(Text::new(&project.name).width(Length::Fill).style(super::style::TEXT))
+                .push(Text::new(format!("{}.{}", 
+                    project.ableton_version.major, 
+                    project.ableton_version.minor
+                )).width(Length::Fixed(80.0)).style(super::style::TEXT))
+                .push(Text::new(format!("{:.1}", project.tempo))
+                    .width(Length::Fixed(80.0))
+                    .style(super::style::TEXT))
+                .push(Text::new(
+                    project.key_signature
+                        .as_ref()
+                        .map(|k| k.to_string())
+                        .unwrap_or_else(|| "-".to_string())
+                ).width(Length::Fixed(80.0)).style(super::style::TEXT))
+                .push(Text::new(
+                    project.modified_time.format("%Y-%m-%d").to_string()
+                ).width(Length::Fixed(120.0)).style(super::style::TEXT))
+                .padding(10);
+            
+            let row = Container::new(
+                Button::new(project_row)
+                    .on_press(Message::ProjectSelected(Some(project.id)))
+                    .width(Length::Fill)
+                    .style(iced::theme::Button::Text)
             )
-            .on_press(Message::ProjectSelected(Some(project.id)))
-            .width(Length::Fill);
+            .width(Length::Fill)
+            .style(row_style);
             
             project_list = project_list.push(row);
         }
         
-        let scrollable_list = Scrollable::new(project_list)
-            .height(Length::Fill)
-            .width(Length::Fill);
-        
-        Container::new(
+        let content = if projects.is_empty() {
             Column::new()
-                .push(header_row)
-                .push(scrollable_list)
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(iced::theme::Container::Box)
-        .into()
+                .push(
+                    Container::new(
+                        Text::new("No projects found")
+                            .width(Length::Fill)
+                            .horizontal_alignment(iced::alignment::Horizontal::Center)
+                            .style(super::style::TEXT)
+                    )
+                    .width(Length::Fill)
+                    .padding(20)
+                    .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1)))
+                )
+        } else {
+            Column::new().push(Scrollable::new(project_list)
+                .height(Length::Fill)
+                .style(super::style::custom_scrollbar_style()))
+        };
+        
+        let column = Column::new()
+            .push(header_row)
+            .push(content)
+            .spacing(1);
+        
+        Container::new(column)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(1)
+            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonPanelStyle)))
+            .into()
     }
     
     // Helper method to create the project details panel
@@ -524,50 +579,243 @@ impl StudioProjectManager {
             .and_then(|id| projects.iter().find(|p| p.id == id));
         
         let content = if let Some(project) = selected_project {
+            // Extract file name from path for comparison with project name
+            let file_name = project.file_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            
+            // Check if name is custom (different from file name)
+            let is_custom_name = project.name != file_name;
+            
+            // Format duration if available
+            let duration_text = if let Some(duration) = project.estimated_duration {
+                let minutes = duration.num_minutes();
+                let seconds = duration.num_seconds() % 60;
+                format!("{:02}:{:02}", minutes, seconds)
+            } else {
+                "--:--".to_string()
+            };
+            
+            // Format key signature properly
+            let key_text = match &project.key_signature {
+                Some(key) => {
+                    if key.tonic == crate::models::Tonic::Empty {
+                        "".to_string()
+                    } else if key.scale == crate::models::Scale::Empty {
+                        format!("{}", key.tonic)
+                    } else {
+                        format!("{} {}", key.tonic, key.scale)
+                    }
+                },
+                None => "".to_string()
+            };
+            
+            // Format full Ableton version
+            let ableton_version_text = format!(
+                "Live {}.{}.{}{}", 
+                project.ableton_version.major, 
+                project.ableton_version.minor,
+                project.ableton_version.patch,
+                if project.ableton_version.beta { " beta" } else { "" }
+            );
+            
             // Project details
             Column::new()
-                .push(Text::new(&project.name).size(24))
-                .push(Text::new(project.file_path.to_string_lossy()).size(12))
+                // Project title card
+                .push(
+                    Container::new(
+                        Column::new()
+                            .push(Text::new(&project.name).size(24))
+                            .push(
+                                if is_custom_name {
+                                    // Show file path in low contrast if name is custom
+                                    Text::new(project.file_path.to_string_lossy())
+                                        .size(12)
+                                        .style(iced::Color::from(super::style::TEXT_SECONDARY))
+                                } else {
+                                    // Empty text if name is not custom
+                                    Text::new("")
+                                }
+                            )
+                            .spacing(5)
+                    )
+                    .width(Length::Fill)
+                    .padding(10)
+                    .style(iced::theme::Container::Custom(Box::new(super::style::AbletonHeaderStyle)))
+                )
+                
+                // Metadata section
                 .push(
                     Column::new()
-                        .push(Text::new("METADATA").size(14))
-                        .push(Row::new()
-                            .push(Text::new("Created:").width(Length::Fixed(80.0)))
-                            .push(Text::new(project.created_time.format("%Y-%m-%d %H:%M").to_string()))
+                        // Created timestamp
+                        .push(
+                            Container::new(
+                                Row::new()
+                                    .push(Text::new("Created:").width(Length::Fixed(120.0)))
+                                    .push(Text::new(project.created_time.format("%Y-%m-%d %H:%M").to_string()))
+                                    .padding(10)
+                            )
+                            .width(Length::Fill)
+                            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1)))
                         )
-                        .push(Row::new()
-                            .push(Text::new("Modified:").width(Length::Fixed(80.0)))
-                            .push(Text::new(project.modified_time.format("%Y-%m-%d %H:%M").to_string()))
+                        // Modified timestamp
+                        .push(
+                            Container::new(
+                                Row::new()
+                                    .push(Text::new("Modified:").width(Length::Fixed(120.0)))
+                                    .push(Text::new(project.modified_time.format("%Y-%m-%d %H:%M").to_string()))
+                                    .padding(10)
+                            )
+                            .width(Length::Fill)
+                            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle2)))
                         )
-                        .push(Row::new()
-                            .push(Text::new("Tempo:").width(Length::Fixed(80.0)))
-                            .push(Text::new(format!("{:.1} BPM", project.tempo)))
+                        // Tempo
+                        .push(
+                            Container::new(
+                                Row::new()
+                                    .push(Text::new("Tempo:").width(Length::Fixed(120.0)))
+                                    .push(Text::new(format!("{:.1} bpm", project.tempo)))
+                                    .padding(10)
+                            )
+                            .width(Length::Fill)
+                            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1)))
                         )
-                        .push(Row::new()
-                            .push(Text::new("Key:").width(Length::Fixed(80.0)))
-                            .push(Text::new(
-                                project.key_signature
-                                    .as_ref()
-                                    .map(|k| k.to_string())
-                                    .unwrap_or_else(|| "-".to_string())
-                            ))
+                        // Time Signature
+                        .push(
+                            Container::new(
+                                Row::new()
+                                    .push(Text::new("Time Signature:").width(Length::Fixed(120.0)))
+                                    .push(Text::new(format!("{}/{}", 
+                                        project.time_signature.numerator, 
+                                        project.time_signature.denominator
+                                    )))
+                                    .padding(10)
+                            )
+                            .width(Length::Fill)
+                            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle2)))
                         )
-                        .spacing(5)
+                        // Key
+                        .push(
+                            Container::new(
+                                Row::new()
+                                    .push(Text::new("Key:").width(Length::Fixed(120.0)))
+                                    .push(Text::new(key_text))
+                                    .padding(10)
+                            )
+                            .width(Length::Fill)
+                            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1)))
+                        )
+                        // Duration
+                        .push(
+                            Container::new(
+                                Row::new()
+                                    .push(Text::new("Duration:").width(Length::Fixed(120.0)))
+                                    .push(Text::new(duration_text))
+                                    .padding(10)
+                            )
+                            .width(Length::Fill)
+                            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle2)))
+                        )
+                        // Ableton Version
+                        .push(
+                            Container::new(
+                                Row::new()
+                                    .push(Text::new("Ableton Version:").width(Length::Fixed(120.0)))
+                                    .push(Text::new(ableton_version_text))
+                                    .padding(10)
+                            )
+                            .width(Length::Fill)
+                            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1)))
+                        )
                 )
+                
+                // Plugins section
                 .push(
-                    Column::new()
-                        .push(Text::new("PLUGINS").size(14))
-                        .push({
-                            let mut plugins_column = Column::new().spacing(2);
-                            for plugin in &project.plugins {
-                                plugins_column = plugins_column.push(Text::new(&plugin.name));
-                            }
-                            Scrollable::new(plugins_column).height(Length::Fixed(150.0))
-                        })
-                        .spacing(5)
+                    Container::new(
+                        Column::new()
+                            .push(Text::new("Plugins:"))
+                            .push({
+                                let mut plugins_column = Column::new().spacing(5);
+                                for plugin in &project.plugins {
+                                    let status_symbol = if plugin.installed {
+                                        "O"
+                                    } else {
+                                        "X"
+                                    };
+                                    
+                                    let status_color = if plugin.installed {
+                                        iced::color!(0x00d861) // Green for installed
+                                    } else {
+                                        iced::color!(0xff5559) // Red for not installed
+                                    };
+                                    
+                                    plugins_column = plugins_column.push(
+                                        Row::new()
+                                            .push(
+                                                Text::new(status_symbol)
+                                                    .width(Length::Fixed(20.0))
+                                                    .style(status_color)
+                                            )
+                                            .push(
+                                                Text::new(&plugin.name)
+                                            )
+                                    );
+                                }
+                                Scrollable::new(plugins_column)
+                                    .height(Length::Fixed(150.0))
+                                    .style(super::style::custom_scrollbar_style())
+                            })
+                            .spacing(10)
+                            .padding(10)
+                    )
+                    .width(Length::Fill)
+                    .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle2)))
                 )
-                .spacing(20)
-                .padding(20)
+                
+                // Samples section
+                .push(
+                    Container::new(
+                        Column::new()
+                            .push(Text::new("Samples:"))
+                            .push({
+                                let mut samples_column = Column::new().spacing(5);
+                                for sample in &project.samples {
+                                    let status_symbol = if sample.is_present {
+                                        "O"
+                                    } else {
+                                        "X"
+                                    };
+                                    
+                                    let status_color = if sample.is_present {
+                                        iced::color!(0x00d861) // Green for present
+                                    } else {
+                                        iced::color!(0xff5559) // Red for missing
+                                    };
+                                    
+                                    samples_column = samples_column.push(
+                                        Row::new()
+                                            .push(
+                                                Text::new(status_symbol)
+                                                    .width(Length::Fixed(20.0))
+                                                    .style(status_color)
+                                            )
+                                            .push(
+                                                Text::new(&sample.name)
+                                            )
+                                    );
+                                }
+                                Scrollable::new(samples_column)
+                                    .height(Length::Fixed(150.0))
+                                    .style(super::style::custom_scrollbar_style())
+                            })
+                            .spacing(10)
+                            .padding(10)
+                    )
+                    .width(Length::Fill)
+                    .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1)))
+                )
+                .spacing(1)
         } else {
             // No project selected
             Column::new()
@@ -580,7 +828,7 @@ impl StudioProjectManager {
         Container::new(content)
             .width(Length::Fixed(350.0))
             .height(Length::Fill)
-            .style(iced::theme::Container::Box)
+            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonPanelStyle)))
             .into()
     }
     
@@ -607,7 +855,7 @@ impl StudioProjectManager {
                 .padding(10)
         )
         .width(Length::Fill)
-        .style(iced::theme::Container::Box)
+        .style(iced::theme::Container::Custom(Box::new(super::style::AbletonPanelStyle)))
         .into()
     }
 
@@ -635,25 +883,8 @@ impl StudioProjectManager {
         
         Container::new(status_row)
             .width(Length::Fill)
-            .padding(10)
-            .style(iced::theme::Container::Custom(Box::new(StatusBarStyle)))
+            .padding(7)
+            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonHeaderStyle)))
             .into()
-    }
-}
-
-// Custom style for the status bar to make it more visible
-struct StatusBarStyle;
-
-impl iced::widget::container::StyleSheet for StatusBarStyle {
-    type Style = iced::Theme;
-
-    fn appearance(&self, _style: &Self::Style) -> iced::widget::container::Appearance {
-        iced::widget::container::Appearance {
-            text_color: Some(iced::Color::from_rgb(0.0, 0.0, 0.0)),
-            background: Some(iced::Background::Color(iced::Color::from_rgb(0.9, 0.9, 0.95))),
-            border_radius: 0.0.into(),
-            border_width: 1.0,
-            border_color: iced::Color::from_rgb(0.8, 0.8, 0.85),
-        }
     }
 } 

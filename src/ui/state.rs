@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::live_set::LiveSet;
@@ -62,6 +60,7 @@ pub struct Collection {
     pub description: Option<String>,
 }
 
+#[allow(unused)]
 impl Collection {
     pub fn new(id: String, name: String, description: Option<String>) -> Self {
         Self {
@@ -70,4 +69,4 @@ impl Collection {
             description,
         }
     }
-} 
+}

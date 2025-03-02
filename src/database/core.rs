@@ -1,7 +1,7 @@
 use super::models::SqlDateTime;
-use crate::error::DatabaseError;
+use crate::error::{DatabaseError, XmlParseError, PluginError};
 use crate::live_set::LiveSet;
-use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
+use crate::models::{AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, Scale, TimeSignature, Tonic};
 use crate::utils::metadata::load_file_hash;
 use chrono::{DateTime, Local, TimeZone};
 use log::{debug, info};
@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use chrono::Utc;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct LiveSetDatabase {
@@ -437,10 +438,15 @@ impl LiveSetDatabase {
                                     module_id: row.get(2)?,
                                     dev_identifier: row.get(3)?,
                                     name,
-                                    plugin_format: row
-                                        .get::<_, String>(5)?
-                                        .parse()
-                                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                    plugin_format: {
+                                        let format_str: String = row.get("format")?;
+                                        PluginFormat::from_str(&format_str)
+                                            .map_err(|_| {
+                                                let plugin_err = PluginError::from(XmlParseError::UnknownPluginFormat(format_str.clone()));
+                                                let db_err: DatabaseError = plugin_err.into();
+                                                rusqlite::Error::from(db_err)
+                                            })?
+                                    },
                                     installed: row.get(6)?,
                                     vendor: row.get(7)?,
                                     version: row.get(8)?,
@@ -630,10 +636,15 @@ impl LiveSetDatabase {
                     module_id: row.get(2)?,
                     dev_identifier: row.get(3)?,
                     name,
-                    plugin_format: row
-                        .get::<_, String>(5)?
-                        .parse()
-                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                    plugin_format: {
+                        let format_str: String = row.get("format")?;
+                        PluginFormat::from_str(&format_str)
+                            .map_err(|_| {
+                                let plugin_err = PluginError::from(XmlParseError::UnknownPluginFormat(format_str.clone()));
+                                let db_err: DatabaseError = plugin_err.into();
+                                rusqlite::Error::from(db_err)
+                            })?
+                    },
                     installed: row.get(6)?,
                     vendor: row.get(7)?,
                     version: row.get(8)?,
@@ -906,6 +917,13 @@ impl LiveSetDatabase {
         let parsed_timestamp: i64 = row.get("last_parsed_at")?;
         let duration_secs: Option<i64> = row.get("duration_seconds")?;
 
+        // Load plugins and samples for this project
+        let plugins = self.get_project_plugins(&id)
+            .map_err(rusqlite::Error::from)?;
+            
+        let samples = self.get_project_samples(&id)
+            .map_err(rusqlite::Error::from)?;
+
         Ok(LiveSet {
             is_active: row.get("is_active")?,
             id: Uuid::parse_str(&id).map_err(|e| {
@@ -957,48 +975,116 @@ impl LiveSetDatabase {
                         )),
                     )
                 })?,
-
-            tempo: row.get("tempo")?,
-            time_signature: TimeSignature {
-                numerator: row.get("time_signature_numerator")?,
-                denominator: row.get("time_signature_denominator")?,
-            },
-            key_signature: match (
-                row.get::<_, Option<String>>("key_signature_tonic")?,
-                row.get::<_, Option<String>>("key_signature_scale")?,
-            ) {
-                (Some(tonic), Some(scale)) => Some(KeySignature {
-                    tonic: tonic.parse().map_err(|e| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            0,
-                            rusqlite::types::Type::Text,
-                            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-                        )
-                    })?,
-                    scale: scale.parse().map_err(|e| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            0,
-                            rusqlite::types::Type::Text,
-                            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-                        )
-                    })?,
-                }),
-                _ => None,
-            },
-            furthest_bar: row.get("furthest_bar")?,
-
             ableton_version: AbletonVersion {
                 major: row.get("ableton_version_major")?,
                 minor: row.get("ableton_version_minor")?,
                 patch: row.get("ableton_version_patch")?,
                 beta: row.get("ableton_version_beta")?,
             },
+            key_signature: {
+                let tonic_str: Option<String> = row.get("key_signature_tonic")?;
+                let scale_str: Option<String> = row.get("key_signature_scale")?;
 
+                match (tonic_str, scale_str) {
+                    (Some(tonic), Some(scale)) => {
+                        let tonic_enum = Tonic::from_str(&tonic).unwrap_or(Tonic::Empty);
+                        let scale_enum = Scale::from_str(&scale).unwrap_or(Scale::Empty);
+                        Some(KeySignature {
+                            tonic: tonic_enum,
+                            scale: scale_enum,
+                        })
+                    }
+                    _ => None,
+                }
+            },
+            tempo: row.get("tempo")?,
+            time_signature: TimeSignature {
+                numerator: row.get("time_signature_numerator")?,
+                denominator: row.get("time_signature_denominator")?,
+            },
+            furthest_bar: row.get("furthest_bar")?,
+            plugins,
+            samples,
+            tags: HashSet::new(), // TODO: Load tags
             estimated_duration: duration_secs.map(chrono::Duration::seconds),
-            plugins: HashSet::new(), // These will be loaded separately when needed
-            samples: HashSet::new(), // These will be loaded separately when needed
-            tags: HashSet::new(),    // These will be loaded separately when needed
         })
+    }
+
+    // Helper method to load plugins for a project
+    fn get_project_plugins(&self, project_id: &str) -> Result<HashSet<Plugin>, DatabaseError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.* FROM plugins p 
+             JOIN project_plugins pp ON p.id = pp.plugin_id 
+             WHERE pp.project_id = ?"
+        )?;
+        
+        let plugin_rows = stmt.query_map([project_id], |row| {
+            Ok(Plugin {
+                id: Uuid::parse_str(row.get::<_, String>("id")?.as_str())
+                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                        0, 
+                        rusqlite::types::Type::Text, 
+                        Box::new(e)
+                    ))?,
+                plugin_id: row.get("ableton_plugin_id")?,
+                module_id: row.get("ableton_module_id")?,
+                dev_identifier: row.get("dev_identifier")?,
+                name: row.get("name")?,
+                vendor: row.get("vendor")?,
+                version: row.get("version")?,
+                sdk_version: row.get("sdk_version")?,
+                flags: row.get("flags")?,
+                scanstate: row.get("scanstate")?,
+                enabled: row.get("enabled")?,
+                plugin_format: {
+                    let format_str: String = row.get("format")?;
+                    PluginFormat::from_str(&format_str)
+                        .map_err(|_| {
+                            let plugin_err = PluginError::from(XmlParseError::UnknownPluginFormat(format_str.clone()));
+                            let db_err: DatabaseError = plugin_err.into();
+                            rusqlite::Error::from(db_err)
+                        })?
+                },
+                installed: row.get("installed")?,
+            })
+        })?;
+        
+        let mut plugins = HashSet::new();
+        for plugin_result in plugin_rows {
+            plugins.insert(plugin_result?);
+        }
+        
+        Ok(plugins)
+    }
+    
+    // Helper method to load samples for a project
+    fn get_project_samples(&self, project_id: &str) -> Result<HashSet<Sample>, DatabaseError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT s.* FROM samples s 
+             JOIN project_samples ps ON s.id = ps.sample_id 
+             WHERE ps.project_id = ?"
+        )?;
+        
+        let sample_rows = stmt.query_map([project_id], |row| {
+            Ok(Sample {
+                id: Uuid::parse_str(row.get::<_, String>("id")?.as_str())
+                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                        0, 
+                        rusqlite::types::Type::Text, 
+                        Box::new(e)
+                    ))?,
+                name: row.get("name")?,
+                path: PathBuf::from(row.get::<_, String>("path")?),
+                is_present: row.get("is_present")?,
+            })
+        })?;
+        
+        let mut samples = HashSet::new();
+        for sample_result in sample_rows {
+            samples.insert(sample_result?);
+        }
+        
+        Ok(samples)
     }
 
     pub fn get_last_scanned_time(&self, path: &Path) -> Result<Option<DateTime<Local>>, DatabaseError> {

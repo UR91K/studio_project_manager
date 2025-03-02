@@ -235,6 +235,12 @@ pub enum PluginError {
     ConfigError(#[from] ConfigError),
 }
 
+impl From<PluginError> for DatabaseError {
+    fn from(error: PluginError) -> Self {
+        DatabaseError::QueryError(format!("Plugin error: {}", error))
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum DatabaseError {
     #[error("SQLite error: {0}")]
@@ -278,6 +284,19 @@ impl Clone for DatabaseError {
             Self::ConfigError(e) => Self::ConfigError(e.clone()),
             Self::InvalidOperation(s) => Self::InvalidOperation(s.clone()),
         }
+    }
+}
+
+impl From<DatabaseError> for rusqlite::Error {
+    fn from(error: DatabaseError) -> Self {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                error.to_string()
+            ))
+        )
     }
 }
 

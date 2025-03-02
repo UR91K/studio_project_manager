@@ -1,7 +1,5 @@
 use uuid::Uuid;
-use crate::error::{DatabaseError, LiveSetError};
 use crate::live_set::LiveSet;
-use crate::database::LiveSetDatabase;
 
 #[derive(Debug, Clone)]
 pub enum Message {
