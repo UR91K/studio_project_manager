@@ -840,21 +840,19 @@ impl StudioProjectManager {
         )
         .on_input(Message::SearchQueryChanged)
         .padding(10)
-        .width(Length::Fill);
-        
-        let scan_button = Button::new(
-            Text::new("Scan")
-        )
-        .on_press(Message::ScanFoldersClicked);
+        .width(Length::Fill)
+        .style(iced::theme::TextInput::Custom(Box::new(super::style::AbletonTextInputStyle)));
         
         Container::new(
             Row::new()
                 .push(search_input)
-                .push(scan_button)
                 .spacing(10)
                 .padding(10)
+                .width(Length::Fill)
         )
+        .max_width(600.0)
         .width(Length::Fill)
+        .align_x(iced::alignment::Horizontal::Center)
         .style(iced::theme::Container::Custom(Box::new(super::style::AbletonPanelStyle)))
         .into()
     }

@@ -1,5 +1,6 @@
 #![allow(unused)]
 use iced::{Background, Color, Theme, widget::container::Appearance};
+use iced::widget::text_input::{self, StyleSheet};
 
 fn color_from_hex(hex: &str) -> Color {
     let r = u8::from_str_radix(&hex[1..3], 16).unwrap();
@@ -262,5 +263,58 @@ impl iced::widget::scrollable::StyleSheet for CustomScrollableStyle {
     
     fn dragging_horizontal(&self, style: &Self::Style) -> iced::widget::scrollable::Scrollbar {
         self.dragging(style) // Use the same dragging style for horizontal scrollbars
+    }
+}
+
+// Add this new style for text inputs
+pub struct AbletonTextInputStyle;
+
+impl text_input::StyleSheet for AbletonTextInputStyle {
+    type Style = iced::Theme;
+
+    fn active(&self, _style: &Self::Style) -> text_input::Appearance {
+        text_input::Appearance {
+            background: iced::Background::Color(iced::Color::from_rgb(0.2, 0.2, 0.2)),
+            border_radius: 0.0.into(),
+            border_width: 1.0,
+            border_color: iced::Color::from_rgb(0.3, 0.3, 0.3),
+            icon_color: iced::Color::from_rgb(0.7, 0.7, 0.7),
+        }
+    }
+
+    fn focused(&self, _style: &Self::Style) -> text_input::Appearance {
+        text_input::Appearance {
+            background: iced::Background::Color(iced::Color::from_rgb(0.2, 0.2, 0.2)),
+            border_radius: 0.0.into(),
+            border_width: 1.0,
+            border_color: iced::Color::from_rgb(0.5, 0.5, 0.5),
+            icon_color: iced::Color::from_rgb(0.7, 0.7, 0.7),
+        }
+    }
+
+    fn placeholder_color(&self, _style: &Self::Style) -> iced::Color {
+        iced::Color::from_rgb(0.5, 0.5, 0.5)
+    }
+
+    fn value_color(&self, _style: &Self::Style) -> iced::Color {
+        iced::Color::from_rgb(0.9, 0.9, 0.9)
+    }
+
+    fn selection_color(&self, _style: &Self::Style) -> iced::Color {
+        iced::Color::from_rgb(0.3, 0.3, 0.7)
+    }
+
+    fn disabled_color(&self, _style: &Self::Style) -> iced::Color {
+        iced::Color::from_rgb(0.4, 0.4, 0.4) // Dimmer text for disabled state
+    }
+
+    fn disabled(&self, _style: &Self::Style) -> text_input::Appearance {
+        text_input::Appearance {
+            background: iced::Background::Color(iced::Color::from_rgb(0.15, 0.15, 0.15)), // Darker background
+            border_radius: 0.0.into(),
+            border_width: 1.0,
+            border_color: iced::Color::from_rgb(0.2, 0.2, 0.2), // Dimmer border
+            icon_color: iced::Color::from_rgb(0.4, 0.4, 0.4), // Dimmer icon
+        }
     }
 } 
