@@ -79,7 +79,7 @@ fn convert_hex_to_color(hex: &str) -> Result<Color, ThemeError> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, Display)]
-pub enum ThemeColorName {
+pub enum LiveThemeElement {
     // Background Colors
     #[strum(serialize = "SurfaceBackground")]
     SurfaceBackground,
@@ -146,7 +146,7 @@ pub enum ThemeColorName {
 }
 
 pub struct Theme {
-    colors: HashMap<ThemeColorName, Color>,
+    colors: HashMap<LiveThemeElement, Color>,
 }
 
 impl Theme {
@@ -192,7 +192,7 @@ impl Theme {
                                     let value = String::from_utf8_lossy(&attr.value).to_string();
                                     
                                     // Try to parse the tag name as ThemeColorName
-                                    if let Ok(theme_color) = tag_name.parse::<ThemeColorName>() {
+                                    if let Ok(theme_color) = tag_name.parse::<LiveThemeElement>() {
                                         // Parse color and add directly to theme if successful
                                         if let Ok(color) = Color::from_hex_str(&value) {
                                             theme.colors.insert(theme_color, color);
@@ -221,7 +221,7 @@ impl Theme {
     }
     
     // Get a color with fallback to default
-    pub fn get(&self, name: ThemeColorName) -> Color {
+    pub fn get(&self, name: LiveThemeElement) -> Color {
         // We're now using a default theme derived from XML instead of hardcoded values
         *self.colors.get(&name).unwrap_or_else(|| {
             // Could log a warning here if desired
