@@ -1,105 +1,72 @@
 #![allow(unused)]
-use iced::{Background, Color, Theme, widget::container::Appearance};
-use iced::widget::text_input::{self, StyleSheet};
+//! # Theme and Styling System
+//! 
+//! This module provides a consistent styling system for the application UI.
+//! 
+//! ## Theme API
+//! 
+//! Access theme colors using the get_color function:
+//! 
+//! ```rust
+//! use crate::ui::style;
+//! 
+//! // Get colors by their name in the Ableton theme file
+//! let background = style::get_color("Desktop");
+//! let text = style::get_color("ControlForeground");
+//! let accent = style::get_color("ChosenDefault");
+//! ```
+//! 
+//! ## Reusable Style Components
+//! 
+//! This module provides several reusable style components:
+//! 
+//! - `AbletonCardStyle` - For card containers
+//! - `AbletonHeaderStyle` - For header containers
+//! - `AbletonRowStyle1` - For primary row styling
+//! - `AbletonRowStyle2` - For alternate row styling
+//! - `AbletonListRowStyle` - For list rows
+//! - `AbletonDividerStyle` - For dividers
+//! - `AbletonPanelStyle` - For panels
+//! - `AbletonBackgroundStyle` - For backgrounds
+//! - `AbletonTextInputStyle` - For text inputs
+//! - `custom_scrollbar_style()` - For scrollbars
 
-fn color_from_hex(hex: &str) -> Color {
-    let r = u8::from_str_radix(&hex[1..3], 16).unwrap();
-    let g = u8::from_str_radix(&hex[3..5], 16).unwrap();
-    let b = u8::from_str_radix(&hex[5..7], 16).unwrap();
-    Color::from_rgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
+use iced::{
+    widget::{container, text_input},
+    Color, Theme,
+};
+use iced::widget::container::Appearance;
+
+use crate::ui::theme_loader::get_current_theme;
+
+/// Get a color from the current theme by its name in the Ableton theme file
+/// 
+/// # Arguments
+/// 
+/// * `name` - The name of the color as defined in the Ableton theme file
+/// 
+/// # Returns
+/// 
+/// * `Color` - The color if found, or a default color if not found
+/// 
+/// # Examples
+/// 
+/// ```
+/// use crate::ui::style;
+/// 
+/// let background = style::get_color("Desktop");
+/// let text = style::get_color("ControlForeground");
+/// ```
+pub fn get_color(name: &str) -> Color {
+    get_current_theme().get_color(name)
 }
 
-// Ableton Live-inspired color palette
-pub const BACKGROUND: Color = Color {
-    r: 0.13,
-    g: 0.13,
-    b: 0.14,
-    a: 1.0,
-};
-
-pub const SURFACE: Color = Color {
-    r: 0.18,
-    g: 0.18,
-    b: 0.19,
-    a: 1.0,
-};
-
-pub const CARD_BACKGROUND: Color = Color {
-    r: 0.22,
-    g: 0.22,
-    b: 0.23,
-    a: 1.0,
-};
-
-pub const ACCENT: Color = Color {
-    r: 0.92,
-    g: 0.65,
-    b: 0.26,  // Ableton's orange accent
-    a: 1.0,
-};
-
-pub const TEXT: Color = Color {
-    r: 0.847,
-    g: 0.847,
-    b: 0.847,
-    a: 1.0,
-};
-
-pub const TEXT_SECONDARY: Color = Color {
-    r: 0.65,
-    g: 0.65,
-    b: 0.65,
-    a: 1.0,
-};
-
-pub const PANEL_BORDER: Color = Color {
-    r: 0.25,
-    g: 0.25,
-    b: 0.26,
-    a: 1.0,
-};
-
-pub const ROW_ALT_1: Color = Color {
-    r: 0.20,
-    g: 0.20,
-    b: 0.21,
-    a: 1.0,
-};
-
-pub const ROW_ALT_2: Color = Color {
-    r: 0.22,
-    g: 0.22,
-    b: 0.23,
-    a: 1.0,
-};
-
-pub const HEADER_BACKGROUND: Color = Color {
-    r: 0.24,
-    g: 0.24,
-    b: 0.25,
-    a: 1.0,
-};
-
-pub const SUCCESS: Color = Color {
-    r: 0.22,
-    g: 0.70,
-    b: 0.29,
-    a: 1.0,
-};
-
-pub const ERROR: Color = Color {
-    r: 0.90,
-    g: 0.30,
-    b: 0.30,
-    a: 1.0,
-};
-
-// Helper function to get the application theme
+/// Get the current theme
 pub fn get_theme() -> Theme {
-    Theme::Dark
+    iced::Theme::Dark
 }
 
-// Reusable styles for containers
+/// Card style for containers
 pub struct AbletonCardStyle;
 
 impl iced::widget::container::StyleSheet for AbletonCardStyle {
@@ -107,15 +74,22 @@ impl iced::widget::container::StyleSheet for AbletonCardStyle {
 
     fn appearance(&self, _style: &Self::Style) -> Appearance {
         Appearance {
-            text_color: Some(TEXT),
-            background: Some(Background::Color(CARD_BACKGROUND)),
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("ControlBackground"))),
             border_radius: 4.0.into(),
             border_width: 1.0,
-            border_color: PANEL_BORDER,
+            border_color: get_color("ControlContrastFrame"),
         }
     }
 }
 
+impl From<AbletonCardStyle> for iced::theme::Container {
+    fn from(_: AbletonCardStyle) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonCardStyle))
+    }
+}
+
+/// Header style for containers
 pub struct AbletonHeaderStyle;
 
 impl iced::widget::container::StyleSheet for AbletonHeaderStyle {
@@ -123,15 +97,22 @@ impl iced::widget::container::StyleSheet for AbletonHeaderStyle {
 
     fn appearance(&self, _style: &Self::Style) -> Appearance {
         Appearance {
-            text_color: Some(TEXT),
-            background: Some(Background::Color(HEADER_BACKGROUND)),
-            border_radius: 4.0.into(),
-            border_width: 1.0,
-            border_color: PANEL_BORDER,
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("SurfaceHighlight"))),
+            border_radius: 0.0.into(),
+            border_width: 0.0,
+            border_color: Color::TRANSPARENT,
         }
     }
 }
 
+impl From<AbletonHeaderStyle> for iced::theme::Container {
+    fn from(_: AbletonHeaderStyle) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonHeaderStyle))
+    }
+}
+
+/// Primary row style for containers
 pub struct AbletonRowStyle1;
 
 impl iced::widget::container::StyleSheet for AbletonRowStyle1 {
@@ -139,8 +120,8 @@ impl iced::widget::container::StyleSheet for AbletonRowStyle1 {
 
     fn appearance(&self, _style: &Self::Style) -> Appearance {
         Appearance {
-            text_color: Some(TEXT),
-            background: Some(Background::Color(ROW_ALT_1)),
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("SurfaceBackground"))),
             border_radius: 0.0.into(),
             border_width: 0.0,
             border_color: Color::TRANSPARENT,
@@ -148,6 +129,13 @@ impl iced::widget::container::StyleSheet for AbletonRowStyle1 {
     }
 }
 
+impl From<AbletonRowStyle1> for iced::theme::Container {
+    fn from(_: AbletonRowStyle1) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonRowStyle1))
+    }
+}
+
+/// Alternate row style for containers
 pub struct AbletonRowStyle2;
 
 impl iced::widget::container::StyleSheet for AbletonRowStyle2 {
@@ -155,8 +143,8 @@ impl iced::widget::container::StyleSheet for AbletonRowStyle2 {
 
     fn appearance(&self, _style: &Self::Style) -> Appearance {
         Appearance {
-            text_color: Some(TEXT),
-            background: Some(Background::Color(ROW_ALT_2)),
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("SurfaceHighlight"))),
             border_radius: 0.0.into(),
             border_width: 0.0,
             border_color: Color::TRANSPARENT,
@@ -164,6 +152,59 @@ impl iced::widget::container::StyleSheet for AbletonRowStyle2 {
     }
 }
 
+impl From<AbletonRowStyle2> for iced::theme::Container {
+    fn from(_: AbletonRowStyle2) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonRowStyle2))
+    }
+}
+
+/// List row style for containers
+pub struct AbletonListRowStyle;
+
+impl iced::widget::container::StyleSheet for AbletonListRowStyle {
+    type Style = Theme;
+
+    fn appearance(&self, _style: &Self::Style) -> Appearance {
+        Appearance {
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("SurfaceBackground"))),
+            border_radius: 0.0.into(),
+            border_width: 0.0,
+            border_color: Color::TRANSPARENT,
+        }
+    }
+}
+
+impl From<AbletonListRowStyle> for iced::theme::Container {
+    fn from(_: AbletonListRowStyle) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonListRowStyle))
+    }
+}
+
+/// Divider style for containers
+pub struct AbletonDividerStyle;
+
+impl iced::widget::container::StyleSheet for AbletonDividerStyle {
+    type Style = Theme;
+
+    fn appearance(&self, _style: &Self::Style) -> Appearance {
+        Appearance {
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("ControlContrastFrame"))),
+            border_radius: 0.0.into(),
+            border_width: 0.0,
+            border_color: Color::TRANSPARENT,
+        }
+    }
+}
+
+impl From<AbletonDividerStyle> for iced::theme::Container {
+    fn from(_: AbletonDividerStyle) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonDividerStyle))
+    }
+}
+
+/// Panel style for containers
 pub struct AbletonPanelStyle;
 
 impl iced::widget::container::StyleSheet for AbletonPanelStyle {
@@ -171,15 +212,22 @@ impl iced::widget::container::StyleSheet for AbletonPanelStyle {
 
     fn appearance(&self, _style: &Self::Style) -> Appearance {
         Appearance {
-            text_color: Some(TEXT),
-            background: Some(Background::Color(SURFACE)),
-            border_radius: 4.0.into(),
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("SurfaceBackground"))),
+            border_radius: 0.0.into(),
             border_width: 1.0,
-            border_color: PANEL_BORDER,
+            border_color: get_color("ControlContrastFrame"),
         }
     }
 }
 
+impl From<AbletonPanelStyle> for iced::theme::Container {
+    fn from(_: AbletonPanelStyle) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonPanelStyle))
+    }
+}
+
+/// Background style for containers
 pub struct AbletonBackgroundStyle;
 
 impl iced::widget::container::StyleSheet for AbletonBackgroundStyle {
@@ -187,8 +235,8 @@ impl iced::widget::container::StyleSheet for AbletonBackgroundStyle {
 
     fn appearance(&self, _style: &Self::Style) -> Appearance {
         Appearance {
-            text_color: Some(TEXT),
-            background: Some(Background::Color(BACKGROUND)),
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("Desktop"))),
             border_radius: 0.0.into(),
             border_width: 0.0,
             border_color: Color::TRANSPARENT,
@@ -196,18 +244,18 @@ impl iced::widget::container::StyleSheet for AbletonBackgroundStyle {
     }
 }
 
-// Custom scrollbar styling
-pub fn custom_scrollbar_style() -> iced::theme::Scrollable {
-    iced::theme::Scrollable::custom(CustomScrollableStyle)
+impl From<AbletonBackgroundStyle> for iced::theme::Container {
+    fn from(_: AbletonBackgroundStyle) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonBackgroundStyle))
+    }
 }
 
-// Define scrollbar colors
-const SCROLLBAR_BACKGROUND: Color = Color::TRANSPARENT; // Transparent background
-const SCROLLBAR_COLOR: Color = Color { r: 0.55, g: 0.55, b: 0.55, a: 0.4 }; // Modern Chromium-style grey
-const SCROLLBAR_HOVER_COLOR: Color = Color { r: 0.65, g: 0.65, b: 0.65, a: 0.6 }; // Slightly lighter grey when hovered
-const SCROLLBAR_DRAG_COLOR: Color = Color { r: 0.75, g: 0.75, b: 0.75, a: 0.8 }; // Even lighter when dragging
+/// Create a custom scrollbar style
+pub fn custom_scrollbar_style() -> iced::theme::Scrollable {
+    iced::theme::Scrollable::Custom(Box::new(CustomScrollableStyle))
+}
 
-// Custom scrollable style implementation
+/// Custom scrollable style
 struct CustomScrollableStyle;
 
 impl iced::widget::scrollable::StyleSheet for CustomScrollableStyle {
@@ -215,13 +263,13 @@ impl iced::widget::scrollable::StyleSheet for CustomScrollableStyle {
 
     fn active(&self, _style: &Self::Style) -> iced::widget::scrollable::Scrollbar {
         iced::widget::scrollable::Scrollbar {
-            background: Some(Background::Color(SCROLLBAR_BACKGROUND)),
-            border_radius: 0.0.into(), // Flat background
+            background: Some(iced::Background::Color(get_color("ScrollbarInnerTrack"))),
+            border_radius: 0.0.into(),
             border_width: 0.0,
             border_color: Color::TRANSPARENT,
             scroller: iced::widget::scrollable::Scroller {
-                color: SCROLLBAR_COLOR,
-                border_radius: 3.0.into(), // Pill shape (half of width)
+                color: get_color("ScrollbarInnerHandle"),
+                border_radius: 0.0.into(),
                 border_width: 0.0,
                 border_color: Color::TRANSPARENT,
             },
@@ -233,40 +281,52 @@ impl iced::widget::scrollable::StyleSheet for CustomScrollableStyle {
         style: &Self::Style,
         is_mouse_over_scrollbar: bool,
     ) -> iced::widget::scrollable::Scrollbar {
-        let mut scrollbar = self.active(style);
-        
+        let scrollbar = self.active(style);
+
         if is_mouse_over_scrollbar {
-            scrollbar.scroller.color = SCROLLBAR_HOVER_COLOR;
+            iced::widget::scrollable::Scrollbar {
+                background: Some(iced::Background::Color(get_color("ScrollbarInnerTrack"))),
+                scroller: iced::widget::scrollable::Scroller {
+                    color: get_color("ScrollbarInnerHandle"),
+                    ..scrollbar.scroller
+                },
+                ..scrollbar
+            }
+        } else {
+            scrollbar
         }
-        
-        scrollbar
     }
 
     fn dragging(&self, style: &Self::Style) -> iced::widget::scrollable::Scrollbar {
-        let mut scrollbar = self.active(style);
-        scrollbar.scroller.color = SCROLLBAR_DRAG_COLOR;
-        scrollbar
+        let scrollbar = self.active(style);
+
+        iced::widget::scrollable::Scrollbar {
+            scroller: iced::widget::scrollable::Scroller {
+                color: get_color("ScrollbarInnerHandle"),
+                ..scrollbar.scroller
+            },
+            ..scrollbar
+        }
     }
-    
-    // Override horizontal scrollbar styling to maintain consistent look
+
     fn active_horizontal(&self, style: &Self::Style) -> iced::widget::scrollable::Scrollbar {
-        self.active(style) // Use the same style for horizontal scrollbars
+        self.active(style)
     }
-    
+
     fn hovered_horizontal(
         &self,
         style: &Self::Style,
         is_mouse_over_scrollbar: bool,
     ) -> iced::widget::scrollable::Scrollbar {
-        self.hovered(style, is_mouse_over_scrollbar) // Use the same hover style for horizontal scrollbars
+        self.hovered(style, is_mouse_over_scrollbar)
     }
-    
+
     fn dragging_horizontal(&self, style: &Self::Style) -> iced::widget::scrollable::Scrollbar {
-        self.dragging(style) // Use the same dragging style for horizontal scrollbars
+        self.dragging(style)
     }
 }
 
-// Add this new style for text inputs
+/// Text input style
 pub struct AbletonTextInputStyle;
 
 impl text_input::StyleSheet for AbletonTextInputStyle {
@@ -274,47 +334,78 @@ impl text_input::StyleSheet for AbletonTextInputStyle {
 
     fn active(&self, _style: &Self::Style) -> text_input::Appearance {
         text_input::Appearance {
-            background: iced::Background::Color(iced::Color::from_rgb(0.2, 0.2, 0.2)),
-            border_radius: 0.0.into(),
+            background: iced::Background::Color(get_color("ControlBackground")),
+            border_radius: 2.0.into(),
             border_width: 1.0,
-            border_color: iced::Color::from_rgb(0.3, 0.3, 0.3),
-            icon_color: iced::Color::from_rgb(0.7, 0.7, 0.7),
+            border_color: get_color("ControlContrastFrame"),
+            icon_color: get_color("ControlForeground"),
         }
     }
 
     fn focused(&self, _style: &Self::Style) -> text_input::Appearance {
         text_input::Appearance {
-            background: iced::Background::Color(iced::Color::from_rgb(0.2, 0.2, 0.2)),
-            border_radius: 0.0.into(),
+            background: iced::Background::Color(get_color("ControlBackground")),
+            border_radius: 2.0.into(),
             border_width: 1.0,
-            border_color: iced::Color::from_rgb(0.5, 0.5, 0.5),
-            icon_color: iced::Color::from_rgb(0.7, 0.7, 0.7),
+            border_color: get_color("ControlSelectionFrame"),
+            icon_color: get_color("ControlForeground"),
         }
     }
 
     fn placeholder_color(&self, _style: &Self::Style) -> iced::Color {
-        iced::Color::from_rgb(0.5, 0.5, 0.5)
+        get_color("TextDisabled")
     }
 
     fn value_color(&self, _style: &Self::Style) -> iced::Color {
-        iced::Color::from_rgb(0.9, 0.9, 0.9)
+        get_color("ControlForeground")
     }
 
     fn selection_color(&self, _style: &Self::Style) -> iced::Color {
-        iced::Color::from_rgb(0.3, 0.3, 0.7)
+        get_color("SelectionBackground")
     }
 
     fn disabled_color(&self, _style: &Self::Style) -> iced::Color {
-        iced::Color::from_rgb(0.4, 0.4, 0.4) // Dimmer text for disabled state
+        get_color("TextDisabled")
     }
 
     fn disabled(&self, _style: &Self::Style) -> text_input::Appearance {
+        let active = self.active(_style);
+        let bg_color = get_color("ControlBackground");
+        let border_color = get_color("ControlContrastFrame");
+
         text_input::Appearance {
-            background: iced::Background::Color(iced::Color::from_rgb(0.15, 0.15, 0.15)), // Darker background
-            border_radius: 0.0.into(),
-            border_width: 1.0,
-            border_color: iced::Color::from_rgb(0.2, 0.2, 0.2), // Dimmer border
-            icon_color: iced::Color::from_rgb(0.4, 0.4, 0.4), // Dimmer icon
+            background: iced::Background::Color(Color::new(bg_color.r, bg_color.g, bg_color.b, 0.5)),
+            border_color: Color::new(border_color.r, border_color.g, border_color.b, 0.5),
+            ..active
         }
+    }
+}
+
+impl From<AbletonTextInputStyle> for iced::theme::TextInput {
+    fn from(_: AbletonTextInputStyle) -> Self {
+        iced::theme::TextInput::Custom(Box::new(AbletonTextInputStyle))
+    }
+}
+
+/// Dynamic style for containers that uses theme colors by name
+pub struct AbletonDynamicStyle;
+
+impl iced::widget::container::StyleSheet for AbletonDynamicStyle {
+    type Style = Theme;
+
+    fn appearance(&self, _style: &Self::Style) -> Appearance {
+        Appearance {
+            text_color: Some(get_color("ControlForeground")),
+            background: Some(iced::Background::Color(get_color("SurfaceBackground"))),
+            border_radius: 4.0.into(),
+            border_width: 1.0,
+            border_color: get_color("ControlContrastFrame"),
+        }
+    }
+}
+
+impl From<AbletonDynamicStyle> for iced::theme::Container {
+    fn from(_: AbletonDynamicStyle) -> Self {
+        iced::theme::Container::Custom(Box::new(AbletonDynamicStyle))
     }
 } 

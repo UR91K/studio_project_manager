@@ -43,18 +43,6 @@ pub enum XmlParseError {
     UnknownPluginFormat(String),
 }
 
-#[derive(Error, Debug)]
-pub enum ThemeError {
-    #[error("Theme not found")]
-    ThemeNotFound,
-
-    #[error("Theme parsing error: {0}")]
-    ThemeParseError(#[from] XmlParseError),
-    
-    #[error("Invalid theme file: Missing Ableton root tag")]
-    InvalidThemeFile,
-}
-
 impl Clone for XmlParseError {
     fn clone(&self) -> Self {
         match self {
@@ -68,6 +56,32 @@ impl Clone for XmlParseError {
             Self::EventNotFound(s) => Self::EventNotFound(s.clone()),
             Self::MissingRequiredAttribute(s) => Self::MissingRequiredAttribute(s.clone()),
             Self::UnknownPluginFormat(s) => Self::UnknownPluginFormat(s.clone()),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ThemeError {
+    #[error("Theme not found")]
+    ThemeNotFound,
+
+    #[error("Theme parsing error: {0}")]
+    ThemeParseError(#[from] XmlParseError),
+    
+    #[error("Invalid theme file: Missing Ableton root tag")]
+    InvalidThemeFile,
+    
+    #[error("Theme file not found")]
+    ThemeFileNotFound,
+}
+
+impl Clone for ThemeError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::ThemeNotFound => Self::ThemeNotFound,
+            Self::ThemeParseError(e) => Self::ThemeParseError(e.clone()),
+            Self::InvalidThemeFile => Self::InvalidThemeFile,
+            Self::ThemeFileNotFound => Self::ThemeFileNotFound,
         }
     }
 }

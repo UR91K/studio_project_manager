@@ -1,5 +1,7 @@
 use uuid::Uuid;
 use crate::live_set::LiveSet;
+use std::path::PathBuf;
+use crate::error::ThemeError;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -27,4 +29,8 @@ pub enum Message {
     UpdateStatus(String),
     UpdateStatusWithProgress(String, f32),
     ClearStatus,
+    
+    // Theme
+    LoadTheme(Option<PathBuf>),
+    ThemeLoaded(Result<(), ThemeError>),
 } 

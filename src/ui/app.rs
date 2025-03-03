@@ -1,5 +1,7 @@
 use iced::{Application, Command, Element, Length, Theme};
-use iced::widget::{Button, Column, Container, Row, Scrollable, Text, TextInput};
+use iced::widget::{
+    Button, Column, Container, Row, Scrollable, Text, TextInput, Space,
+};
 use log::{debug, error, info};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -8,9 +10,12 @@ use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
 use crate::live_set::LiveSet;
 use crate::process_projects;
+use crate::ui::theme_loader;
+use crate::ui::style::{AbletonDividerStyle, AbletonListRowStyle, AbletonPanelStyle};
+use crate::ui::style::custom_scrollbar_style;
 
 use super::message::Message;
-use super::state::{AppState, UiState};
+use super::state::{AppState, UiState, StatusInfo};
 
 pub struct StudioProjectManager {
     // Database connection
@@ -358,6 +363,55 @@ impl Application for StudioProjectManager {
                 self.ui_state.status.progress = None;
                 Command::none()
             },
+            Message::LoadTheme(path) => {
+                if let Some(path) = path {
+                    // If a path is provided, load the theme directly
+                    Command::perform(
+                        async move {
+                            match theme_loader::load_theme(Some(&path)) {
+                                Ok(_) => Ok(()),
+                                Err(e) => Err(e),
+                            }
+                        },
+                        Message::ThemeLoaded
+                    )
+                } else {
+                    // If no path is provided, we need to show a file dialog
+                    // This would typically use a file dialog library like rfd
+                    // For now, we'll just load the default theme
+                    self.ui_state.status = StatusInfo {
+                        message: "Theme selection not implemented yet. Using default theme.".to_string(),
+                        progress: None,
+                    };
+                    Command::perform(
+                        async {
+                            match theme_loader::load_theme(None) {
+                                Ok(_) => Ok(()),
+                                Err(e) => Err(e),
+                            }
+                        },
+                        Message::ThemeLoaded
+                    )
+                }
+            },
+            Message::ThemeLoaded(result) => {
+                match result {
+                    Ok(_) => {
+                        self.ui_state.status = StatusInfo {
+                            message: "Theme loaded successfully".to_string(),
+                            progress: None,
+                        };
+                    },
+                    Err(e) => {
+                        error!("Failed to load theme: {:?}", e);
+                        self.ui_state.status = StatusInfo {
+                            message: format!("Failed to load theme: {}", e),
+                            progress: None,
+                        };
+                    }
+                }
+                Command::none()
+            },
         }
     }
     
@@ -467,6 +521,19 @@ impl StudioProjectManager {
                 .style(iced::theme::Container::Custom(Box::new(super::style::AbletonHeaderStyle)))
             )
             .push(Button::new(Text::new("Scan Folders")).on_press(Message::ScanFoldersClicked))
+            .push(
+                Container::new(
+                    Text::new("Appearance").size(20)
+                )
+                .width(Length::Fill)
+                .padding(10)
+                .style(iced::theme::Container::Custom(Box::new(super::style::AbletonHeaderStyle)))
+            )
+            .push(
+                Button::new(Text::new("Load Theme"))
+                    .on_press(Message::LoadTheme(None))
+                    .style(iced::theme::Button::Secondary)
+            )
             .spacing(10)
             .padding(10);
         
@@ -485,92 +552,96 @@ impl StudioProjectManager {
     
     // Helper method to create the project list
     fn view_project_list<'a>(&self, projects: &'a [LiveSet]) -> Element<'a, Message> {
-        // Create column headers
-        let header_row = Container::new(
-            Row::new()
-                .push(Text::new("Name").width(Length::Fill).style(super::style::TEXT))
-                .push(Text::new("Ableton Version").width(Length::Fixed(80.0)).style(super::style::TEXT))
-                .push(Text::new("Tempo").width(Length::Fixed(80.0)).style(super::style::TEXT))
-                .push(Text::new("Key").width(Length::Fixed(80.0)).style(super::style::TEXT))
-                .push(Text::new("Modified").width(Length::Fixed(120.0)).style(super::style::TEXT))
-                .padding(10)
-        )
-        .width(Length::Fill)
-        .style(iced::theme::Container::Custom(Box::new(super::style::AbletonHeaderStyle)));
-        
-        // Create scrollable list of projects
-        let mut project_list = Column::new().spacing(1);
-        
-        for (index, project) in projects.iter().enumerate() {
-            // Alternate row styles
-            let row_style = if index % 2 == 0 {
-                iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1))
-            } else {
-                iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle2))
-            };
-            
+        // Create header row with text columns
+        let header = Row::new()
+            .push(Text::new("Name").width(Length::FillPortion(3)))
+            .push(Text::new("Ableton Version").width(Length::FillPortion(2)))
+            .push(Text::new("Tempo").width(Length::FillPortion(2)))
+            .push(Text::new("Key").width(Length::FillPortion(2)))
+            .push(Text::new("Modified").width(Length::FillPortion(3)))
+            .spacing(10)
+            .padding([5, 10]);
+
+        // Initialize a scrollable list of projects without spacing between rows
+        let mut project_list = Column::new().spacing(0);
+
+        // Add projects to the list with single pixel dividers between rows
+        for (i, project) in projects.iter().enumerate() {
+            // Create a row for each project
             let project_row = Row::new()
-                .push(Text::new(&project.name).width(Length::Fill).style(super::style::TEXT))
+                .push(Text::new(&project.name).width(Length::FillPortion(3)))
                 .push(Text::new(format!("{}.{}", 
                     project.ableton_version.major, 
                     project.ableton_version.minor
-                )).width(Length::Fixed(80.0)).style(super::style::TEXT))
-                .push(Text::new(format!("{:.1}", project.tempo))
-                    .width(Length::Fixed(80.0))
-                    .style(super::style::TEXT))
+                )).width(Length::FillPortion(2)))
+                .push(Text::new(format!("{:.1}", project.tempo)).width(Length::FillPortion(2)))
                 .push(Text::new(
                     project.key_signature
                         .as_ref()
                         .map(|k| k.to_string())
                         .unwrap_or_else(|| "-".to_string())
-                ).width(Length::Fixed(80.0)).style(super::style::TEXT))
+                ).width(Length::FillPortion(2)))
                 .push(Text::new(
                     project.modified_time.format("%Y-%m-%d").to_string()
-                ).width(Length::Fixed(120.0)).style(super::style::TEXT))
-                .padding(10);
-            
-            let row = Container::new(
-                Button::new(project_row)
+                ).width(Length::FillPortion(3)))
+                .spacing(10)
+                .padding([5, 10]);
+
+            // Add the project row with the Ableton-style
+            project_list = project_list.push(
+                Container::new(project_row)
+                    .width(Length::Fill)
+                    .style(iced::theme::Container::Custom(Box::new(super::style::AbletonListRowStyle)))
                     .on_press(Message::ProjectSelected(Some(project.id)))
-                    .width(Length::Fill)
-                    .style(iced::theme::Button::Text)
-            )
-            .width(Length::Fill)
-            .style(row_style);
-            
-            project_list = project_list.push(row);
+            );
+
+            // Add a divider after each row except the last one
+            if i < projects.len() - 1 {
+                project_list = project_list.push(
+                    Container::new(Space::new(Length::Fill, 1.0))
+                        .width(Length::Fill)
+                        .height(Length::Fixed(1.0))
+                        .style(iced::theme::Container::Custom(Box::new(super::style::AbletonDividerStyle)))
+                );
+            }
         }
-        
-        let content = if projects.is_empty() {
-            Column::new()
-                .push(
-                    Container::new(
-                        Text::new("No projects found")
-                            .width(Length::Fill)
-                            .horizontal_alignment(iced::alignment::Horizontal::Center)
-                            .style(super::style::TEXT)
-                    )
-                    .width(Length::Fill)
-                    .padding(20)
-                    .style(iced::theme::Container::Custom(Box::new(super::style::AbletonRowStyle1)))
+
+        // If no projects, show a message
+        if projects.is_empty() {
+            project_list = project_list.push(
+                Container::new(
+                    Text::new("No projects found")
+                        .width(Length::Fill)
+                        .horizontal_alignment(iced::alignment::Horizontal::Center)
+                        .style(super::style::get_color("ControlForeground"))
                 )
-        } else {
-            Column::new().push(Scrollable::new(project_list)
-                .height(Length::Fill)
-                .style(super::style::custom_scrollbar_style()))
-        };
+                .width(Length::Fill)
+                .padding(20)
+                .style(AbletonListRowStyle)
+            );
+        }
+
+        // Create the scrollable content
+        let scrollable = Scrollable::new(
+            Container::new(project_list)
+                .width(Length::Fill)
+                .height(Length::Shrink)
+                .style(iced::theme::Container::Custom(Box::new(super::style::AbletonPanelStyle)))
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(super::style::custom_scrollbar_style());
         
-        let column = Column::new()
-            .push(header_row)
-            .push(content)
-            .spacing(1);
-        
-        Container::new(column)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(1)
-            .style(iced::theme::Container::Custom(Box::new(super::style::AbletonPanelStyle)))
-            .into()
+        // Create the final container with header and scrollable content
+        Container::new(
+            Column::new()
+                .push(header)
+                .push(scrollable)
+                .spacing(0) // No spacing between header and content
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
     
     // Helper method to create the project details panel
@@ -632,7 +703,7 @@ impl StudioProjectManager {
                                     // Show file path in low contrast if name is custom
                                     Text::new(project.file_path.to_string_lossy())
                                         .size(12)
-                                        .style(iced::Color::from(super::style::TEXT_SECONDARY))
+                                        .style(iced::Color::from(super::style::get_color("TextDisabled")))
                                 } else {
                                     // Empty text if name is not custom
                                     Text::new("")
