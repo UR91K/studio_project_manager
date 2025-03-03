@@ -73,11 +73,6 @@ impl ColorExt for Color {
     }
 }
 
-// You can then update your existing function to use this trait
-fn convert_hex_to_color(hex: &str) -> Result<Color, ThemeError> {
-    Color::from_hex_str(hex)
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, Display)]
 pub enum LiveThemeElement {
     // Background Colors
