@@ -43,6 +43,18 @@ pub enum XmlParseError {
     UnknownPluginFormat(String),
 }
 
+#[derive(Error, Debug)]
+pub enum ThemeError {
+    #[error("Theme not found")]
+    ThemeNotFound,
+
+    #[error("Theme parsing error: {0}")]
+    ThemeParseError(#[from] XmlParseError),
+    
+    #[error("Invalid theme file: Missing Ableton root tag")]
+    InvalidThemeFile,
+}
+
 impl Clone for XmlParseError {
     fn clone(&self) -> Self {
         match self {

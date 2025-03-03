@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="5" MinorVersion="12.0_12049" SchemaChangeCount="3" Creator="Ableton Live 12.0d1" Revision="">
+	<Theme>
+		<ControlForeground Value="#b5b5b5" />
+		<TextDisabled Value="#757575" />
+		<SurfaceHighlight Value="#464646" />
+		<SurfaceArea Value="#242424" />
+		<Desktop Value="#2a2a2a" />
+		<ViewCheckControlEnabledOn Value="#ffad56" />
+		<ScrollbarInnerHandle Value="#696969" />
+		<ScrollbarInnerTrack Value="#00000000" />
+		<DetailViewBackground Value="#3e3e3e" />
+		<SelectionFrame Value="#757575" />
+		<ControlBackground Value="#1e1e1e" />
+		<ControlFillHandle Value="#5d5d5d" />
+		<ChosenDefault Value="#ffad56" />
+		<ChosenAlternative Value="#03c3d5" />
+		<Alert Value="#e76942" />
+		<ControlOnForeground Value="#070707" />
+		<ControlOffForeground Value="#b5b5b5" />
+		<ControlContrastFrame Value="#111111" />
+		<ViewCheckControlEnabledOff Value="#757575" />
+		<SelectionBackground Value="#b0ddeb" />
+		<StandbySelectionBackground Value="#637e86" />
+		<SurfaceBackground Value="#363636" />
+		<DisplayBackground Value="#181818" />
+		<Progress Value="#ffad56" />
+		<GridLabel Value="#b5b5b57f" />
+		<GridLineBase Value="#06060654" />
+	</Theme>
+</Ableton>
