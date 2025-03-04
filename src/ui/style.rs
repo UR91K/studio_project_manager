@@ -135,6 +135,39 @@ impl From<AbletonRowStyle1> for iced::theme::Container {
     }
 }
 
+impl iced::widget::button::StyleSheet for AbletonRowStyle1 {
+    type Style = Theme;
+
+    fn active(&self, _style: &Self::Style) -> iced::widget::button::Appearance {
+        iced::widget::button::Appearance {
+            text_color: get_color("ControlForeground"),
+            background: Some(iced::Background::Color(get_color("SurfaceBackground"))),
+            border_radius: 0.0.into(),
+            border_width: 0.0,
+            border_color: Color::TRANSPARENT,
+            shadow_offset: iced::Vector::default(),
+        }
+    }
+
+    fn hovered(&self, style: &Self::Style) -> iced::widget::button::Appearance {
+        let active = self.active(style);
+        iced::widget::button::Appearance {
+            background: Some(iced::Background::Color(get_color("SelectionBackground"))),
+            text_color: get_color("SelectionForeground"),
+            ..active
+        }
+    }
+
+    fn pressed(&self, style: &Self::Style) -> iced::widget::button::Appearance {
+        let active = self.active(style);
+        iced::widget::button::Appearance {
+            background: Some(iced::Background::Color(get_color("SelectionBackground"))),
+            text_color: get_color("SelectionForeground"),
+            ..active
+        }
+    }
+}
+
 /// Alternate row style for containers
 pub struct AbletonRowStyle2;
 
@@ -155,6 +188,39 @@ impl iced::widget::container::StyleSheet for AbletonRowStyle2 {
 impl From<AbletonRowStyle2> for iced::theme::Container {
     fn from(_: AbletonRowStyle2) -> Self {
         iced::theme::Container::Custom(Box::new(AbletonRowStyle2))
+    }
+}
+
+impl iced::widget::button::StyleSheet for AbletonRowStyle2 {
+    type Style = Theme;
+
+    fn active(&self, _style: &Self::Style) -> iced::widget::button::Appearance {
+        iced::widget::button::Appearance {
+            text_color: get_color("ControlForeground"),
+            background: Some(iced::Background::Color(get_color("SurfaceHighlight"))),
+            border_radius: 0.0.into(),
+            border_width: 0.0,
+            border_color: Color::TRANSPARENT,
+            shadow_offset: iced::Vector::default(),
+        }
+    }
+
+    fn hovered(&self, style: &Self::Style) -> iced::widget::button::Appearance {
+        let active = self.active(style);
+        iced::widget::button::Appearance {
+            background: Some(iced::Background::Color(get_color("SelectionBackground"))),
+            text_color: get_color("SelectionForeground"),
+            ..active
+        }
+    }
+
+    fn pressed(&self, style: &Self::Style) -> iced::widget::button::Appearance {
+        let active = self.active(style);
+        iced::widget::button::Appearance {
+            background: Some(iced::Background::Color(get_color("SelectionBackground"))),
+            text_color: get_color("SelectionForeground"),
+            ..active
+        }
     }
 }
 
