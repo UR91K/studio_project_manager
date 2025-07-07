@@ -50,7 +50,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                 
                 // Apply pagination: offset is always applied, limit only if specified
                 // This allows returning all ~4000 projects when no limit is set
-                let mut projects_iter = projects.into_iter().skip(req.offset.unwrap_or(0) as usize);
+                let projects_iter = projects.into_iter().skip(req.offset.unwrap_or(0) as usize);
                 let proto_projects: Vec<Project> = if let Some(limit) = req.limit {
                     projects_iter.take(limit as usize).map(|p| convert_live_set_to_proto(p)).collect()
                 } else {
@@ -136,7 +136,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                 
                 // Apply pagination: offset is always applied, limit only if specified
                 // This allows returning all search results when no limit is set
-                let mut results_iter = search_results.into_iter().skip(req.offset.unwrap_or(0) as usize);
+                let results_iter = search_results.into_iter().skip(req.offset.unwrap_or(0) as usize);
                 let projects: Vec<Project> = if let Some(limit) = req.limit {
                     results_iter.take(limit as usize).map(|result| convert_live_set_to_proto(result.project)).collect()
                 } else {
