@@ -220,6 +220,10 @@ impl LiveSetDatabase {
         )?;
 
         debug!("Database schema initialized successfully");
+        
+        // Rebuild FTS5 table to fix any NULL values in existing data
+        self.rebuild_fts5_table()?;
+        
         Ok(())
     }
 
@@ -1057,5 +1061,47 @@ impl LiveSetDatabase {
                 .single()
                 .expect("Invalid timestamp in database")
         }))
+    }
+
+    pub fn rebuild_fts5_table(&mut self) -> Result<(), DatabaseError> {
+        debug!("Rebuilding FTS5 table to fix NULL values");
+        
+        // Clear and rebuild the FTS5 table
+        self.conn.execute("DELETE FROM project_search", [])?;
+        
+        // Repopulate with corrected data
+        self.conn.execute(
+            r#"
+            INSERT INTO project_search (
+                project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo
+            )
+            SELECT 
+                p.id,
+                p.name,
+                p.path,
+                COALESCE((SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
+                 FROM plugins pl
+                 JOIN project_plugins pp ON pp.plugin_id = pl.id
+                 WHERE pp.project_id = p.id), ''),
+                COALESCE((SELECT GROUP_CONCAT(s.name, ' ')
+                 FROM samples s
+                 JOIN project_samples ps ON ps.sample_id = s.id
+                 WHERE ps.project_id = p.id), ''),
+                COALESCE((SELECT GROUP_CONCAT(t.name, ' ')
+                 FROM tags t
+                 JOIN project_tags pt ON pt.tag_id = t.id
+                 WHERE pt.project_id = p.id), ''),
+                COALESCE(p.notes, ''),
+                strftime('%Y-%m-%d %H:%M:%S', datetime(p.created_at, 'unixepoch')),
+                strftime('%Y-%m-%d %H:%M:%S', datetime(p.modified_at, 'unixepoch')),
+                CAST(p.tempo AS TEXT)
+            FROM projects p
+            WHERE p.is_active = true
+            "#,
+            [],
+        )?;
+        
+        debug!("FTS5 table rebuilt successfully");
+        Ok(())
     }
 }
