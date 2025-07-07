@@ -400,23 +400,14 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
     use crate::test_utils::generate_test_live_sets_arc;
-    use std::sync::Once;
     use crate::database::LiveSetDatabase;
     use std::collections::HashSet;
 
-    static INIT: Once = Once::new();
-    fn setup() {
-        let _ = INIT.call_once(|| {
-            let _ = std::env::set_var("RUST_LOG", "debug");
-            if let Err(_) = env_logger::try_init() {
-                // Logger already initialized, that's fine
-            }
-        });
-    }
+    use crate::test_utils::setup;
 
     #[test]
     fn test_batch_insert() {
-        setup();
+        setup("debug");
         // Create a temporary database
         let temp_dir = tempdir().expect("Failed to create temp dir");
         let db_path = temp_dir.path().join("test.db");

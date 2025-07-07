@@ -7,7 +7,7 @@ use std::path::Path;
 use std::str::from_utf8;
 use std::sync::Mutex;
 
-use log::{debug, error, info, trace};
+use log::{error, trace};
 use once_cell::sync::Lazy;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
@@ -201,7 +201,7 @@ pub(crate) fn format_file_size(size: u64) -> String {
 /// println!("Decompressed {} bytes", decompressed_data.len());
 /// ```
 pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
-    debug!("Attempting to extract gzipped data from: {:?}", file_path);
+    trace!("Attempting to extract gzipped data from: {:?}", file_path);
     trace!("Opening file for gzip decompression");
 
     let file = File::open(file_path).map_err(|error| {
@@ -215,7 +215,7 @@ pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileErro
         }
     })?;
 
-    debug!("File opened successfully, creating GzDecoder");
+    trace!("File opened successfully, creating GzDecoder");
     let mut gzip_decoder = GzDecoder::new(file);
     let mut decompressed_data = Vec::new();
 
@@ -231,7 +231,7 @@ pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileErro
         })?;
 
     let decompressed_size = decompressed_data.len();
-    debug!(
+    trace!(
         "Successfully decompressed {} bytes from: {:?}",
         decompressed_size, file_path
     );

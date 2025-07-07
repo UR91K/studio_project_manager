@@ -18,7 +18,7 @@ use crate::utils::plugins::get_most_recent_db_file;
 use crate::utils::plugins::LineTrackingBuffer;
 use crate::utils::{EventExt, StringResultExt};
 #[allow(unused_imports)]
-use crate::{debug_fn, trace_fn, warn_fn};
+use crate::{trace_fn, warn_fn};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathType {
@@ -353,7 +353,7 @@ impl Parser {
                 .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             result.furthest_bar = Some(max_end_time / beats_per_bar);
 
-            debug_fn!(
+            trace_fn!(
                 "finalize_result",
                 "Calculated furthest bar: {} (max end time: {}, beats per bar: {})",
                 result.furthest_bar.unwrap(),
@@ -389,7 +389,7 @@ impl Parser {
 
             let plugin = match db_plugin {
                 Some(db_plugin) => {
-                    debug_fn!(
+                    trace_fn!(
                         "finalize_result",
                         "Found plugin {} {} on system, flagging as installed",
                         db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
@@ -412,7 +412,7 @@ impl Parser {
                     }
                 }
                 None => {
-                    debug_fn!(
+                    trace_fn!(
                         "finalize_result",
                         "Plugin not found in database: {:?}",
                         info
@@ -446,7 +446,7 @@ impl Parser {
                 .iter()
                 .max_by_key(|&(_, count)| count)
                 .map(|(key, count)| {
-                    debug_fn!(
+                    trace_fn!(
                         "finalize_result",
                         "Found most frequent key signature: {} (count: {})",
                         key,
@@ -455,7 +455,7 @@ impl Parser {
                     key.clone()
                 })
                 .unwrap_or_else(|| {
-                    debug_fn!("finalize_result", "No key signatures found, using default");
+                    trace_fn!("finalize_result", "No key signatures found, using default");
                     KeySignature::default()
                 });
 
@@ -501,7 +501,7 @@ impl Parser {
                 .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
             result.furthest_bar = Some(max_end_time / beats_per_bar);
 
-            debug_fn!(
+            trace_fn!(
                 "finalize_result",
                 "Calculated furthest bar: {} (max end time: {}, beats per bar: {})",
                 result.furthest_bar.unwrap(),
@@ -537,7 +537,7 @@ impl Parser {
 
             let plugin = match db_plugin {
                 Some(db_plugin) => {
-                    debug_fn!(
+                    trace_fn!(
                         "finalize_result",
                         "Found plugin {} {} on system, flagging as installed",
                         db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
@@ -560,7 +560,7 @@ impl Parser {
                     }
                 }
                 None => {
-                    debug_fn!(
+                    trace_fn!(
                         "finalize_result",
                         "Plugin not found in database: {:?}",
                         info
@@ -593,7 +593,7 @@ impl Parser {
                 .iter()
                 .max_by_key(|&(_, count)| count)
                 .map(|(key, count)| {
-                    debug_fn!(
+                    trace_fn!(
                         "finalize_result",
                         "Found most frequent key signature: {} (count: {})",
                         key,
@@ -602,7 +602,7 @@ impl Parser {
                     key.clone()
                 })
                 .unwrap_or_else(|| {
-                    debug_fn!("finalize_result", "No key signatures found, using default");
+                    trace_fn!("finalize_result", "No key signatures found, using default");
                     KeySignature::default()
                 });
 
@@ -634,7 +634,7 @@ impl Parser {
 
         match name.as_str() {
             "SampleRef" => {
-                debug_fn!(
+                trace_fn!(
                     "handle_start_event",
                     "[{}] Entering SampleRef at depth {}, version: {}",
                     line,
@@ -646,7 +646,7 @@ impl Parser {
                 };
             }
             "FileRef" if matches!(self.state, ParserState::InSampleRef { .. }) => {
-                debug_fn!(
+                trace_fn!(
                     "handle_start_event",
                     "[{}] Entering FileRef at depth {}",
                     line,
@@ -658,7 +658,7 @@ impl Parser {
                 if matches!(self.state, ParserState::InFileRef)
                     && self.ableton_version.major < 11 =>
             {
-                debug_fn!(
+                trace_fn!(
                     "handle_start_event",
                     "[{}] Found Data tag for old format sample at depth {}",
                     line,
@@ -673,7 +673,7 @@ impl Parser {
                 if matches!(self.state, ParserState::InFileRef)
                     && self.ableton_version.major >= 11 =>
             {
-                debug_fn!(
+                trace_fn!(
                     "handle_start_event",
                     "[{}] Found Path tag for new format sample at depth {}",
                     line,
@@ -687,7 +687,7 @@ impl Parser {
                 // Extract the path value from the Value attribute
                 if let Some(value) = event.try_get_attribute("Value")? {
                     let path_str = value.unescape_value()?.to_string();
-                    debug_fn!(
+                    trace_fn!(
                         "handle_start_event",
                         "[{}] Found sample path: {}",
                         line,
@@ -742,7 +742,7 @@ impl Parser {
                             let tag_name = event.name().to_string_result()?;
                             match tag_name.as_str() {
                                 "BrowserContentPath" => {
-                                    debug_fn!(
+                                    trace_fn!(
                                         "handle_start_event",
                                         "[{}] Found BrowserContentPath at depth {}",
                                         line,
@@ -752,7 +752,7 @@ impl Parser {
                                 }
                                 "BranchDeviceId" => {
                                     if let Some(id) = event.get_value_as_string_result()? {
-                                        debug_fn!(
+                                        trace_fn!(
                                             "handle_start_event",
                                             "[{}] Found device ID at depth {}: {}",
                                             line,
@@ -769,7 +769,7 @@ impl Parser {
                             let tag_name = e.name().to_string_result()?;
                             // Only consider PluginDesc nested if it's at a deeper depth
                             if tag_name == "PluginDesc" && self.depth > start_depth {
-                                debug_fn!(
+                                trace_fn!(
                                     "handle_start_event",
                                     "[{}] Found nested PluginDesc at depth {}, ignoring device ID",
                                     line,
@@ -792,7 +792,7 @@ impl Parser {
                         Ok(Event::End(ref e)) => {
                             let end_name = e.name().to_string_result()?;
                             if end_name == "BranchSourceContext" && self.depth <= start_depth {
-                                debug_fn!(
+                                trace_fn!(
                                     "handle_start_event",
                                     "[{}] Exiting BranchSourceContext look-ahead at depth {}",
                                     line,
@@ -813,7 +813,7 @@ impl Parser {
                 if found_browser_content_path && !found_nested_plugin_desc {
                     if let Some(id) = device_id {
                         if id.starts_with("device:vst:") || id.starts_with("device:vst3:") {
-                            debug_fn!(
+                            trace_fn!(
                                 "handle_start_event",
                                 "[{}] Storing valid plugin device ID at depth {}: {}",
                                 line,
@@ -835,7 +835,7 @@ impl Parser {
             }
             "PluginDesc" => {
                 if let Some(device_id) = &self.current_branch_info {
-                    debug_fn!(
+                    trace_fn!(
                         "handle_start_event",
                         "[{}] Entering PluginDesc at depth {} for device: {}",
                         line,
@@ -858,7 +858,7 @@ impl Parser {
             "Vst3PluginInfo" | "VstPluginInfo" => {
                 if let ParserState::InPluginDesc { device_id } = &self.state {
                     if self.plugin_info_processed {
-                        debug_fn!(
+                        trace_fn!(
                             "handle_start_event",
                             "[{}] Ignoring subsequent plugin info tag at depth {}: {} for device: {} (already processed)",
                             line,
@@ -867,7 +867,7 @@ impl Parser {
                             device_id
                         );
                     } else {
-                        debug_fn!(
+                        trace_fn!(
                             "handle_start_event",
                             "[{}] Found plugin info tag at depth {}: {} for device: {}",
                             line,
@@ -900,7 +900,7 @@ impl Parser {
                                     if let Some(plugin_format) =
                                         crate::utils::plugins::parse_plugin_format(device_id)
                                     {
-                                        debug_fn!(
+                                        trace_fn!(
                                             "handle_start_event",
                                             "[{}] Found plugin name at depth {}: {} for device: {}",
                                             line,
@@ -913,7 +913,7 @@ impl Parser {
                                             dev_identifier: device_id.clone(),
                                             plugin_format,
                                         };
-                                        debug_fn!(
+                                        trace_fn!(
                                             "handle_start_event",
                                             "[{}] Adding plugin info at depth {}: {:?}",
                                             line,
@@ -926,7 +926,7 @@ impl Parser {
                                     }
                                 }
                             } else {
-                                debug_fn!(
+                                trace_fn!(
                                     "handle_start_event",
                                     "[{}] Ignoring plugin name at depth {} (already processed): {}",
                                     line,
@@ -936,7 +936,7 @@ impl Parser {
                             }
                         }
                         ParserState::InScaleInformation => {
-                            debug_fn!(
+                            trace_fn!(
                                 "handle_start_event",
                                 "[{}] Found scale name: {}",
                                 line,
@@ -975,7 +975,7 @@ impl Parser {
                 // Get the Value attribute
                 if let Some(value) = event.try_get_attribute("Value")? {
                     let value_str = value.unescape_value()?.to_string();
-                    debug_fn!(
+                    trace_fn!(
                         "handle_start_event",
                         "[{}] Found EnumEvent with value: {}",
                         line,
@@ -986,7 +986,7 @@ impl Parser {
                     match crate::utils::time_signature::parse_encoded_time_signature(&value_str) {
                         Ok(encoded_value) => match TimeSignature::from_encoded(encoded_value) {
                             Ok(time_sig) => {
-                                debug_fn!(
+                                trace_fn!(
                                     "handle_start_event",
                                     "[{}] Successfully decoded time signature: {}/{}",
                                     line,
@@ -1028,7 +1028,7 @@ impl Parser {
                     let value_str = value.unescape_value()?.to_string();
                     match value_str.parse::<f64>() {
                         Ok(end_time) => {
-                            debug_fn!(
+                            trace_fn!(
                                 "handle_start_event",
                                 "[{}] Found CurrentEnd with value: {}",
                                 line,
@@ -1049,7 +1049,7 @@ impl Parser {
                 }
             }
             "Tempo" => {
-                debug_fn!(
+                trace_fn!(
                     "handle_start_event",
                     "[{}] Entering Tempo tag at depth {}",
                     line,
@@ -1065,7 +1065,7 @@ impl Parser {
                     let value_str = value.unescape_value()?.to_string();
                     match value_str.parse::<f64>() {
                         Ok(tempo) if tempo >= 10.0 && tempo <= 999.0 => {
-                            debug_fn!(
+                            trace_fn!(
                                 "handle_start_event",
                                 "[{}] Found valid tempo value: {}",
                                 line,
@@ -1096,7 +1096,7 @@ impl Parser {
             }
             "MidiClip" => {
                 if self.options.parse_key {
-                    debug_fn!(
+                    trace_fn!(
                         "handle_start_event",
                         "[{}] Entering MidiClip at depth {}",
                         line,
@@ -1108,7 +1108,7 @@ impl Parser {
                 }
             }
             "ScaleInformation" if matches!(self.state, ParserState::InMidiClip) => {
-                debug_fn!(
+                trace_fn!(
                     "handle_start_event",
                     "[{}] Entering ScaleInformation at depth {}",
                     line,
@@ -1119,7 +1119,7 @@ impl Parser {
             "RootNote" if matches!(self.state, ParserState::InScaleInformation) => {
                 if let Some(value) = event.try_get_attribute("Value")? {
                     if let Ok(root_note) = value.unescape_value()?.parse::<i32>() {
-                        debug_fn!(
+                        trace_fn!(
                             "handle_start_event",
                             "[{}] Found root note: {}",
                             line,
@@ -1137,7 +1137,7 @@ impl Parser {
             "IsInKey" if matches!(self.state, ParserState::InMidiClip) => {
                 if let Some(value) = event.try_get_attribute("Value")? {
                     let is_in_key = value.unescape_value()?.as_ref() == "true";
-                    debug_fn!(
+                    trace_fn!(
                         "handle_start_event",
                         "[{}] Found IsInKey: {}",
                         line,
@@ -1175,14 +1175,14 @@ impl Parser {
 
         match name.as_str() {
             "SampleRef" => {
-                debug_fn!(
+                trace_fn!(
                     "handle_end_event",
                     "Exiting SampleRef at depth {}, resetting state",
                     self.depth
                 );
                 // If we have a current file reference, add it to our sample paths
                 if let Some(path) = self.current_file_ref.take() {
-                    debug_fn!("handle_end_event", "Adding sample path: {:?}", path);
+                    trace_fn!("handle_end_event", "Adding sample path: {:?}", path);
                     self.sample_paths.insert(path);
                 }
                 self.current_path_type = None;
@@ -1192,7 +1192,7 @@ impl Parser {
                 self.state = ParserState::Root;
             }
             "FileRef" => {
-                debug_fn!(
+                trace_fn!(
                     "handle_end_event",
                     "Exiting FileRef at depth {}",
                     self.depth
@@ -1205,14 +1205,14 @@ impl Parser {
             }
             "Data" => {
                 if let ParserState::InData { ref current_data } = self.state {
-                    debug_fn!(
+                    trace_fn!(
                         "handle_end_event",
                         "Processing encoded path data of length {}",
                         current_data.len()
                     );
                     match crate::utils::samples::decode_sample_path(current_data) {
                         Ok(path) => {
-                            debug_fn!(
+                            trace_fn!(
                                 "handle_end_event",
                                 "Successfully decoded sample path: {:?}",
                                 path
@@ -1233,7 +1233,7 @@ impl Parser {
                 }
             }
             "SourceContext" => {
-                debug_fn!(
+                trace_fn!(
                     "handle_end_event",
                     "Exiting SourceContext at depth {}, resetting state",
                     self.depth
@@ -1265,7 +1265,7 @@ impl Parser {
             }
             "PluginDesc" => {
                 // Clear the current branch info and plugin info processed flag
-                debug_fn!(
+                trace_fn!(
                     "handle_end_event",
                     "Exiting PluginDesc at depth {}, clearing device ID: {:?}",
                     self.depth,
@@ -1291,7 +1291,7 @@ impl Parser {
             }
             "Vst3PluginInfo" | "VstPluginInfo" => {
                 if let Some(device_id) = &self.current_branch_info {
-                    debug_fn!(
+                    trace_fn!(
                         "handle_end_event",
                         "Exiting plugin info tag at depth {}, returning to PluginDesc state for device: {}",
                         self.depth,
@@ -1310,7 +1310,7 @@ impl Parser {
                 }
             }
             "Tempo" => {
-                debug_fn!(
+                trace_fn!(
                     "handle_end_event",
                     "Exiting Tempo tag at depth {}, resetting state",
                     self.depth
@@ -1318,7 +1318,7 @@ impl Parser {
                 self.state = ParserState::Root;
             }
             "Manual" if matches!(self.state, ParserState::InTempoManual) => {
-                debug_fn!(
+                trace_fn!(
                     "handle_end_event",
                     "Exiting Manual tag at depth {}, returning to Tempo state",
                     self.depth
@@ -1328,7 +1328,7 @@ impl Parser {
                 };
             }
             "MidiClip" => {
-                debug_fn!(
+                trace_fn!(
                     "handle_end_event",
                     "Exiting MidiClip at depth {}, resetting state",
                     self.depth
@@ -1340,7 +1340,7 @@ impl Parser {
                 }
             }
             "ScaleInformation" => {
-                debug_fn!(
+                trace_fn!(
                     "handle_end_event",
                     "Exiting ScaleInformation at depth {}, returning to MidiClip state",
                     self.depth

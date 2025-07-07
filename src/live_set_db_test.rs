@@ -14,17 +14,7 @@ use crate::live_set::LiveSet;
 use crate::models::{
     AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, Scale, TimeSignature, Tonic,
 };
-use std::sync::Once;
-
-static INIT: Once = Once::new();
-fn setup() {
-    let _ = INIT.call_once(|| {
-        let _ = std::env::set_var("RUST_LOG", "debug");
-        if let Err(_) = env_logger::try_init() {
-            // Logger already initialized, that's fine
-        }
-    });
-}
+use crate::test_utils::setup;
 
 fn create_test_live_set() -> LiveSet {
     let now = Local::now();
@@ -117,7 +107,7 @@ fn create_test_live_set_from_parse(name: &str, parse_result: ParseResult) -> Liv
 
 #[test]
 fn test_database_initialization() {
-    setup();
+    setup("debug");
     let db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Verify tables exist
@@ -139,7 +129,7 @@ fn test_database_initialization() {
 
 #[test]
 fn test_insert_and_retrieve_project() {
-    setup();
+    setup("debug");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -210,7 +200,7 @@ fn test_insert_and_retrieve_project() {
 
 #[test]
 fn test_multiple_projects() {
-    setup();
+    setup("debug");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -294,7 +284,7 @@ fn test_multiple_projects() {
 
 #[test]
 fn test_tags() {
-    setup();
+    setup("debug");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -352,7 +342,7 @@ fn test_tags() {
 
 #[test]
 fn test_collections() {
-    setup();
+    setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create three test projects with different characteristics
@@ -446,7 +436,7 @@ fn test_collections() {
 #[test]
 #[allow(unused_variables)]
 fn test_notes_and_tasks() {
-    setup();
+    setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create a test project
@@ -551,7 +541,7 @@ fn test_notes_and_tasks() {
 
 #[test]
 fn test_mark_project_deleted() {
-    setup();
+    setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create and insert a test project
@@ -577,7 +567,7 @@ fn test_mark_project_deleted() {
 
 #[test]
 fn test_find_deleted_by_hash() {
-    setup();
+    setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create and insert a test project
@@ -603,7 +593,7 @@ fn test_find_deleted_by_hash() {
 
 #[test]
 fn test_reactivate_project() {
-    setup();
+    setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create and insert a test project
@@ -635,7 +625,7 @@ fn test_reactivate_project() {
 
 #[test]
 fn test_permanent_deletion() {
-    setup();
+    setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create and insert a test project

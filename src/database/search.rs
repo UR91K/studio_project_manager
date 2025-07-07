@@ -308,15 +308,7 @@ mod tests {
     use crate::live_set::LiveSet;
     use std::sync::Once;
 
-    static INIT: Once = Once::new();
-    fn setup() {
-        let _ = INIT.call_once(|| {
-            let _ = std::env::set_var("RUST_LOG", "debug");
-            if let Err(_) = env_logger::try_init() {
-                // Logger already initialized, that's fine
-            }
-        });
-    }
+    use crate::test_utils::setup;
 
     fn setup_test_projects() -> (LiveSetDatabase, DateTime<Local>, DateTime<Local>, DateTime<Local>, DateTime<Local>) {
         let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
@@ -417,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_query_parser() {
-        setup();
+        setup("debug");
         let query = SearchQuery::parse("drum mix bpm:120-140 plugin:serum path:\"C:/Music\"");
         
         assert_eq!(query.text, "drum mix");
@@ -428,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_query_parser_interleaved() {
-        setup();
+        setup("debug");
         let query = SearchQuery::parse("bpm:98 plugin:omnisphere big dog beat path:\"C:/Music\"");
         
         assert_eq!(query.text, "big dog beat");
@@ -439,7 +431,7 @@ mod tests {
 
     #[test]
     fn test_multiple_operators() {
-        setup();
+        setup("debug");
         let query = SearchQuery::parse("tag:wip ts:4/4 key:cmaj");
         
         assert!(query.text.is_empty());
@@ -450,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_search_plugins() {
-        setup();
+        setup("debug");
         let (mut db, _, _, _, _) = setup_test_projects();
 
         // Test specific plugin search
@@ -467,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_search_tempo() {
-        setup();
+        setup("debug");
         let (mut db, _, _, _, _) = setup_test_projects();
 
         let tempo_query = SearchQuery::parse("bpm:140");
@@ -479,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_search_exact_creation_date() {
-        setup();
+        setup("debug");
         let (mut db, edm_created, _, _, _) = setup_test_projects();
         
         let date_query = SearchQuery::parse("dc:2024-01-01");
@@ -490,7 +482,7 @@ mod tests {
 
     #[test]
     fn test_search_exact_modified_date() {
-        setup();
+        setup("debug");
         let (mut db, _, _, _, rock_modified) = setup_test_projects();
         
         let date_query = SearchQuery::parse("dm:2024-01-04");
@@ -501,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_search_full_timestamp() {
-        setup();
+        setup("debug");
         let (mut db, edm_created, _, _, _) = setup_test_projects();
         
         let date_query = SearchQuery::parse("dc:2024-01-01 08:00:00");
@@ -512,7 +504,7 @@ mod tests {
 
     #[test]
     fn test_search_partial_date_match() {
-        setup();
+        setup("debug");
         let (mut db, _, edm_modified, _, _) = setup_test_projects();
         
         let date_query = SearchQuery::parse("dm:2024-01-02");
@@ -523,7 +515,7 @@ mod tests {
 
     #[test]
     fn test_search_nonexistent_date() {
-        setup();
+        setup("debug");
         let (mut db, _, _, _, _) = setup_test_projects();
         
         let date_query = SearchQuery::parse("dc:2023-12-31");
@@ -533,7 +525,7 @@ mod tests {
 
     #[test]
     fn test_search_invalid_date_format() {
-        setup();
+        setup("debug");
         let (mut db, _, _, _, _) = setup_test_projects();
         
         let date_query = SearchQuery::parse("dc:not-a-date");
@@ -543,7 +535,7 @@ mod tests {
 
     #[test]
     fn test_search_year_month_only() {
-        setup();
+        setup("debug");
         let (mut db, _, _, _, _) = setup_test_projects();
         
         let date_query = SearchQuery::parse("dc:2024-01");
@@ -553,7 +545,7 @@ mod tests {
 
     #[test]
     fn test_search_year_only() {
-        setup();
+        setup("debug");
         let (mut db, _, _, _, _) = setup_test_projects();
         
         let date_query = SearchQuery::parse("dc:2024");

@@ -1,9 +1,9 @@
 use super::parser::{ParseOptions, Parser, ParserState};
 use crate::error::LiveSetError;
 use crate::models::{PluginFormat, Scale, TimeSignature, Tonic};
+use crate::test_utils::setup;
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use std::sync::Once;
 
 use super::parser::ParseResult;
 
@@ -17,18 +17,10 @@ fn setup_valid_scanner(scanner: &mut Parser) {
     scanner.current_time_signature = TIME_SIGNATURE.clone();
 }
 
-static INIT: Once = Once::new();
-fn setup() {
-    let _ = INIT.call_once(|| {
-        let _ = std::env::set_var("RUST_LOG", "debug");
-        if let Err(_) = env_logger::try_init() {
-            // Logger already initialized, that's fine
-        }
-    });
-}
+
 
 fn create_test_scanner() -> Parser {
-    setup();
+    setup("error");
     let xml_data = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <Ableton MajorVersion="11" MinorVersion="12.0_12049">
@@ -54,7 +46,7 @@ fn create_test_scanner() -> Parser {
 }
 
 fn create_test_scanner_with_version(version: u32) -> Parser {
-    setup();
+    setup("error");
     let xml_data = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <Ableton MajorVersion="5" MinorVersion="{}.0_12049">

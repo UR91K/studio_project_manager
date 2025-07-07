@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use log::debug;
+use log::{debug, trace};
 
 use crate::error::LiveSetError;
 use crate::live_set::LiveSet;
@@ -55,14 +55,14 @@ impl ParallelParser {
             let work_rx = Arc::clone(&work_rx);
             
             let handle = thread::spawn(move || {
-                debug!("Worker thread {} started", thread_id);
+                trace!("Worker thread {} started", thread_id);
                 let worker = ParserWorker::new(results_tx);
                 
                 while let Ok(path) = work_rx.lock().unwrap().recv() {
-                    debug!("Worker {} processing file: {}", thread_id, path.display());
+                    trace!("Worker {} processing file: {}", thread_id, path.display());
                     worker.process_file(path);
                 }
-                debug!("Worker thread {} exiting", thread_id);
+                trace!("Worker thread {} exiting", thread_id);
             });
             
             workers.push(handle);
@@ -81,10 +81,10 @@ impl ParallelParser {
         debug!("Submitting {} paths to worker threads", paths.len());
         if let Some(tx) = self.work_tx.lock().unwrap().as_ref() {
             for path in paths {
-                debug!("Sending path to worker: {}", path.display());
+                trace!("Sending path to worker: {}", path.display());
                 tx.send(path).map_err(|_| LiveSetError::InvalidProject("Failed to send path to worker thread".to_string()))?;
             }
-            debug!("Finished submitting all paths");
+            trace!("Finished submitting all paths");
             Ok(())
         } else {
             Err(LiveSetError::InvalidProject("Worker threads are no longer available".to_string()))
@@ -99,16 +99,16 @@ impl ParallelParser {
 
 impl Drop for ParallelParser {
     fn drop(&mut self) {
-        debug!("ParallelParser being dropped, signaling workers to stop");
+        trace!("ParallelParser being dropped, signaling workers to stop");
         // Drop work sender to signal workers to stop
         self.work_tx.lock().unwrap().take();
         
-        debug!("Waiting for {} workers to complete", self.workers.len());
+        trace!("Waiting for {} workers to complete", self.workers.len());
         // Wait for all workers to complete
         for (i, worker) in self.workers.drain(..).enumerate() {
-            debug!("Waiting for worker {} to complete", i);
+            trace!("Waiting for worker {} to complete", i);
             let _ = worker.join();
-            debug!("Worker {} completed", i);
+            trace!("Worker {} completed", i);
         }
         debug!("All workers completed");
     }

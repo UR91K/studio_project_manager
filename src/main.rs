@@ -15,7 +15,6 @@ use std::path::PathBuf;
 use log::{info, debug, error};
 use std::time::Duration;
 use std::sync::mpsc::RecvTimeoutError;
-use std::sync::Arc;
 // use std::sync::Mutex;
 // use once_cell::sync::Lazy;
 
@@ -396,19 +395,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Once;
-    use std::env;
-
-    static INIT: Once = Once::new();
-
-    fn setup(log_level: &str) {
-        let _ = INIT.call_once(|| {
-            let _ = env::set_var("RUST_LOG", log_level);
-            if let Err(_) = env_logger::try_init() {
-                // Logger already initialized, that's fine
-            }
-        });
-    }
+    use crate::test_utils::setup;
+    use std::sync::Arc;
 
     #[test]
     fn test_process_projects_integration() {

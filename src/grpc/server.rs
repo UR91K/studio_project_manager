@@ -720,27 +720,14 @@ fn convert_live_set_to_proto(live_set: LiveSet) -> Project {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Once;
     use std::path::PathBuf;
-    use std::env;
     use tokio::sync::Mutex;
     use uuid::Uuid;
-    use crate::test_utils::LiveSetBuilder;
+    use crate::test_utils::{LiveSetBuilder, setup};
     use studio_project_manager_server::StudioProjectManager;
 
-    static INIT: Once = Once::new();
-
-    fn setup() {
-        let _ = INIT.call_once(|| {
-            let _ = env::set_var("RUST_LOG", "debug");
-            if let Err(_) = env_logger::try_init() {
-                // Logger already initialized, that's fine
-            }
-        });
-    }
-
     async fn create_test_server() -> StudioProjectManagerServer {
-        setup();
+        setup("debug");
         
         // Create in-memory database
         let db = LiveSetDatabase::new(PathBuf::from(":memory:"))
@@ -1183,7 +1170,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_tags_empty() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         
@@ -1196,7 +1183,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_tag() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         
@@ -1214,9 +1201,10 @@ mod tests {
         assert!((tag.created_at - now).abs() < 5);
     }
 
+    #[allow(unused)]
     #[tokio::test]
     async fn test_get_tags_with_data() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         
@@ -1225,19 +1213,19 @@ mod tests {
             name: "Rock".to_string(),
         };
         let tag1_resp = server.create_tag(Request::new(tag1_req)).await.unwrap();
-        let tag1 = tag1_resp.into_inner().tag.unwrap();
+        // let tag1 = tag1_resp.into_inner().tag.unwrap();
         
         let tag2_req = CreateTagRequest {
             name: "Electronic".to_string(),
         };
         let tag2_resp = server.create_tag(Request::new(tag2_req)).await.unwrap();
-        let tag2 = tag2_resp.into_inner().tag.unwrap();
+        // let tag2 = tag2_resp.into_inner().tag.unwrap();
         
         let tag3_req = CreateTagRequest {
             name: "Ambient".to_string(),
         };
         let tag3_resp = server.create_tag(Request::new(tag3_req)).await.unwrap();
-        let tag3 = tag3_resp.into_inner().tag.unwrap();
+        // let tag3 = tag3_resp.into_inner().tag.unwrap();
         
         // Get all tags
         let request = GetTagsRequest {};
@@ -1260,7 +1248,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tag_project() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         let db = &server.db;
@@ -1294,7 +1282,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_untag_project() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         let db = &server.db;
@@ -1359,7 +1347,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tag_project_nonexistent_project() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         
@@ -1383,7 +1371,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tag_project_nonexistent_tag() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         let db = &server.db;
@@ -1402,9 +1390,10 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[allow(unused)]
     #[tokio::test]
     async fn test_create_duplicate_tag() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         
@@ -1427,7 +1416,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tag_project_idempotent() {
-        setup();
+        setup("debug");
         
         let server = create_test_server().await;
         let db = &server.db;

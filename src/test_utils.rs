@@ -1,7 +1,8 @@
 #![allow(dead_code, unused_variables)]
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Once};
+use std::env;
 use uuid::Uuid;
 use chrono::{DateTime, Local};
 use rand::{thread_rng, Rng};
@@ -9,6 +10,20 @@ use rand::{thread_rng, Rng};
 use crate::live_set::LiveSet;
 use crate::models::{AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, TimeSignature};
 use crate::scan::parser::ParseResult;
+
+// Global INIT for all tests - ensures logger is initialized only once across all tests
+static INIT: Once = Once::new();
+
+/// Shared test setup function that can be used across all test files
+/// This should be called at the beginning of each test to ensure proper logging setup
+pub fn setup(log_level: &str) {
+    let _ = INIT.call_once(|| {
+        let _ = env::set_var("RUST_LOG", log_level);
+        if let Err(_) = env_logger::try_init() {
+            // Logger already initialized, that's fine
+        }
+    });
+}
 
 /// Builder for creating test LiveSets with specific properties
 #[derive(Debug)]

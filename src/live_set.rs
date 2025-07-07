@@ -269,30 +269,12 @@ impl LiveSet {
 mod tests {
     use super::*;
     use std::path::Path;
-    use std::sync::Once;
     use std::time::Instant;
-    static INIT: Once = Once::new();
-    fn setup() {
-        let _ = INIT.call_once(|| {
-            let _ = std::env::set_var("RUST_LOG", "debug");
-            if let Err(_) = env_logger::try_init() {
-                // Logger already initialized, that's fine
-            }
-        });
-    }
-    #[allow(unused)]
-    fn setup_no_logging() {
-        let _ = INIT.call_once(|| {
-            let _ = std::env::set_var("RUST_LOG", "error");
-            if let Err(_) = env_logger::try_init() {
-                // Logger already initialized, that's fine
-            }
-        });
-    }
+    use crate::test_utils::setup;
 
     #[test]
     fn test_load_real_project() {
-        setup();
+        setup("debug");
 
         let project_path = Path::new(
             r"C:\Users\judee\Documents\Projects\band with joel\Forkspan Project\Forkspan.als",
@@ -333,9 +315,7 @@ mod tests {
 
     #[test]
     fn test_parse_performance() {
-        // setup_no_logging();
-
-        // std::env::set_var("RUST_LOG", "error");
+        setup("error");
         
         let project_paths = [
             (

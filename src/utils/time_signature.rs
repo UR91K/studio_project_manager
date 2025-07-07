@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use log::{debug, error, trace};
+use log::{error, trace};
 
 use crate::error::TimeSignatureError;
 
@@ -12,7 +12,7 @@ pub(crate) fn parse_encoded_time_signature(value: &str) -> Result<i32, TimeSigna
 
     i32::from_str(value)
         .map(|parsed_value| {
-            debug!(
+            trace!(
                 "Successfully parsed encoded value '{}' to {}",
                 value, parsed_value
             );
