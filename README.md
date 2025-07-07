@@ -2,49 +2,88 @@
 
 ## Overview
 
-A tool which aims to let users create an index of their Ableton Live sets and search them based on their contents. As far as I know, this has the fastest ableton live set parser out there.
+A high-performance gRPC server for indexing and searching Ableton Live projects. This tool provides the fastest Ableton Live set parser available. It offers comprehensive project analysis and search, and organisation capabilities through a clean gRPC API.
 
 ## Features
 
 ### Currently implemented
 
-- Extremely fast scanning and analyzing of Ableton Live Set (.als) files (~270 MB/s)
-- Extract the following project data:
+- **Extremely fast scanning and parsing** of Ableton Live Set (.als) files (~160-270 MB/s)
+- **gRPC API** for remote access and integration with any client application
+- **Comprehensive project data extraction**:
     - Tempo
     - Ableton version
     - Time signature
     - Length (bars)
     - Plugins used
-    - Samples used
+    - Samples used (paths)
     - Key + scale
     - Estimated duration
-- Check which plugins are missing in a project
-- Efficient 5NF database for storing project information
-- FTS5 fuzzy searching across all project data
+- **Plugin + Sample validation** - per project, check which samples/plugins are present on the system
+- **5NF SQLite database** for storing project information
+- **FTS5 based search engine** with operators:
+    - `plugin:serum` - search by plugin name
+    - `bpm:128` - search by tempo
+    - `key:Cmaj` - search by key signature
+    - `missing:true` - find projects with missing plugins
+    - And more fuzzy search capabilities across all project data
+- **Real-time file watching** (planned integration with gRPC streaming)
+- **Notes** - a description for each project
+- **Database statistics** and system information endpoints
 
-### Coming very soon - high priority
-- GUI with a search bar, user-friendly database viewer, and ability to add folders, etc.
+### gRPC API Endpoints
+
+- `GetProjects` - List all projects with pagination
+- `GetProject` - Get detailed information about a specific project
+- `Search` - Advanced search with FTS5 and specialized operators
+- `UpdateProjectNotes` - Add or update project notes
+- `ScanDirectories` - Trigger project scanning with progress streaming
+- `GetSystemInfo` - Get system and database information
+- `GetStatistics` - Get database statistics
+
+### Coming soon - high priority
+
+- **To-do lists** per project for mix notes, etc. (already implemented internally)
+- **Tags** - tag projects for categorisation (e.g., artists, genres) [already implemented internally]
+- **Collections** - for making tracklists; collects to-do lists of contained projects, support for cover art [already implemented internally]
+- **Real-time file watcher streaming** - get notified of project changes
+- **Configuration management** - add/remove project directories via API
 
 ### Planned - lower priority
 
-- Version control system
-- Album management system for creating albums of Ableton Live sets, notes, album art, etc.
-- Ability to reference and play demo audio files to audition sets.
-- Statistics tab, almost like "Ableton Wrapped" with information on things like plugin usage, most common tempos, etc.
-- macOS support
+- **Version control system** - track project changes over time
+- **Audio file integration** - reference and play demo audio files for auditioning
+- **Analytics dashboard** - "Ableton Wrapped" style statistics
+- **macOS support** - currently Windows-focused
 
 ## Installation
 
 ### Prerequisites
 
-- Rust 1.54 or higher
-- SQLite 3.35.0 or higher
+- **Rust 1.70 or higher**
+- **SQLite 3.35.0 or higher**
+- **Protocol Buffers compiler** (`protoc`)
+  - Windows: `choco install protoc` (using Chocolatey)
 
 ### Building from source
 
-Warning: the project is not ready to be run on other people's machines and currently won't do anything unless you change the hard-coded file paths in the main function.
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd studio_project_manager
+```
 
-Just clone, then build and run with cargo.
+2. Build the project:
+```bash
+cargo build --release
+```
+
+3. Run the server:
+```bash
+cargo run --release
+```
+
+The gRPC server will start on `localhost:50051` by default.
 
 ## Configuration
 
@@ -52,18 +91,56 @@ Edit the `config.toml` file to set up your project directories and database loca
 
 ```toml
 paths = [
-    '{USER_HOME}\Documents\Ableton Live Projects'
+    '{USER_HOME}/Documents/Ableton Live Projects',
+    '{USER_HOME}/Music/Ableton Projects'
 ]
 
-database_path = '{USER_HOME}\Documents\ableton_manager\ableton_live_sets.db'
+database_path = '{USER_HOME}/Documents/ableton_manager/ableton_live_sets.db'
 
-live_database_dir = '{USER_HOME}\AppData\Local\Ableton\Live Database'
+live_database_dir = '{USER_HOME}/AppData/Local/Ableton/Live Database'
 ```
+
+The `{USER_HOME}` placeholder will be automatically replaced with your user directory.
 
 ## Usage
 
-Usage will be provided once the app is functional.
+### Starting the server
+
+```bash
+cargo run --release
+```
+
+The server will:
+1. Load configuration from `config.toml`
+2. Initialize the SQLite database
+3. Start the gRPC server on `localhost:50051`
+
+### Testing with grpcurl
+
+You can test the API using `grpcurl`:
+
+```bash
+# Get system information
+grpcurl -plaintext -proto proto/studio_project_manager.proto localhost:50051 studio_project_manager.StudioProjectManager/GetSystemInfo
+
+# Get all projects
+grpcurl -plaintext -proto proto/studio_project_manager.proto localhost:50051 studio_project_manager.StudioProjectManager/GetProjects
+
+# Search for projects
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"query": "plugin:serum"}' localhost:50051 studio_project_manager.StudioProjectManager/Search
+
+# Search by tempo
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"query": "bpm:128"}' localhost:50051 studio_project_manager.StudioProjectManager/Search
+```
+
+### Client Integration
+
+The gRPC service can be integrated with any language that supports gRPC. The protobuf definitions are available in `proto/studio_project_manager.proto`.
 
 ## Contributing
 
-Contributions are welcome! Feel free to submit a PR, but please rather open an issue for large contributions.
+Contributions are welcome! Feel free to submit a PR, but please open an issue first for large contributions.
+
+## License
+
+[License information]
