@@ -43,8 +43,8 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         debug!("GetProjects request: {:?}", request);
         
         let req = request.into_inner();
-        let mut db = self.db.lock().await;
-        match db.get_all_projects() {
+        let db = self.db.lock().await;
+        match db.get_all_projects_with_status(None) {
             Ok(projects) => {
                 let total_count = projects.len() as i32;
                 
