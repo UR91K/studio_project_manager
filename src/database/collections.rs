@@ -5,6 +5,7 @@ use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature}
 use chrono::{Local, TimeZone};
 use log::debug;
 use rusqlite::{params, OptionalExtension};
+use rusqlite::types::ToSql;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -14,17 +15,18 @@ use super::LiveSetDatabase;
 impl LiveSetDatabase {
     
     // Collection methods
-    pub fn create_collection(&mut self, name: &str, description: Option<&str>) -> Result<String, DatabaseError> {
+    pub fn create_collection(&mut self, name: &str, description: Option<&str>, notes: Option<&str>) -> Result<String, DatabaseError> {
         debug!("Creating collection: {}", name);
         let collection_id = Uuid::new_v4().to_string();
         let now = Local::now();
 
         self.conn.execute(
-            "INSERT INTO collections (id, name, description, created_at, modified_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO collections (id, name, description, notes, created_at, modified_at) VALUES (?, ?, ?, ?, ?, ?)",
             params![
                 collection_id,
                 name,
                 description,
+                notes,
                 SqlDateTime::from(now),
                 SqlDateTime::from(now)
             ],
@@ -32,6 +34,74 @@ impl LiveSetDatabase {
 
         debug!("Successfully created collection: {} ({})", name, collection_id);
         Ok(collection_id)
+    }
+
+    pub fn get_collection_by_id(&mut self, collection_id: &str) -> Result<Option<(String, String, Option<String>, Option<String>, i64, i64, Vec<String>)>, DatabaseError> {
+        debug!("Getting collection by ID: {}", collection_id);
+        
+        let collection_data: Option<(String, String, Option<String>, Option<String>, i64, i64)> = self.conn.query_row(
+            "SELECT id, name, description, notes, created_at, modified_at FROM collections WHERE id = ?",
+            [collection_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        ).optional()?;
+
+        if let Some((id, name, description, notes, created_at, modified_at)) = collection_data {
+            // Get project IDs for this collection
+            let mut stmt = self.conn.prepare(
+                "SELECT project_id FROM collection_projects WHERE collection_id = ? ORDER BY position"
+            )?;
+            let project_ids: Vec<String> = stmt.query_map([collection_id], |row| {
+                row.get(0)
+            })?.filter_map(|r| r.ok()).collect();
+
+            debug!("Found collection: {} with {} projects", name, project_ids.len());
+            Ok(Some((id, name, description, notes, created_at, modified_at, project_ids)))
+        } else {
+            debug!("Collection not found: {}", collection_id);
+            Ok(None)
+        }
+    }
+
+    pub fn update_collection(&mut self, collection_id: &str, name: Option<&str>, description: Option<&str>, notes: Option<&str>) -> Result<(), DatabaseError> {
+        debug!("Updating collection: {}", collection_id);
+        let now = Local::now();
+
+        // Build the update query dynamically based on provided fields
+        let mut query = String::from("UPDATE collections SET modified_at = ?");
+        let mut params: Vec<Box<dyn ToSql>> = vec![Box::new(SqlDateTime::from(now))];
+
+        if let Some(name) = name {
+            query.push_str(", name = ?");
+            params.push(Box::new(name.to_string()));
+        }
+
+        if let Some(description) = description {
+            query.push_str(", description = ?");
+            params.push(Box::new(description.to_string()));
+        }
+
+        if let Some(notes) = notes {
+            query.push_str(", notes = ?");
+            params.push(Box::new(notes.to_string()));
+        }
+
+        query.push_str(" WHERE id = ?");
+        params.push(Box::new(collection_id.to_string()));
+
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        self.conn.execute(&query, param_refs.as_slice())?;
+
+        debug!("Successfully updated collection: {}", collection_id);
+        Ok(())
     }
 
     pub fn delete_collection(&mut self, collection_id: &str) -> Result<(), DatabaseError> {

@@ -252,38 +252,183 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         _request: Request<GetCollectionsRequest>,
     ) -> Result<Response<GetCollectionsResponse>, Status> {
-        // TODO: Implement collections
-        Ok(Response::new(GetCollectionsResponse {
-            collections: vec![],
-        }))
+        debug!("GetCollections request");
+        
+        let mut db = self.db.lock().await;
+        match db.list_collections() {
+            Ok(collections_data) => {
+                let mut collections = Vec::new();
+                
+                for (id, name, description) in collections_data {
+                    // Get the full collection details including project IDs
+                    match db.get_collection_by_id(&id) {
+                        Ok(Some((_, _, _, notes, created_at, modified_at, project_ids))) => {
+                            collections.push(Collection {
+                                id: id.clone(),
+                                name: name.clone(),
+                                description,
+                                notes,
+                                created_at,
+                                modified_at,
+                                project_ids,
+                            });
+                        }
+                        Ok(None) => {
+                            // Collection was deleted between list_collections and get_collection_by_id
+                            debug!("Collection {} not found during detailed lookup", id);
+                        }
+                        Err(e) => {
+                            error!("Failed to get collection details for {}: {:?}", id, e);
+                            return Err(Status::new(Code::Internal, format!("Database error: {}", e)));
+                        }
+                    }
+                }
+                
+                let response = GetCollectionsResponse { collections };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get collections: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn create_collection(
         &self,
-        _request: Request<CreateCollectionRequest>,
+        request: Request<CreateCollectionRequest>,
     ) -> Result<Response<CreateCollectionResponse>, Status> {
-        Err(Status::unimplemented("Collections not yet implemented"))
+        debug!("CreateCollection request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.create_collection(&req.name, req.description.as_deref(), req.notes.as_deref()) {
+            Ok(collection_id) => {
+                // Get the created collection details to return in response
+                match db.get_collection_by_id(&collection_id) {
+                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids))) => {
+                        let collection = Collection {
+                            id,
+                            name,
+                            description,
+                            notes,
+                            created_at,
+                            modified_at,
+                            project_ids,
+                        };
+                        
+                        let response = CreateCollectionResponse { collection: Some(collection) };
+                        Ok(Response::new(response))
+                    }
+                    Ok(None) => {
+                        error!("Collection {} was created but not found", collection_id);
+                        Err(Status::new(Code::Internal, "Collection creation failed"))
+                    }
+                    Err(e) => {
+                        error!("Failed to retrieve created collection {}: {:?}", collection_id, e);
+                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to create collection '{}': {:?}", req.name, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn update_collection(
         &self,
-        _request: Request<UpdateCollectionRequest>,
+        request: Request<UpdateCollectionRequest>,
     ) -> Result<Response<UpdateCollectionResponse>, Status> {
-        Err(Status::unimplemented("Collections not yet implemented"))
+        debug!("UpdateCollection request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.update_collection(
+            &req.collection_id,
+            req.name.as_deref(),
+            req.description.as_deref(),
+            req.notes.as_deref(),
+        ) {
+            Ok(()) => {
+                // Get the updated collection details to return in response
+                match db.get_collection_by_id(&req.collection_id) {
+                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids))) => {
+                        let collection = Collection {
+                            id,
+                            name,
+                            description,
+                            notes,
+                            created_at,
+                            modified_at,
+                            project_ids,
+                        };
+                        
+                        let response = UpdateCollectionResponse { collection: Some(collection) };
+                        Ok(Response::new(response))
+                    }
+                    Ok(None) => {
+                        error!("Collection {} not found after update", req.collection_id);
+                        Err(Status::new(Code::NotFound, "Collection not found"))
+                    }
+                    Err(e) => {
+                        error!("Failed to retrieve updated collection {}: {:?}", req.collection_id, e);
+                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to update collection '{}': {:?}", req.collection_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn add_project_to_collection(
         &self,
-        _request: Request<AddProjectToCollectionRequest>,
+        request: Request<AddProjectToCollectionRequest>,
     ) -> Result<Response<AddProjectToCollectionResponse>, Status> {
-        Err(Status::unimplemented("Collections not yet implemented"))
+        debug!("AddProjectToCollection request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.add_project_to_collection(&req.collection_id, &req.project_id) {
+            Ok(()) => {
+                debug!("Successfully added project {} to collection {}", req.project_id, req.collection_id);
+                let response = AddProjectToCollectionResponse { success: true };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to add project {} to collection {}: {:?}", req.project_id, req.collection_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn remove_project_from_collection(
         &self,
-        _request: Request<RemoveProjectFromCollectionRequest>,
+        request: Request<RemoveProjectFromCollectionRequest>,
     ) -> Result<Response<RemoveProjectFromCollectionResponse>, Status> {
-        Err(Status::unimplemented("Collections not yet implemented"))
+        debug!("RemoveProjectFromCollection request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.remove_project_from_collection(&req.collection_id, &req.project_id) {
+            Ok(()) => {
+                debug!("Successfully removed project {} from collection {}", req.project_id, req.collection_id);
+                let response = RemoveProjectFromCollectionResponse { success: true };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to remove project {} from collection {}: {:?}", req.project_id, req.collection_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn get_tags(
@@ -466,5 +611,468 @@ fn convert_live_set_to_proto(live_set: LiveSet) -> Project {
         }).collect(),
         tasks: vec![], // TODO: Load actual tasks
         collection_ids: vec![], // TODO: Load actual collection associations
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Once;
+    use std::path::PathBuf;
+    use std::env;
+    use tokio::sync::Mutex;
+    use uuid::Uuid;
+    use crate::test_utils::LiveSetBuilder;
+    use studio_project_manager_server::StudioProjectManager;
+
+    static INIT: Once = Once::new();
+
+    fn setup() {
+        let _ = INIT.call_once(|| {
+            let _ = env::set_var("RUST_LOG", "debug");
+            if let Err(_) = env_logger::try_init() {
+                // Logger already initialized, that's fine
+            }
+        });
+    }
+
+    async fn create_test_server() -> StudioProjectManagerServer {
+        setup();
+        
+        // Create in-memory database
+        let db = LiveSetDatabase::new(PathBuf::from(":memory:"))
+            .expect("Failed to create test database");
+        
+        StudioProjectManagerServer {
+            db: Arc::new(Mutex::new(db)),
+            scan_status: Arc::new(Mutex::new(ScanStatus::ScanUnknown)),
+        }
+    }
+
+    async fn create_test_project_in_db(db: &Arc<Mutex<LiveSetDatabase>>) -> String {
+        let test_project = LiveSetBuilder::new()
+            .with_plugin("Serum")
+            .with_sample("kick.wav")
+            .with_tempo(140.0)
+            .build();
+        
+        let unique_id = uuid::Uuid::new_v4();
+        let unique_name = format!("Test Project {}.als", unique_id);
+        
+        let test_live_set = crate::live_set::LiveSet {
+            is_active: true,
+            id: unique_id,
+            file_path: PathBuf::from(&unique_name),
+            name: unique_name.clone(),
+            file_hash: format!("test_hash_{}", unique_id),
+            created_time: chrono::Local::now(),
+            modified_time: chrono::Local::now(),
+            last_parsed_timestamp: chrono::Local::now(),
+            tempo: test_project.tempo,
+            time_signature: test_project.time_signature,
+            key_signature: test_project.key_signature,
+            furthest_bar: test_project.furthest_bar,
+            estimated_duration: None,
+            ableton_version: test_project.version,
+            plugins: test_project.plugins,
+            samples: test_project.samples,
+            tags: std::collections::HashSet::new(),
+        };
+        
+        let project_id = test_live_set.id.to_string();
+        let mut db_guard = db.lock().await;
+        db_guard.insert_project(&test_live_set).expect("Failed to insert test project");
+        
+        project_id
+    }
+
+    #[tokio::test]
+    async fn test_get_collections_empty() {
+        let server = create_test_server().await;
+        let request = Request::new(GetCollectionsRequest {});
+        
+        let response = server.get_collections(request).await.unwrap();
+        let collections = response.into_inner().collections;
+        
+        assert_eq!(collections.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_create_collection() {
+        let server = create_test_server().await;
+        let request = Request::new(CreateCollectionRequest {
+            name: "My Test Collection".to_string(),
+            description: Some("A collection for testing".to_string()),
+            notes: Some("Test notes".to_string()),
+        });
+        
+        let response = server.create_collection(request).await.unwrap();
+        let collection = response.into_inner().collection.expect("Collection should be present");
+        
+        assert_eq!(collection.name, "My Test Collection");
+        assert_eq!(collection.description, Some("A collection for testing".to_string()));
+        assert_eq!(collection.notes, Some("Test notes".to_string()));
+        assert!(!collection.id.is_empty());
+        assert!(collection.created_at > 0);
+        assert!(collection.modified_at > 0);
+        assert_eq!(collection.project_ids.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_collections_with_data() {
+        let server = create_test_server().await;
+        
+        // Create a collection
+        let create_request = Request::new(CreateCollectionRequest {
+            name: "Test Collection".to_string(),
+            description: Some("Test Description".to_string()),
+            notes: None,
+        });
+        
+        let create_response = server.create_collection(create_request).await.unwrap();
+        let created_collection = create_response.into_inner().collection.unwrap();
+        
+        // Get all collections
+        let get_request = Request::new(GetCollectionsRequest {});
+        let get_response = server.get_collections(get_request).await.unwrap();
+        let collections = get_response.into_inner().collections;
+        
+        assert_eq!(collections.len(), 1);
+        assert_eq!(collections[0].id, created_collection.id);
+        assert_eq!(collections[0].name, "Test Collection");
+        assert_eq!(collections[0].description, Some("Test Description".to_string()));
+        assert_eq!(collections[0].notes, None);
+    }
+
+    #[tokio::test]
+    async fn test_update_collection() {
+        let server = create_test_server().await;
+        
+        // Create a collection
+        let create_request = Request::new(CreateCollectionRequest {
+            name: "Original Name".to_string(),
+            description: Some("Original Description".to_string()),
+            notes: None,
+        });
+        
+        let create_response = server.create_collection(create_request).await.unwrap();
+        let collection_id = create_response.into_inner().collection.unwrap().id;
+        
+        // Update the collection
+        let update_request = Request::new(UpdateCollectionRequest {
+            collection_id: collection_id.clone(),
+            name: Some("Updated Name".to_string()),
+            description: Some("Updated Description".to_string()),
+            notes: Some("Updated Notes".to_string()),
+        });
+        
+        let update_response = server.update_collection(update_request).await.unwrap();
+        let updated_collection = update_response.into_inner().collection.unwrap();
+        
+        assert_eq!(updated_collection.id, collection_id);
+        assert_eq!(updated_collection.name, "Updated Name");
+        assert_eq!(updated_collection.description, Some("Updated Description".to_string()));
+        assert_eq!(updated_collection.notes, Some("Updated Notes".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_update_collection_partial() {
+        let server = create_test_server().await;
+        
+        // Create a collection
+        let create_request = Request::new(CreateCollectionRequest {
+            name: "Original Name".to_string(),
+            description: Some("Original Description".to_string()),
+            notes: Some("Original Notes".to_string()),
+        });
+        
+        let create_response = server.create_collection(create_request).await.unwrap();
+        let collection_id = create_response.into_inner().collection.unwrap().id;
+        
+        // Update only the name
+        let update_request = Request::new(UpdateCollectionRequest {
+            collection_id: collection_id.clone(),
+            name: Some("Updated Name Only".to_string()),
+            description: None,
+            notes: None,
+        });
+        
+        let update_response = server.update_collection(update_request).await.unwrap();
+        let updated_collection = update_response.into_inner().collection.unwrap();
+        
+        assert_eq!(updated_collection.name, "Updated Name Only");
+        assert_eq!(updated_collection.description, Some("Original Description".to_string()));
+        assert_eq!(updated_collection.notes, Some("Original Notes".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_update_nonexistent_collection() {
+        let server = create_test_server().await;
+        
+        let update_request = Request::new(UpdateCollectionRequest {
+            collection_id: Uuid::new_v4().to_string(),
+            name: Some("Should Fail".to_string()),
+            description: None,
+            notes: None,
+        });
+        
+        let result = server.update_collection(update_request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn test_add_project_to_collection() {
+        let server = create_test_server().await;
+        
+        // Create a collection
+        let create_request = Request::new(CreateCollectionRequest {
+            name: "Test Collection".to_string(),
+            description: None,
+            notes: None,
+        });
+        
+        let create_response = server.create_collection(create_request).await.unwrap();
+        let collection_id = create_response.into_inner().collection.unwrap().id;
+        
+        // Create a test project
+        let project_id = create_test_project_in_db(&server.db).await;
+        
+        // Add project to collection
+        let add_request = Request::new(AddProjectToCollectionRequest {
+            collection_id: collection_id.clone(),
+            project_id: project_id.clone(),
+            position: None,
+        });
+        
+        let add_response = server.add_project_to_collection(add_request).await.unwrap();
+        assert!(add_response.into_inner().success);
+        
+        // Verify the project was added
+        let get_request = Request::new(GetCollectionsRequest {});
+        let get_response = server.get_collections(get_request).await.unwrap();
+        let collections = get_response.into_inner().collections;
+        
+        assert_eq!(collections.len(), 1);
+        assert_eq!(collections[0].project_ids.len(), 1);
+        assert_eq!(collections[0].project_ids[0], project_id);
+    }
+
+    #[tokio::test]
+    async fn test_add_multiple_projects_to_collection() {
+        let server = create_test_server().await;
+        
+        // Create a collection
+        let create_request = Request::new(CreateCollectionRequest {
+            name: "Multi-Project Collection".to_string(),
+            description: None,
+            notes: None,
+        });
+        
+        let create_response = server.create_collection(create_request).await.unwrap();
+        let collection_id = create_response.into_inner().collection.unwrap().id;
+        
+        // Create multiple test projects
+        let project_id1 = create_test_project_in_db(&server.db).await;
+        let project_id2 = create_test_project_in_db(&server.db).await;
+        
+        // Add first project
+        let add_request1 = Request::new(AddProjectToCollectionRequest {
+            collection_id: collection_id.clone(),
+            project_id: project_id1.clone(),
+            position: None,
+        });
+        
+        let add_response1 = server.add_project_to_collection(add_request1).await.unwrap();
+        assert!(add_response1.into_inner().success);
+        
+        // Add second project
+        let add_request2 = Request::new(AddProjectToCollectionRequest {
+            collection_id: collection_id.clone(),
+            project_id: project_id2.clone(),
+            position: None,
+        });
+        
+        let add_response2 = server.add_project_to_collection(add_request2).await.unwrap();
+        assert!(add_response2.into_inner().success);
+        
+        // Verify both projects were added in order
+        let get_request = Request::new(GetCollectionsRequest {});
+        let get_response = server.get_collections(get_request).await.unwrap();
+        let collections = get_response.into_inner().collections;
+        
+        assert_eq!(collections.len(), 1);
+        assert_eq!(collections[0].project_ids.len(), 2);
+        assert_eq!(collections[0].project_ids[0], project_id1);
+        assert_eq!(collections[0].project_ids[1], project_id2);
+    }
+
+    #[tokio::test]
+    async fn test_remove_project_from_collection() {
+        let server = create_test_server().await;
+        
+        // Create a collection
+        let create_request = Request::new(CreateCollectionRequest {
+            name: "Test Collection".to_string(),
+            description: None,
+            notes: None,
+        });
+        
+        let create_response = server.create_collection(create_request).await.unwrap();
+        let collection_id = create_response.into_inner().collection.unwrap().id;
+        
+        // Create and add a test project
+        let project_id = create_test_project_in_db(&server.db).await;
+        
+        let add_request = Request::new(AddProjectToCollectionRequest {
+            collection_id: collection_id.clone(),
+            project_id: project_id.clone(),
+            position: None,
+        });
+        
+        server.add_project_to_collection(add_request).await.unwrap();
+        
+        // Remove the project
+        let remove_request = Request::new(RemoveProjectFromCollectionRequest {
+            collection_id: collection_id.clone(),
+            project_id: project_id.clone(),
+        });
+        
+        let remove_response = server.remove_project_from_collection(remove_request).await.unwrap();
+        assert!(remove_response.into_inner().success);
+        
+        // Verify the project was removed
+        let get_request = Request::new(GetCollectionsRequest {});
+        let get_response = server.get_collections(get_request).await.unwrap();
+        let collections = get_response.into_inner().collections;
+        
+        assert_eq!(collections.len(), 1);
+        assert_eq!(collections[0].project_ids.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_remove_project_maintains_order() {
+        let server = create_test_server().await;
+        
+        // Create a collection
+        let create_request = Request::new(CreateCollectionRequest {
+            name: "Order Test Collection".to_string(),
+            description: None,
+            notes: None,
+        });
+        
+        let create_response = server.create_collection(create_request).await.unwrap();
+        let collection_id = create_response.into_inner().collection.unwrap().id;
+        
+        // Create three test projects
+        let project_id1 = create_test_project_in_db(&server.db).await;
+        let project_id2 = create_test_project_in_db(&server.db).await;
+        let project_id3 = create_test_project_in_db(&server.db).await;
+        
+        // Add all projects
+        for project_id in [&project_id1, &project_id2, &project_id3] {
+            let add_request = Request::new(AddProjectToCollectionRequest {
+                collection_id: collection_id.clone(),
+                project_id: project_id.clone(),
+                position: None,
+            });
+            server.add_project_to_collection(add_request).await.unwrap();
+        }
+        
+        // Remove the middle project
+        let remove_request = Request::new(RemoveProjectFromCollectionRequest {
+            collection_id: collection_id.clone(),
+            project_id: project_id2.clone(),
+        });
+        
+        server.remove_project_from_collection(remove_request).await.unwrap();
+        
+        // Verify the remaining projects maintain their relative order
+        let get_request = Request::new(GetCollectionsRequest {});
+        let get_response = server.get_collections(get_request).await.unwrap();
+        let collections = get_response.into_inner().collections;
+        
+        assert_eq!(collections.len(), 1);
+        assert_eq!(collections[0].project_ids.len(), 2);
+        assert_eq!(collections[0].project_ids[0], project_id1);
+        assert_eq!(collections[0].project_ids[1], project_id3);
+    }
+
+    #[tokio::test]
+    async fn test_add_project_to_nonexistent_collection() {
+        let server = create_test_server().await;
+        
+        let project_id = create_test_project_in_db(&server.db).await;
+        
+        let add_request = Request::new(AddProjectToCollectionRequest {
+            collection_id: Uuid::new_v4().to_string(),
+            project_id,
+            position: None,
+        });
+        
+        let result = server.add_project_to_collection(add_request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), Code::Internal);
+    }
+
+    #[tokio::test]
+    async fn test_remove_project_from_nonexistent_collection() {
+        let server = create_test_server().await;
+        
+        let project_id = create_test_project_in_db(&server.db).await;
+        
+        let remove_request = Request::new(RemoveProjectFromCollectionRequest {
+            collection_id: Uuid::new_v4().to_string(),
+            project_id,
+        });
+        
+        let result = server.remove_project_from_collection(remove_request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), Code::Internal);
+    }
+
+    #[tokio::test]
+    async fn test_collection_timestamps() {
+        let server = create_test_server().await;
+        
+        // Create a collection and record creation time
+        let before_create = chrono::Utc::now().timestamp();
+        
+        let create_request = Request::new(CreateCollectionRequest {
+            name: "Timestamp Test".to_string(),
+            description: None,
+            notes: None,
+        });
+        
+        let create_response = server.create_collection(create_request).await.unwrap();
+        let collection = create_response.into_inner().collection.unwrap();
+        let after_create = chrono::Utc::now().timestamp();
+        
+        // Verify creation timestamps
+        assert!(collection.created_at >= before_create);
+        assert!(collection.created_at <= after_create);
+        assert!(collection.modified_at >= before_create);
+        assert!(collection.modified_at <= after_create);
+        
+        // Wait a bit then update (ensure timestamp difference)
+        tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+        let before_update = chrono::Utc::now().timestamp();
+        
+        let update_request = Request::new(UpdateCollectionRequest {
+            collection_id: collection.id.clone(),
+            name: Some("Updated Name".to_string()),
+            description: None,
+            notes: None,
+        });
+        
+        let update_response = server.update_collection(update_request).await.unwrap();
+        let updated_collection = update_response.into_inner().collection.unwrap();
+        let after_update = chrono::Utc::now().timestamp();
+        
+        // Verify update timestamps
+        assert_eq!(updated_collection.created_at, collection.created_at); // Should not change
+        assert!(updated_collection.modified_at >= before_update);
+        assert!(updated_collection.modified_at <= after_update);
+        assert!(updated_collection.modified_at > collection.modified_at); // Should be newer
     }
 } 

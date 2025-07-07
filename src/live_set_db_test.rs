@@ -388,7 +388,8 @@ fn test_collections() {
     // Test creating a collection
     let collection_id = db.create_collection(
         "Electronic Music",
-        Some("Collection of electronic music projects")
+        Some("Collection of electronic music projects"),
+        None
     ).expect("Failed to create collection");
 
     // Test listing collections
@@ -456,7 +457,8 @@ fn test_notes_and_tasks() {
     // Create a test collection
     let collection_id = db.create_collection(
         "Test Collection",
-        Some("A collection for testing notes and tasks")
+        Some("A collection for testing notes and tasks"),
+        None
     ).expect("Failed to create collection");
 
     // Add project to collection
