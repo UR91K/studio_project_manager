@@ -4,7 +4,7 @@ mod collections;
 mod notes;
 mod tasks;
 mod models;
-mod search;
+pub mod search;
 pub mod batch;
 
 pub use core::LiveSetDatabase;

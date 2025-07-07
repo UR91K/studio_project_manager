@@ -9,10 +9,13 @@ pub mod scan;
 mod test_utils;
 mod utils;
 mod watcher;
+pub mod grpc;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use log::{info, debug, error, warn};
 use std::time::Duration;
+// use std::sync::Mutex;
+// use once_cell::sync::Lazy;
 
 use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
@@ -21,6 +24,25 @@ use crate::scan::parallel::ParallelParser;
 use crate::scan::project_scanner::ProjectPathScanner;
 use crate::error::LiveSetError;
 use crate::live_set::LiveSetPreprocessed;
+
+// // Define a global progress callback
+// type ProgressCallback = Box<dyn Fn(f32) + Send + 'static>;
+// static PROGRESS_CALLBACK: Lazy<Mutex<Option<ProgressCallback>>> = Lazy::new(|| Mutex::new(None));
+
+// // Function to set the progress callback
+// pub fn set_progress_callback<F>(callback: F)
+// where
+//     F: Fn(f32) + Send + 'static,
+// {
+//     let mut progress_callback = PROGRESS_CALLBACK.lock().unwrap();
+//     *progress_callback = Some(Box::new(callback));
+// }
+
+// // Function to clear the progress callback
+// pub fn clear_progress_callback() {
+//     let mut progress_callback = PROGRESS_CALLBACK.lock().unwrap();
+//     *progress_callback = None;
+// }
 
 fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocessed>, LiveSetError> {
     debug!("Preprocessing {} projects", paths.len());
@@ -161,6 +183,9 @@ pub fn process_projects() -> Result<(), LiveSetError> {
                 completed_count += 1;
                 info!("Progress: {}/{} projects processed", completed_count, total_projects);
                 
+                // Progress updates are now handled by gRPC streaming
+                // in the ScanDirectories endpoint
+                
                 match result {
                     Ok((path, live_set)) => {
                         debug!("Successfully parsed: {}", path.display());
@@ -293,6 +318,24 @@ mod tests {
     }
 }
 
-fn main() {
-    process_projects().unwrap();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    env_logger::init();
+    info!("Starting Studio Project Manager gRPC Server");
+    
+    // Create the gRPC server
+    let server = grpc::server::StudioProjectManagerServer::new().await?;
+    
+    // Set up the gRPC service
+    let addr = "127.0.0.1:50051".parse()?;
+    info!("gRPC server listening on {}", addr);
+    
+    // Start the server
+    tonic::transport::Server::builder()
+        .add_service(grpc::proto::studio_project_manager_server::StudioProjectManagerServer::new(server))
+        .serve(addr)
+        .await?;
+    
+    Ok(())
 }

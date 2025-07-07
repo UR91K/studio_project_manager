@@ -1,0 +1,402 @@
+syntax = "proto3";
+
+package studio_project_manager;
+
+// Main service for managing Ableton Live projects
+service StudioProjectManager {
+  // Project Management
+  rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+  rpc UpdateProjectNotes(UpdateProjectNotesRequest) returns (UpdateProjectNotesResponse);
+  
+  // Search
+  rpc Search(SearchRequest) returns (SearchResponse);
+  
+  // Scanning
+  rpc ScanDirectories(ScanDirectoriesRequest) returns (stream ScanProgressResponse);
+  rpc GetScanStatus(GetScanStatusRequest) returns (GetScanStatusResponse);
+  
+  // Collections
+  rpc GetCollections(GetCollectionsRequest) returns (GetCollectionsResponse);
+  rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
+  rpc UpdateCollection(UpdateCollectionRequest) returns (UpdateCollectionResponse);
+  rpc AddProjectToCollection(AddProjectToCollectionRequest) returns (AddProjectToCollectionResponse);
+  rpc RemoveProjectFromCollection(RemoveProjectFromCollectionRequest) returns (RemoveProjectFromCollectionResponse);
+  
+  // Tags
+  rpc GetTags(GetTagsRequest) returns (GetTagsResponse);
+  rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  rpc TagProject(TagProjectRequest) returns (TagProjectResponse);
+  rpc UntagProject(UntagProjectRequest) returns (UntagProjectResponse);
+  
+  // Tasks
+  rpc GetProjectTasks(GetProjectTasksRequest) returns (GetProjectTasksResponse);
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse);
+  
+  // File Watching
+  rpc StartWatcher(StartWatcherRequest) returns (StartWatcherResponse);
+  rpc StopWatcher(StopWatcherRequest) returns (StopWatcherResponse);
+  rpc GetWatcherEvents(GetWatcherEventsRequest) returns (stream WatcherEventResponse);
+  
+  // System Info
+  rpc GetSystemInfo(GetSystemInfoRequest) returns (GetSystemInfoResponse);
+  rpc GetStatistics(GetStatisticsRequest) returns (GetStatisticsResponse);
+}
+
+// Core Data Types
+message Project {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  string hash = 4;
+  string notes = 5;
+  int64 created_at = 6;
+  int64 modified_at = 7;
+  int64 last_parsed_at = 8;
+  
+  // Musical properties
+  double tempo = 9;
+  TimeSignature time_signature = 10;
+  KeySignature key_signature = 11;
+  optional double duration_seconds = 12;
+  optional double furthest_bar = 13;
+  
+  // Ableton version
+  AbletonVersion ableton_version = 14;
+  
+  // Related data
+  repeated Plugin plugins = 15;
+  repeated Sample samples = 16;
+  repeated Tag tags = 17;
+  repeated Task tasks = 18;
+  repeated string collection_ids = 19;
+}
+
+message Plugin {
+  string id = 1;
+  optional int32 ableton_plugin_id = 2;
+  optional int32 ableton_module_id = 3;
+  string dev_identifier = 4;
+  string name = 5;
+  string format = 6;
+  bool installed = 7;
+  optional string vendor = 8;
+  optional string version = 9;
+  optional string sdk_version = 10;
+  optional int32 flags = 11;
+  optional int32 scanstate = 12;
+  optional int32 enabled = 13;
+}
+
+message Sample {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  bool is_present = 4;
+}
+
+message Tag {
+  string id = 1;
+  string name = 2;
+  int64 created_at = 3;
+}
+
+message Task {
+  string id = 1;
+  string project_id = 2;
+  string description = 3;
+  bool completed = 4;
+  int64 created_at = 5;
+}
+
+message Collection {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  optional string notes = 4;
+  int64 created_at = 5;
+  int64 modified_at = 6;
+  repeated string project_ids = 7;
+}
+
+message TimeSignature {
+  int32 numerator = 1;
+  int32 denominator = 2;
+}
+
+message KeySignature {
+  string tonic = 1;
+  string scale = 2;
+}
+
+message AbletonVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+  uint32 patch = 3;
+  bool beta = 4;
+}
+
+// Request/Response Messages
+
+// Project Management
+message GetProjectsRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string sort_by = 3;
+  optional bool sort_desc = 4;
+}
+
+message GetProjectsResponse {
+  repeated Project projects = 1;
+  int32 total_count = 2;
+}
+
+message GetProjectRequest {
+  string project_id = 1;
+}
+
+message GetProjectResponse {
+  optional Project project = 1;
+}
+
+message UpdateProjectNotesRequest {
+  string project_id = 1;
+  string notes = 2;
+}
+
+message UpdateProjectNotesResponse {
+  bool success = 1;
+}
+
+// Search
+message SearchRequest {
+  string query = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message SearchResponse {
+  repeated Project projects = 1;
+  int32 total_count = 2;
+}
+
+// Scanning
+message ScanDirectoriesRequest {
+  repeated string paths = 1;
+  optional bool force_rescan = 2;
+}
+
+message ScanProgressResponse {
+  uint32 completed = 1;
+  uint32 total = 2;
+  float progress = 3;
+  string message = 4;
+  ScanStatus status = 5;
+}
+
+enum ScanStatus {
+  SCAN_UNKNOWN = 0;
+  SCAN_STARTING = 1;
+  SCAN_DISCOVERING = 2;
+  SCAN_PARSING = 3;
+  SCAN_INSERTING = 4;
+  SCAN_COMPLETED = 5;
+  SCAN_ERROR = 6;
+}
+
+message GetScanStatusRequest {}
+
+message GetScanStatusResponse {
+  ScanStatus status = 1;
+  optional ScanProgressResponse current_progress = 2;
+}
+
+// Collections
+message GetCollectionsRequest {}
+
+message GetCollectionsResponse {
+  repeated Collection collections = 1;
+}
+
+message CreateCollectionRequest {
+  string name = 1;
+  optional string description = 2;
+  optional string notes = 3;
+}
+
+message CreateCollectionResponse {
+  Collection collection = 1;
+}
+
+message UpdateCollectionRequest {
+  string collection_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string notes = 4;
+}
+
+message UpdateCollectionResponse {
+  Collection collection = 1;
+}
+
+message AddProjectToCollectionRequest {
+  string collection_id = 1;
+  string project_id = 2;
+  optional int32 position = 3;
+}
+
+message AddProjectToCollectionResponse {
+  bool success = 1;
+}
+
+message RemoveProjectFromCollectionRequest {
+  string collection_id = 1;
+  string project_id = 2;
+}
+
+message RemoveProjectFromCollectionResponse {
+  bool success = 1;
+}
+
+// Tags
+message GetTagsRequest {}
+
+message GetTagsResponse {
+  repeated Tag tags = 1;
+}
+
+message CreateTagRequest {
+  string name = 1;
+}
+
+message CreateTagResponse {
+  Tag tag = 1;
+}
+
+message TagProjectRequest {
+  string project_id = 1;
+  string tag_id = 2;
+}
+
+message TagProjectResponse {
+  bool success = 1;
+}
+
+message UntagProjectRequest {
+  string project_id = 1;
+  string tag_id = 2;
+}
+
+message UntagProjectResponse {
+  bool success = 1;
+}
+
+// Tasks
+message GetProjectTasksRequest {
+  string project_id = 1;
+}
+
+message GetProjectTasksResponse {
+  repeated Task tasks = 1;
+}
+
+message CreateTaskRequest {
+  string project_id = 1;
+  string description = 2;
+}
+
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+message UpdateTaskRequest {
+  string task_id = 1;
+  optional string description = 2;
+  optional bool completed = 3;
+}
+
+message UpdateTaskResponse {
+  Task task = 1;
+}
+
+message DeleteTaskRequest {
+  string task_id = 1;
+}
+
+message DeleteTaskResponse {
+  bool success = 1;
+}
+
+// File Watching
+message StartWatcherRequest {
+  repeated string paths = 1;
+}
+
+message StartWatcherResponse {
+  bool success = 1;
+}
+
+message StopWatcherRequest {}
+
+message StopWatcherResponse {
+  bool success = 1;
+}
+
+message GetWatcherEventsRequest {}
+
+message WatcherEventResponse {
+  WatcherEventType event_type = 1;
+  string path = 2;
+  optional string new_path = 3;
+  int64 timestamp = 4;
+}
+
+enum WatcherEventType {
+  WATCHER_UNKNOWN = 0;
+  WATCHER_CREATED = 1;
+  WATCHER_MODIFIED = 2;
+  WATCHER_DELETED = 3;
+  WATCHER_RENAMED = 4;
+}
+
+// System Info
+message GetSystemInfoRequest {}
+
+message GetSystemInfoResponse {
+  string version = 1;
+  repeated string watch_paths = 2;
+  bool watcher_active = 3;
+  int64 uptime_seconds = 4;
+}
+
+message GetStatisticsRequest {}
+
+message GetStatisticsResponse {
+  int32 total_projects = 1;
+  int32 total_plugins = 2;
+  int32 total_samples = 3;
+  int32 total_collections = 4;
+  int32 total_tags = 5;
+  int32 total_tasks = 6;
+  repeated PluginStatistic top_plugins = 7;
+  repeated TempoStatistic tempo_distribution = 8;
+  repeated KeyStatistic key_distribution = 9;
+}
+
+message PluginStatistic {
+  string name = 1;
+  string vendor = 2;
+  int32 usage_count = 3;
+}
+
+message TempoStatistic {
+  double tempo = 1;
+  int32 count = 2;
+}
+
+message KeyStatistic {
+  string key = 1;
+  int32 count = 2;
+} 
