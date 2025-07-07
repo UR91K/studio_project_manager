@@ -849,30 +849,77 @@ impl LiveSetDatabase {
         &self,
         is_active: Option<bool>
     ) -> Result<Vec<LiveSet>, DatabaseError> {
-        match is_active {
+        let mut results = Vec::new();
+        
+        let query = match is_active {
             Some(status) => {
-                let mut stmt = self.conn.prepare(
-                    "SELECT * FROM projects WHERE is_active = ?"
-                ).map_err(DatabaseError::from)?;
-                
-                let projects = stmt.query_map([status], |row| {
-                    self.row_to_live_set(row)
-                }).map_err(DatabaseError::from)?;
-                
-                projects.collect::<rusqlite::Result<Vec<_>>>().map_err(DatabaseError::from)
+                format!("SELECT * FROM projects WHERE is_active = {}", status)
             }
             None => {
-                let mut stmt = self.conn.prepare(
-                    "SELECT * FROM projects"
-                ).map_err(DatabaseError::from)?;
-                
-                let projects = stmt.query_map([], |row| {
-                    self.row_to_live_set(row)
-                }).map_err(DatabaseError::from)?;
-                
-                projects.collect::<rusqlite::Result<Vec<_>>>().map_err(DatabaseError::from)
+                "SELECT * FROM projects".to_string()
             }
+        };
+        
+        let mut stmt = self.conn.prepare(&query).map_err(DatabaseError::from)?;
+        
+        let mut rows = stmt.query([]).map_err(DatabaseError::from)?;
+        while let Some(row) = rows.next().map_err(DatabaseError::from)? {
+            let mut live_set = self.row_to_live_set(row)?;
+            let project_id_str = live_set.id.to_string();
+            
+            // Load plugins for this project
+            {
+                let mut plugin_stmt = self.conn.prepare(
+                    "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
+                ).map_err(DatabaseError::from)?;
+                live_set.plugins = plugin_stmt.query_map([&project_id_str], |row| {
+                    Ok(Plugin {
+                        id: Uuid::new_v4(),
+                        plugin_id: row.get(1)?,
+                        module_id: row.get(2)?,
+                        dev_identifier: row.get(3)?,
+                        name: row.get(4)?,
+                        plugin_format: row.get::<_, String>(5)?.parse()
+                            .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                        installed: row.get(6)?,
+                        vendor: row.get(7)?,
+                        version: row.get(8)?,
+                        sdk_version: row.get(9)?,
+                        flags: row.get(10)?,
+                        scanstate: row.get(11)?,
+                        enabled: row.get(12)?,
+                    })
+                }).map_err(DatabaseError::from)?.filter_map(|r| r.ok()).collect();
+            }
+            
+            // Load samples for this project
+            {
+                let mut sample_stmt = self.conn.prepare(
+                    "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
+                ).map_err(DatabaseError::from)?;
+                live_set.samples = sample_stmt.query_map([&project_id_str], |row| {
+                    Ok(Sample {
+                        id: Uuid::new_v4(),
+                        name: row.get(1)?,
+                        path: PathBuf::from(row.get::<_, String>(2)?),
+                        is_present: row.get(3)?,
+                    })
+                }).map_err(DatabaseError::from)?.filter_map(|r| r.ok()).collect();
+            }
+            
+            // Load tags for this project
+            {
+                let mut tag_stmt = self.conn.prepare(
+                    "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
+                ).map_err(DatabaseError::from)?;
+                live_set.tags = tag_stmt.query_map([&project_id_str], |row| row.get(0))
+                    .map_err(DatabaseError::from)?.filter_map(|r| r.ok()).collect();
+            }
+            
+            results.push(live_set);
         }
+        
+        Ok(results)
     }
 
     pub fn permanently_delete_project(&mut self, project_id: &Uuid) -> Result<(), DatabaseError> {
