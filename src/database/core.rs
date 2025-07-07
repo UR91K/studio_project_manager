@@ -173,18 +173,18 @@ impl LiveSetDatabase {
                     p.id,
                     p.name,
                     p.path,
-                    (SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
+                    COALESCE((SELECT GROUP_CONCAT(pl.name || ' ' || COALESCE(pl.vendor, ''), ' ')
                      FROM plugins pl
                      JOIN project_plugins pp ON pp.plugin_id = pl.id
-                     WHERE pp.project_id = p.id),
-                    (SELECT GROUP_CONCAT(s.name, ' ')
+                     WHERE pp.project_id = p.id), ''),
+                    COALESCE((SELECT GROUP_CONCAT(s.name, ' ')
                      FROM samples s
                      JOIN project_samples ps ON ps.sample_id = s.id
-                     WHERE ps.project_id = p.id),
-                    (SELECT GROUP_CONCAT(t.name, ' ')
+                     WHERE ps.project_id = p.id), ''),
+                    COALESCE((SELECT GROUP_CONCAT(t.name, ' ')
                      FROM tags t
                      JOIN project_tags pt ON pt.tag_id = t.id
-                     WHERE pt.project_id = p.id),
+                     WHERE pt.project_id = p.id), ''),
                     COALESCE(p.notes, ''),
                     strftime('%Y-%m-%d %H:%M:%S', datetime(p.created_at, 'unixepoch')),
                     strftime('%Y-%m-%d %H:%M:%S', datetime(p.modified_at, 'unixepoch')),
