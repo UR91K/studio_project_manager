@@ -305,23 +305,44 @@ impl LiveSetDatabase {
         Ok(results)
     }
 
-    pub fn list_tags(&mut self) -> Result<Vec<(String, String)>, DatabaseError> {
+    pub fn list_tags(&mut self) -> Result<Vec<(String, String, i64)>, DatabaseError> {
         debug!("Listing all tags");
         let mut stmt = self
             .conn
-            .prepare("SELECT id, name FROM tags ORDER BY name")?;
+            .prepare("SELECT id, name, created_at FROM tags ORDER BY name")?;
 
         let tags = stmt
             .query_map([], |row| {
                 let id: String = row.get(0)?;
                 let name: String = row.get(1)?;
-                debug!("Found tag: {} ({})", name, id);
-                Ok((id, name))
+                let created_at: i64 = row.get(2)?;
+                debug!("Found tag: {} ({}) created at {}", name, id, created_at);
+                Ok((id, name, created_at))
             })?
             .filter_map(|r| r.ok())
             .collect();
 
         debug!("Retrieved all tags");
         Ok(tags)
+    }
+
+    pub fn get_tag_by_id(&mut self, tag_id: &str) -> Result<Option<(String, String, i64)>, DatabaseError> {
+        debug!("Getting tag by ID: {}", tag_id);
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, name, created_at FROM tags WHERE id = ?")?;
+
+        let tag = stmt
+            .query_row([tag_id], |row| {
+                let id: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                let created_at: i64 = row.get(2)?;
+                debug!("Found tag: {} ({}) created at {}", name, id, created_at);
+                Ok((id, name, created_at))
+            })
+            .optional()?;
+
+        debug!("Retrieved tag by ID");
+        Ok(tag)
     }
 }

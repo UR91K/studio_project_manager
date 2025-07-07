@@ -310,8 +310,8 @@ fn test_tags() {
     // Test listing tags
     let tags = db.list_tags().expect("Failed to list tags");
     assert_eq!(tags.len(), 2);
-    assert!(tags.iter().any(|(_, name)| name == "work-in-progress"));
-    assert!(tags.iter().any(|(_, name)| name == "favorite"));
+    assert!(tags.iter().any(|(_, name, _)| name == "work-in-progress"));
+    assert!(tags.iter().any(|(_, name, _)| name == "favorite"));
 
     // Test tagging project
     db.tag_project(&live_set.id.to_string(), &tag1_id)
@@ -347,7 +347,7 @@ fn test_tags() {
     db.remove_tag(&tag2_id).expect("Failed to remove tag");
     let tags = db.list_tags().expect("Failed to list tags");
     assert_eq!(tags.len(), 1);
-    assert!(tags.iter().any(|(_, name)| name == "work-in-progress"));
+    assert!(tags.iter().any(|(_, name, _)| name == "work-in-progress"));
 }
 
 #[test]
