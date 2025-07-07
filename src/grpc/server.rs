@@ -9,7 +9,6 @@ use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
 use crate::database::search::SearchQuery;
 use crate::live_set::LiveSet;
-use crate::process_projects;
 
 use super::proto::*;
 
@@ -172,53 +171,61 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         *self.scan_status.lock().await = ScanStatus::ScanStarting;
         
         // Clone necessary data for the task
-        let _db = Arc::clone(&self.db);
         let scan_status = Arc::clone(&self.scan_status);
+        let tx_for_callback = tx.clone();
+        let scan_status_for_callback = Arc::clone(&scan_status);
+        let tx_for_error = tx.clone();
+        let scan_status_for_error = Arc::clone(&scan_status);
         
         // Spawn the scanning task
         tokio::spawn(async move {
-            // Send initial progress
-            let _ = tx.send(Ok(ScanProgressResponse {
-                completed: 0,
-                total: 0,
-                progress: 0.0,
-                message: "Starting scan...".to_string(),
-                status: ScanStatus::ScanStarting as i32,
-            })).await;
+            // Create progress callback that sends updates through the channel
+            let progress_callback = move |completed: u32, total: u32, progress: f32, message: String, phase: &str| {
+                let status = match phase {
+                    "starting" => ScanStatus::ScanStarting,
+                    "discovering" => ScanStatus::ScanDiscovering,
+                    "preprocessing" | "parsing" => ScanStatus::ScanParsing,
+                    "inserting" => ScanStatus::ScanInserting,
+                    "completed" => ScanStatus::ScanCompleted,
+                    _ => ScanStatus::ScanStarting,
+                };
+                
+                // Update global scan status
+                let scan_status_clone = Arc::clone(&scan_status_for_callback);
+                tokio::spawn(async move {
+                    *scan_status_clone.lock().await = status;
+                });
+                
+                // Send progress update
+                let response = ScanProgressResponse {
+                    completed,
+                    total,
+                    progress,
+                    message,
+                    status: status as i32,
+                };
+                
+                if let Err(e) = tx_for_callback.try_send(Ok(response)) {
+                    error!("Failed to send progress update: {:?}", e);
+                }
+            };
             
-            // Update status to discovering
-            *scan_status.lock().await = ScanStatus::ScanDiscovering;
-            let _ = tx.send(Ok(ScanProgressResponse {
-                completed: 0,
-                total: 0,
-                progress: 0.0,
-                message: "Discovering projects...".to_string(),
-                status: ScanStatus::ScanDiscovering as i32,
-            })).await;
-            
-            // For now, use the existing process_projects function
-            // TODO: Integrate proper progress streaming
-            match process_projects() {
+            // Run the scanning process with progress callbacks
+            match crate::process_projects_with_progress(progress_callback) {
                 Ok(()) => {
+                    info!("Scan completed successfully");
                     *scan_status.lock().await = ScanStatus::ScanCompleted;
-                    let _ = tx.send(Ok(ScanProgressResponse {
-                        completed: 1,
-                        total: 1,
-                        progress: 1.0,
-                        message: "Scan completed successfully".to_string(),
-                        status: ScanStatus::ScanCompleted as i32,
-                    })).await;
                 }
                 Err(e) => {
                     error!("Scan failed: {:?}", e);
-                    *scan_status.lock().await = ScanStatus::ScanError;
-                    let _ = tx.send(Ok(ScanProgressResponse {
+                    *scan_status_for_error.lock().await = ScanStatus::ScanError;
+                    let _ = tx_for_error.try_send(Ok(ScanProgressResponse {
                         completed: 0,
                         total: 1,
                         progress: 0.0,
                         message: format!("Scan failed: {}", e),
                         status: ScanStatus::ScanError as i32,
-                    })).await;
+                    }));
                 }
             }
         });

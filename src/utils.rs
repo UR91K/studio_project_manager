@@ -201,7 +201,7 @@ pub(crate) fn format_file_size(size: u64) -> String {
 /// println!("Decompressed {} bytes", decompressed_data.len());
 /// ```
 pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
-    info!("Attempting to extract gzipped data from: {:?}", file_path);
+    debug!("Attempting to extract gzipped data from: {:?}", file_path);
     trace!("Opening file for gzip decompression");
 
     let file = File::open(file_path).map_err(|error| {
@@ -231,11 +231,11 @@ pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileErro
         })?;
 
     let decompressed_size = decompressed_data.len();
-    info!(
+    debug!(
         "Successfully decompressed {} bytes from: {:?}",
         decompressed_size, file_path
     );
-    debug!("Decompressed data size: {} bytes", decompressed_size);
+    trace!("Decompressed data size: {} bytes", decompressed_size);
 
     Ok(decompressed_data)
 }

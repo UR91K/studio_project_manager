@@ -12,8 +12,10 @@ mod watcher;
 pub mod grpc;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use log::{info, debug, error, warn};
+use log::{info, debug, error};
 use std::time::Duration;
+use std::sync::mpsc::RecvTimeoutError;
+use std::sync::Arc;
 // use std::sync::Mutex;
 // use once_cell::sync::Lazy;
 
@@ -173,7 +175,7 @@ pub fn process_projects() -> Result<(), LiveSetError> {
     
     let mut successful_live_sets = Vec::new();
     
-    // Collect results from parser with progress tracking
+    // Collect results from parser
     debug!("Starting to collect parser results");
     let mut completed_count = 0;
     
@@ -182,9 +184,6 @@ pub fn process_projects() -> Result<(), LiveSetError> {
             Ok(result) => {
                 completed_count += 1;
                 info!("Progress: {}/{} projects processed", completed_count, total_projects);
-                
-                // Progress updates are now handled by gRPC streaming
-                // in the ScanDirectories endpoint
                 
                 match result {
                     Ok((path, live_set)) => {
@@ -196,16 +195,12 @@ pub fn process_projects() -> Result<(), LiveSetError> {
                     }
                 }
             }
-            Err(_) => {
-                // If we timeout waiting for results, but haven't received all expected results
-                // wait a bit longer unless it's been too long
-                if completed_count < total_projects {
-                    warn!(
-                        "Timeout while waiting for results. Processed {}/{} projects. Continuing to wait...",
-                        completed_count, total_projects
-                    );
-                    continue;
-                }
+            Err(RecvTimeoutError::Timeout) => {
+                debug!("Timeout waiting for parser results, but continuing...");
+                continue;
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                debug!("Parser channel disconnected, assuming completion");
                 break;
             }
         }
@@ -232,6 +227,172 @@ pub fn process_projects() -> Result<(), LiveSetError> {
     Ok(())
 }
 
+pub fn process_projects_with_progress<F>(mut progress_callback: F) -> Result<(), LiveSetError> 
+where 
+    F: FnMut(u32, u32, f32, String, &str) + Send + 'static,
+{
+    debug!("Starting process_projects_with_progress");
+    
+    progress_callback(0, 0, 0.0, "Starting scan...".to_string(), "starting");
+    
+    // Get paths from config
+    let config = CONFIG.as_ref().map_err(|e| LiveSetError::ConfigError(e.clone()))?;
+    debug!("Using database path from config: {}", config.database_path);
+    debug!("Using project paths from config: {:?}", config.paths);
+    
+    // Initialize database early to use for filtering
+    debug!("Initializing database at {}", config.database_path);
+    let mut db = LiveSetDatabase::new(PathBuf::from(&config.database_path))?;
+    
+    progress_callback(0, 0, 0.0, "Discovering projects...".to_string(), "discovering");
+    
+    let scanner = ProjectPathScanner::new()?;
+    let mut found_projects = HashSet::new();
+
+    // Scan all configured directories
+    for path in &config.paths {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            info!("Scanning directory: {}", path.display());
+            let projects = scanner.scan_directory(&path)?;
+            debug!("Found {} projects in {}", projects.len(), path.display());
+            found_projects.extend(projects);
+        } else {
+            error!("Directory does not exist: {}", path.display());
+        }
+    }
+
+    if found_projects.is_empty() {
+        info!("No Ableton projects found in configured paths");
+        progress_callback(1, 1, 1.0, "No projects found".to_string(), "completed");
+        return Ok(());
+    }
+
+    let total_found = found_projects.len();
+    progress_callback(0, total_found as u32, 0.0, format!("Found {} projects, preprocessing...", total_found), "preprocessing");
+
+    // Preprocess and filter projects
+    let preprocessed = preprocess_projects(found_projects)?;
+    let projects_to_parse = filter_unchanged_projects(preprocessed, &db)?;
+    
+    if projects_to_parse.is_empty() {
+        info!("No projects need updating");
+        progress_callback(total_found as u32, total_found as u32, 1.0, "All projects up to date".to_string(), "completed");
+        return Ok(());
+    }
+
+    let total_projects = projects_to_parse.len();
+    info!("Found {} projects that need parsing", total_projects);
+    progress_callback(0, total_projects as u32, 0.0, format!("Parsing {} projects...", total_projects), "parsing");
+
+    // Create parallel parser with number of threads based on project count
+    let thread_count = (total_projects / 2).max(1).min(4);
+    debug!("Creating parallel parser with {} threads", thread_count);
+    let parser = ParallelParser::new(thread_count);
+    
+    // Submit filtered projects for parsing
+    debug!("Submitting {} projects to parser", total_projects);
+    let receiver = {
+        let receiver = parser.get_results_receiver();
+        parser.submit_paths(projects_to_parse)?;
+        receiver
+    };
+    // Parser is dropped here, which will close the work channel
+    
+    let mut successful_live_sets = Vec::new();
+    
+    // Collect results from parser with progress tracking
+    debug!("Starting to collect parser results");
+    let mut completed_count = 0;
+    
+    while completed_count < total_projects {
+        match receiver.recv_timeout(Duration::from_secs(5)) {
+            Ok(result) => {
+                completed_count += 1;
+                let progress = completed_count as f32 / total_projects as f32;
+                
+                match result {
+                    Ok((path, live_set)) => {
+                        let filename = path.file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("unknown");
+                        
+                        debug!("Successfully parsed: {}", path.display());
+                        
+                        // Send detailed progress update with file name
+                        progress_callback(
+                            completed_count as u32, 
+                            total_projects as u32, 
+                            progress,
+                            format!("Parsed {} ({}/{})", filename, completed_count, total_projects),
+                            "parsing"
+                        );
+                        
+                        successful_live_sets.push(live_set);
+                    }
+                    Err((path, error)) => {
+                        let filename = path.file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("unknown");
+                        
+                        error!("Failed to parse {}: {:?}", path.display(), error);
+                        
+                        // Send progress update even for failed files
+                        progress_callback(
+                            completed_count as u32, 
+                            total_projects as u32, 
+                            progress,
+                            format!("✗ Failed to parse {} ({}/{})", filename, completed_count, total_projects),
+                            "parsing"
+                        );
+                    }
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                debug!("Timeout waiting for parser results, but continuing...");
+                // Send heartbeat progress update during timeout
+                progress_callback(
+                    completed_count as u32, 
+                    total_projects as u32, 
+                    completed_count as f32 / total_projects as f32,
+                    format!("Parsing in progress... ({}/{})", completed_count, total_projects),
+                    "parsing"
+                );
+                continue;
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                debug!("Parser channel disconnected, assuming completion");
+                break;
+            }
+        }
+    }
+
+    if successful_live_sets.is_empty() {
+        progress_callback(total_projects as u32, total_projects as u32, 1.0, "No projects needed updates".to_string(), "completed");
+        return Ok(());
+    }
+
+    progress_callback(completed_count as u32, total_projects as u32, 0.9, "Saving to database...".to_string(), "inserting");
+
+    // Batch insert the successfully parsed projects
+    let num_live_sets = successful_live_sets.len();
+    info!("Inserting {} projects into database", num_live_sets);
+    let live_sets = std::sync::Arc::new(successful_live_sets);
+    let mut batch_manager = BatchInsertManager::new(&mut db.conn, live_sets);
+    let stats = batch_manager.execute()?;
+    
+    info!(
+        "Batch insert complete: {} projects, {} plugins, {} samples",
+        stats.projects_inserted,
+        stats.plugins_inserted,
+        stats.samples_inserted
+    );
+
+    progress_callback(total_projects as u32, total_projects as u32, 1.0, format!("Successfully processed {} projects", stats.projects_inserted), "completed");
+    info!("Successfully processed {} projects", num_live_sets);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,9 +401,9 @@ mod tests {
 
     static INIT: Once = Once::new();
 
-    fn setup() {
+    fn setup(log_level: &str) {
         let _ = INIT.call_once(|| {
-            let _ = env::set_var("RUST_LOG", "debug");
+            let _ = env::set_var("RUST_LOG", log_level);
             if let Err(_) = env_logger::try_init() {
                 // Logger already initialized, that's fine
             }
@@ -251,7 +412,7 @@ mod tests {
 
     #[test]
     fn test_process_projects_integration() {
-        setup();
+        setup("debug");
 
         // Get expected project paths from config
         let config = CONFIG.as_ref().expect("Failed to load config");
@@ -315,6 +476,80 @@ mod tests {
         for name in &project_names {
             println!("- {}", name);
         }
+    }
+
+    #[test]
+    fn test_process_projects_with_progress() {
+        setup("info");
+
+        // Get expected project paths from config
+        let config = CONFIG.as_ref().expect("Failed to load config");
+        let scanner = ProjectPathScanner::new().expect("Failed to create scanner");
+        
+        // Scan configured paths to know what we expect to find
+        let mut expected_projects = HashSet::new();
+        for path in &config.paths {
+            let path = PathBuf::from(path);
+            if path.exists() {
+                let projects = scanner.scan_directory(&path).expect("Failed to scan directory");
+                expected_projects.extend(projects);
+            }
+        }
+        
+        if expected_projects.is_empty() {
+            println!("No projects found in configured paths, skipping test");
+            return;
+        }
+
+        // Track progress updates
+        let progress_updates = std::sync::Arc::new(std::sync::Mutex::new(Vec::<(u32, u32, f32, String, String)>::new()));
+        let progress_updates_clone = Arc::clone(&progress_updates);
+
+        // Create progress callback that captures all updates
+        let progress_callback = move |completed: u32, total: u32, progress: f32, message: String, phase: &str| {
+            let mut updates = progress_updates_clone.lock().unwrap();
+            updates.push((completed, total, progress, message.clone(), phase.to_string()));
+            println!("Progress: {}/{} ({:.1}%) - {} [{}]", completed, total, progress * 100.0, message, phase);
+        };
+
+        // Run process_projects_with_progress
+        let result = process_projects_with_progress(progress_callback);
+        assert!(result.is_ok(), "process_projects_with_progress failed: {:?}", result.err());
+
+        // Verify progress updates
+        let updates = progress_updates.lock().unwrap();
+        assert!(!updates.is_empty(), "No progress updates received");
+
+        // Check that we got the expected progression of phases
+        let phases: Vec<String> = updates.iter().map(|(_, _, _, _, phase)| phase.clone()).collect();
+        println!("Received phases: {:?}", phases);
+
+        // Should have at least starting and completed phases
+        assert!(phases.contains(&"starting".to_string()), "Missing 'starting' phase");
+        assert!(phases.contains(&"completed".to_string()) || phases.contains(&"preprocessing".to_string()), 
+               "Missing completion phase");
+
+        // Check that progress values make sense
+        for (i, (completed, total, progress, _, _)) in updates.iter().enumerate() {
+            // Progress should be between 0 and 1
+            assert!(*progress >= 0.0 && *progress <= 1.0, 
+                   "Progress out of range at update {}: {}", i, progress);
+            
+            // If total > 0, completed should not exceed total
+            if *total > 0 {
+                assert!(*completed <= *total, 
+                       "Completed {} exceeds total {} at update {}", completed, total, i);
+            }
+        }
+
+        // Check final progress should be complete
+        if let Some((_, _, final_progress, _, final_phase)) = updates.last() {
+            if final_phase == "completed" {
+                assert_eq!(*final_progress, 1.0, "Final progress should be 1.0, got {}", final_progress);
+            }
+        }
+
+        println!("✅ Progress streaming test passed with {} updates", updates.len());
     }
 }
 
