@@ -36,11 +36,11 @@ impl LiveSetDatabase {
         Ok(collection_id)
     }
 
-    pub fn get_collection_by_id(&mut self, collection_id: &str) -> Result<Option<(String, String, Option<String>, Option<String>, i64, i64, Vec<String>)>, DatabaseError> {
+    pub fn get_collection_by_id(&mut self, collection_id: &str) -> Result<Option<(String, String, Option<String>, Option<String>, i64, i64, Vec<String>, Option<String>)>, DatabaseError> {
         debug!("Getting collection by ID: {}", collection_id);
         
-        let collection_data: Option<(String, String, Option<String>, Option<String>, i64, i64)> = self.conn.query_row(
-            "SELECT id, name, description, notes, created_at, modified_at FROM collections WHERE id = ?",
+        let collection_data: Option<(String, String, Option<String>, Option<String>, i64, i64, Option<String>)> = self.conn.query_row(
+            "SELECT id, name, description, notes, created_at, modified_at, cover_art_id FROM collections WHERE id = ?",
             [collection_id],
             |row| {
                 Ok((
@@ -50,11 +50,12 @@ impl LiveSetDatabase {
                     row.get(3)?,
                     row.get(4)?,
                     row.get(5)?,
+                    row.get(6)?,
                 ))
             },
         ).optional()?;
 
-        if let Some((id, name, description, notes, created_at, modified_at)) = collection_data {
+        if let Some((id, name, description, notes, created_at, modified_at, cover_art_id)) = collection_data {
             // Get project IDs for this collection
             let mut stmt = self.conn.prepare(
                 "SELECT project_id FROM collection_projects WHERE collection_id = ? ORDER BY position"
@@ -64,7 +65,7 @@ impl LiveSetDatabase {
             })?.filter_map(|r| r.ok()).collect();
 
             debug!("Found collection: {} with {} projects", name, project_ids.len());
-            Ok(Some((id, name, description, notes, created_at, modified_at, project_ids)))
+            Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id)))
         } else {
             debug!("Collection not found: {}", collection_id);
             Ok(None)

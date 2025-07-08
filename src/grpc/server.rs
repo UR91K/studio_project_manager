@@ -334,7 +334,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                 for (id, name, description) in collections_data {
                     // Get the full collection details including project IDs
                     match db.get_collection_by_id(&id) {
-                        Ok(Some((_, _, _, notes, created_at, modified_at, project_ids))) => {
+                        Ok(Some((_, _, _, notes, created_at, modified_at, project_ids, cover_art_id))) => {
                             collections.push(Collection {
                                 id: id.clone(),
                                 name: name.clone(),
@@ -343,7 +343,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                                 created_at,
                                 modified_at,
                                 project_ids,
-                                cover_art_id: None, // TODO: Get actual cover art ID from database
+                                cover_art_id,
                             });
                         }
                         Ok(None) => {
@@ -380,7 +380,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
             Ok(collection_id) => {
                 // Get the created collection details to return in response
                 match db.get_collection_by_id(&collection_id) {
-                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids))) => {
+                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
                         let collection = Collection {
                             id,
                             name,
@@ -389,7 +389,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                             created_at,
                             modified_at,
                             project_ids,
-                            cover_art_id: None, // TODO: Get actual cover art ID from database
+                            cover_art_id,
                         };
                         
                         let response = CreateCollectionResponse { collection: Some(collection) };
@@ -430,7 +430,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
             Ok(()) => {
                 // Get the updated collection details to return in response
                 match db.get_collection_by_id(&req.collection_id) {
-                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids))) => {
+                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
                         let collection = Collection {
                             id,
                             name,
@@ -439,7 +439,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                             created_at,
                             modified_at,
                             project_ids,
-                            cover_art_id: None, // TODO: Get actual cover art ID from database
+                            cover_art_id,
                         };
                         
                         let response = UpdateCollectionResponse { collection: Some(collection) };
