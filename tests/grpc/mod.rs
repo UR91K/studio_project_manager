@@ -8,6 +8,7 @@ pub mod collections;
 pub mod tags;
 pub mod search;
 pub mod server_setup;
+pub mod media;
 
 // Common imports for gRPC tests
 use studio_project_manager::grpc::proto::*;

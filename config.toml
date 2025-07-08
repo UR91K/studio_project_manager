@@ -1,7 +1,6 @@
 # config.toml
 
 # if you change this file while the program is running, you need to restart the program for changes to take effect.
-# TODO: Add support for multiple project folders
 
 paths = [
     'C:\Users\judee\Documents\Projects\90s'

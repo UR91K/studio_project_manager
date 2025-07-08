@@ -24,6 +24,7 @@ pub async fn create_test_server() -> StudioProjectManagerServer {
     StudioProjectManagerServer {
         db: Arc::new(Mutex::new(db)),
         scan_status: Arc::new(Mutex::new(ScanStatus::ScanUnknown)),
+        scan_progress: Arc::new(Mutex::new(None)),
     }
 }
 
@@ -62,4 +63,53 @@ pub async fn create_test_project_in_db(db: &Arc<Mutex<LiveSetDatabase>>) -> Stri
     db_guard.insert_project(&test_live_set).expect("Failed to insert test project");
     
     project_id
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tonic::Request;
+    use studio_project_manager::grpc::proto::*;
+    use studio_project_manager::grpc::proto::studio_project_manager_server::StudioProjectManager;
+
+    #[tokio::test]
+    async fn test_scan_status_progress_tracking() {
+        let server = create_test_server().await;
+        
+        // Initially, there should be no progress
+        let request = Request::new(GetScanStatusRequest {});
+        let response = server.get_scan_status(request).await.unwrap();
+        let scan_status_response = response.into_inner();
+        
+        assert_eq!(scan_status_response.status, ScanStatus::ScanUnknown as i32);
+        assert!(scan_status_response.current_progress.is_none());
+        
+        // Simulate setting progress manually
+        let progress_response = ScanProgressResponse {
+            completed: 50,
+            total: 100,
+            progress: 0.5,
+            message: "Test progress".to_string(),
+            status: ScanStatus::ScanParsing as i32,
+        };
+        
+        // Set the progress
+        *server.scan_progress.lock().await = Some(progress_response.clone());
+        *server.scan_status.lock().await = ScanStatus::ScanParsing;
+        
+        // Now check that the progress is returned
+        let request = Request::new(GetScanStatusRequest {});
+        let response = server.get_scan_status(request).await.unwrap();
+        let scan_status_response = response.into_inner();
+        
+        assert_eq!(scan_status_response.status, ScanStatus::ScanParsing as i32);
+        assert!(scan_status_response.current_progress.is_some());
+        
+        let returned_progress = scan_status_response.current_progress.unwrap();
+        assert_eq!(returned_progress.completed, 50);
+        assert_eq!(returned_progress.total, 100);
+        assert_eq!(returned_progress.progress, 0.5);
+        assert_eq!(returned_progress.message, "Test progress");
+        assert_eq!(returned_progress.status, ScanStatus::ScanParsing as i32);
+    }
 }
