@@ -33,11 +33,51 @@ A high-performance gRPC server for indexing and searching Ableton Live projects.
 
 ### gRPC API Endpoints
 
+**Project Management**
+
 - `GetProjects` - List all projects with pagination
 - `GetProject` - Get detailed information about a specific project
-- `Search` - Advanced search with FTS5 and specialized operators
 - `UpdateProjectNotes` - Add or update project notes
+
+**Search**
+
+- `Search` - Advanced search with FTS5 and specialized operators
+
+**Scanning**
+
 - `ScanDirectories` - Trigger project scanning with progress streaming
+- `GetScanStatus` - Get the current status of the scan
+
+**Collections**
+
+- `GetCollections` - Get all the current collections
+- `CreateCollection` - Create a new collection
+- `UpdateCollection` - Update an existing collection
+- `AddProjectToCollection` - Add a project to a collection
+- `RemoveProjectFromCollection` - Remove a project from a collection
+
+**Tags**
+
+- `GetTags` - Get all available tags
+- `CreateTag` - Create a new tag
+- `TagProject` - Add a tag to a project
+- `UntagProject` - Remove a tag from a project
+
+**Tasks**
+
+- `GetProjectTasks` - Get all tasks for a specific project
+- `CreateTask` - Create a new task for a project
+- `UpdateTask` - Update an existing task
+- `DeleteTask` - Delete a task
+
+**File Watching**
+
+- `StartWatcher` - Start watching specified directories for changes
+- `StopWatcher` - Stop the file watcher
+- `GetWatcherEvents` - Stream file system events (returns streaming responses)
+
+**System Info**
+
 - `GetSystemInfo` - Get system and database information
 - `GetStatistics` - Get database statistics
 
