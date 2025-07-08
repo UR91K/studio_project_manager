@@ -414,15 +414,58 @@ message GetSystemInfoResponse {
 message GetStatisticsRequest {}
 
 message GetStatisticsResponse {
+  // Basic counts
   int32 total_projects = 1;
   int32 total_plugins = 2;
   int32 total_samples = 3;
   int32 total_collections = 4;
   int32 total_tags = 5;
   int32 total_tasks = 6;
+  
+  // Plugin statistics
   repeated PluginStatistic top_plugins = 7;
-  repeated TempoStatistic tempo_distribution = 8;
-  repeated KeyStatistic key_distribution = 9;
+  repeated VendorStatistic top_vendors = 8;
+  
+  // Musical statistics
+  repeated TempoStatistic tempo_distribution = 9;
+  repeated KeyStatistic key_distribution = 10;
+  repeated TimeSignatureStatistic time_signature_distribution = 11;
+  
+  // Project analytics
+  repeated YearStatistic projects_per_year = 12;
+  repeated MonthStatistic projects_per_month = 13;
+  double average_monthly_projects = 14;
+  
+  // Duration analytics
+  double average_project_duration_seconds = 15;
+  int32 projects_under_40_seconds = 16;
+  Project longest_project = 17;
+  
+  // Complexity metrics
+  repeated ProjectComplexityStatistic most_complex_projects = 18;
+  double average_plugins_per_project = 19;
+  double average_samples_per_project = 20;
+  
+  // Sample statistics
+  repeated SampleStatistic top_samples = 21;
+  
+  // Tag statistics
+  repeated TagStatistic top_tags = 22;
+  
+  // Task statistics
+  int32 completed_tasks = 23;
+  int32 pending_tasks = 24;
+  double task_completion_rate = 25;
+  
+  // Activity trends
+  repeated ActivityTrendStatistic recent_activity = 26;
+  
+  // Version analytics
+  repeated VersionStatistic ableton_versions = 27;
+  
+  // Collection statistics
+  double average_projects_per_collection = 28;
+  Collection largest_collection = 29;
 }
 
 message PluginStatistic {
@@ -438,6 +481,60 @@ message TempoStatistic {
 
 message KeyStatistic {
   string key = 1;
+  int32 count = 2;
+}
+
+message VendorStatistic {
+  string vendor = 1;
+  int32 plugin_count = 2;
+  int32 usage_count = 3;
+}
+
+message TimeSignatureStatistic {
+  int32 numerator = 1;
+  int32 denominator = 2;
+  int32 count = 3;
+}
+
+message YearStatistic {
+  int32 year = 1;
+  int32 count = 2;
+}
+
+message MonthStatistic {
+  int32 year = 1;
+  int32 month = 2;
+  int32 count = 3;
+}
+
+message ProjectComplexityStatistic {
+  Project project = 1;
+  int32 plugin_count = 2;
+  int32 sample_count = 3;
+  int32 complexity_score = 4;
+}
+
+message SampleStatistic {
+  string name = 1;
+  string path = 2;
+  int32 usage_count = 3;
+}
+
+message TagStatistic {
+  string name = 1;
+  int32 usage_count = 2;
+}
+
+message ActivityTrendStatistic {
+  int32 year = 1;
+  int32 month = 2;
+  int32 day = 3;
+  int32 projects_created = 4;
+  int32 projects_modified = 5;
+}
+
+message VersionStatistic {
+  string version = 1;
   int32 count = 2;
 }
 

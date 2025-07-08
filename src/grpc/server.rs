@@ -969,19 +969,224 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         _request: Request<GetStatisticsRequest>,
     ) -> Result<Response<GetStatisticsResponse>, Status> {
-        // TODO: Implement actual statistics gathering
-        let response = GetStatisticsResponse {
-            total_projects: 0,
-            total_plugins: 0,
-            total_samples: 0,
-            total_collections: 0,
-            total_tags: 0,
-            total_tasks: 0,
-            top_plugins: vec![],
-            tempo_distribution: vec![],
-            key_distribution: vec![],
+        debug!("Getting comprehensive statistics");
+        
+        let mut db = self.db.lock().await;
+        
+        // Basic counts
+        let (total_projects, total_plugins, total_samples, total_collections, total_tags, total_tasks) = 
+            db.get_basic_counts().map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        
+        // Plugin statistics
+        let top_plugins = db.get_top_plugins(10).map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(name, vendor, count)| super::proto::PluginStatistic {
+                name,
+                vendor,
+                usage_count: count,
+            })
+            .collect();
+        
+        let top_vendors = db.get_top_vendors(10).map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(vendor, plugin_count, usage_count)| super::proto::VendorStatistic {
+                vendor,
+                plugin_count,
+                usage_count,
+            })
+            .collect();
+        
+        // Musical statistics
+        let tempo_distribution = db.get_tempo_distribution().map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(tempo, count)| super::proto::TempoStatistic {
+                tempo,
+                count,
+            })
+            .collect();
+        
+        let key_distribution = db.get_key_distribution().map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(key, count)| super::proto::KeyStatistic {
+                key,
+                count,
+            })
+            .collect();
+        
+        let time_signature_distribution = db.get_time_signature_distribution().map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(numerator, denominator, count)| super::proto::TimeSignatureStatistic {
+                numerator,
+                denominator,
+                count,
+            })
+            .collect();
+        
+        // Project analytics
+        let projects_per_year = db.get_projects_per_year().map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(year, count)| super::proto::YearStatistic {
+                year,
+                count,
+            })
+            .collect();
+        
+        let projects_per_month: Vec<super::proto::MonthStatistic> = db.get_projects_per_month(12).map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(year, month, count)| super::proto::MonthStatistic {
+                year,
+                month,
+                count,
+            })
+            .collect();
+        
+        // Calculate average monthly projects
+        let total_months = projects_per_month.len() as f64;
+        let average_monthly_projects = if total_months > 0.0 {
+            projects_per_month.iter().map(|m| m.count as f64).sum::<f64>() / total_months
+        } else {
+            0.0
         };
         
+        // Duration analytics
+        let (average_project_duration_seconds, projects_under_40_seconds, longest_project_id) = 
+            db.get_duration_analytics().map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        
+        let longest_project = if let Some(project_id) = longest_project_id {
+            match db.get_project(&project_id) {
+                Ok(Some(project)) => {
+                    match convert_live_set_to_proto(project, &mut *db) {
+                        Ok(proto_project) => Some(proto_project),
+                        Err(_) => None,
+                    }
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        
+        // Complexity metrics
+        let (average_plugins_per_project, average_samples_per_project) = 
+            db.get_complexity_metrics().map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        
+        let most_complex_projects = db.get_most_complex_projects(5).map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        let mut proto_complex_projects = Vec::new();
+        
+        for (project_id, plugin_count, sample_count, complexity_score) in most_complex_projects {
+            if let Ok(Some(project)) = db.get_project(&project_id) {
+                if let Ok(proto_project) = convert_live_set_to_proto(project, &mut *db) {
+                    proto_complex_projects.push(super::proto::ProjectComplexityStatistic {
+                        project: Some(proto_project),
+                        plugin_count,
+                        sample_count,
+                        complexity_score,
+                    });
+                }
+            }
+        }
+        
+        // Sample statistics
+        let top_samples = db.get_top_samples(10).map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(name, path, usage_count)| super::proto::SampleStatistic {
+                name,
+                path,
+                usage_count,
+            })
+            .collect();
+        
+        // Tag statistics
+        let top_tags = db.get_top_tags(10).map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(name, usage_count)| super::proto::TagStatistic {
+                name,
+                usage_count,
+            })
+            .collect();
+        
+        // Task statistics
+        let (completed_tasks, pending_tasks, task_completion_rate) = 
+            db.get_task_statistics().map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        
+        // Recent activity
+        let recent_activity = db.get_recent_activity(30).map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(year, month, day, projects_created, projects_modified)| super::proto::ActivityTrendStatistic {
+                year,
+                month,
+                day,
+                projects_created,
+                projects_modified,
+            })
+            .collect();
+        
+        // Version statistics
+        let ableton_versions = db.get_ableton_version_stats().map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(version, count)| super::proto::VersionStatistic {
+                version,
+                count,
+            })
+            .collect();
+        
+        // Collection analytics
+        let (average_projects_per_collection, largest_collection_id) = 
+            db.get_collection_analytics().map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        
+        let largest_collection = if let Some(collection_id) = largest_collection_id {
+            match db.get_collection_by_id(&collection_id) {
+                Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                    Some(super::proto::Collection {
+                        id,
+                        name,
+                        description,
+                        notes,
+                        created_at,
+                        modified_at,
+                        project_ids,
+                        cover_art_id,
+                    })
+                },
+                _ => None,
+            }
+        } else {
+            None
+        };
+        
+        let response = GetStatisticsResponse {
+            total_projects,
+            total_plugins,
+            total_samples,
+            total_collections,
+            total_tags,
+            total_tasks,
+            top_plugins,
+            top_vendors,
+            tempo_distribution,
+            key_distribution,
+            time_signature_distribution,
+            projects_per_year,
+            projects_per_month,
+            average_monthly_projects,
+            average_project_duration_seconds,
+            projects_under_40_seconds,
+            longest_project,
+            most_complex_projects: proto_complex_projects,
+            average_plugins_per_project,
+            average_samples_per_project,
+            top_samples,
+            top_tags,
+            completed_tasks,
+            pending_tasks,
+            task_completion_rate,
+            recent_activity,
+            ableton_versions,
+            average_projects_per_collection,
+            largest_collection,
+        };
+        
+        debug!("Successfully gathered comprehensive statistics");
         Ok(Response::new(response))
     }
     
