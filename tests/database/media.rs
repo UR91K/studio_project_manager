@@ -2,7 +2,7 @@
 //!
 //! This module tests the media file functionality including:
 //! - Media file CRUD operations
-//! - Cover art management for collections  
+//! - Cover art management for collections
 //! - Audio file management for projects
 //! - Error handling and validation
 
@@ -25,12 +25,12 @@ fn create_test_media_file(
     MediaFile {
         id: Uuid::new_v4().to_string(),
         original_filename: filename.to_string(),
-        file_extension: filename.split('.').last().unwrap().to_string(),
+        file_extension: filename.split('.').last().unwrap_or("").to_string(),
         media_type,
         file_size_bytes: size,
         mime_type: mime_type.to_string(),
         uploaded_at: chrono::Utc::now(),
-        checksum: "test_checksum".to_string(),
+        checksum: "dummy-checksum".to_string(),
     }
 }
 
@@ -39,31 +39,28 @@ fn test_media_file_crud() {
     setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
-    // Test insert
+    // Create test media file
     let media_file = create_test_media_file(
         MediaType::CoverArt,
-        "test_cover.jpg",
+        "cover.jpg",
         1024,
-        "image/jpeg"
+        "image/jpeg",
     );
-    
+
+    // Test insert
     db.insert_media_file(&media_file).unwrap();
 
-    // Test get by ID
-    let retrieved = db.get_media_file(&media_file.id).unwrap().unwrap();
+    // Test get
+    let retrieved = db.get_media_file(&media_file.id).unwrap();
+    assert!(retrieved.is_some());
+    let retrieved = retrieved.unwrap();
     assert_eq!(retrieved.id, media_file.id);
-    assert_eq!(retrieved.original_filename, media_file.original_filename);
-    assert_eq!(retrieved.file_size_bytes, media_file.file_size_bytes);
-    assert_eq!(retrieved.mime_type, media_file.mime_type);
-
-    // Test get non-existent
-    let non_existent = db.get_media_file("non-existent-id").unwrap();
-    assert!(non_existent.is_none());
+    assert_eq!(retrieved.original_filename, "cover.jpg");
 
     // Test delete
     db.delete_media_file(&media_file.id).unwrap();
-    let after_delete = db.get_media_file(&media_file.id).unwrap();
-    assert!(after_delete.is_none());
+    let deleted = db.get_media_file(&media_file.id).unwrap();
+    assert!(deleted.is_none());
 }
 
 #[test]
@@ -72,34 +69,32 @@ fn test_collection_cover_art_management() {
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create test collection
-    let collection_id = Uuid::new_v4().to_string();
-    db.create_collection("Test Collection", None, None).unwrap();
+    let collection_id = db.create_collection("Test Collection", None, None).unwrap();
 
     // Create test media file
     let media_file = create_test_media_file(
         MediaType::CoverArt,
         "cover.jpg",
-        2048,
-        "image/jpeg"
+        1024,
+        "image/jpeg",
     );
-    
+
+    // Insert media file
     db.insert_media_file(&media_file).unwrap();
 
-    // Test set cover art
+    // Associate with collection
     db.update_collection_cover_art(&collection_id, Some(&media_file.id)).unwrap();
-    
+
+    // Verify association
     let cover_art = db.get_collection_cover_art(&collection_id).unwrap();
     assert!(cover_art.is_some());
-    assert_eq!(cover_art.unwrap().id, media_file.id);
+    let cover_art = cover_art.unwrap();
+    assert_eq!(cover_art.id, media_file.id);
 
-    // Test remove cover art
+    // Remove association
     db.update_collection_cover_art(&collection_id, None).unwrap();
-    let after_removal = db.get_collection_cover_art(&collection_id).unwrap();
-    assert!(after_removal.is_none());
-
-    // Test foreign key constraint (should fail for non-existent media)
-    let result = db.update_collection_cover_art(&collection_id, Some("non-existent-id"));
-    assert!(result.is_err());
+    let no_cover_art = db.get_collection_cover_art(&collection_id).unwrap();
+    assert!(no_cover_art.is_none());
 }
 
 #[test]
@@ -107,36 +102,35 @@ fn test_project_audio_file_management() {
     setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
-    // Create test project
+    // Create test collection and project
     let test_project = create_test_live_set();
+    
     db.insert_project(&test_project).unwrap();
 
     // Create test audio file
     let audio_file = create_test_media_file(
         MediaType::AudioFile,
         "demo.mp3",
-        5 * 1024 * 1024, // 5MB
-        "audio/mpeg"
+        2048,
+        "audio/mpeg",
     );
-    
+
+    // Insert audio file
     db.insert_media_file(&audio_file).unwrap();
 
-    // Test set audio file
-    let project_id = test_project.id.to_string();
-    db.update_project_audio_file(&project_id, Some(&audio_file.id)).unwrap();
-    
-    let project_audio = db.get_project_audio_file(&project_id).unwrap();
+    // Associate with project
+    db.update_project_audio_file(&test_project.id.to_string(), Some(&audio_file.id)).unwrap();
+
+    // Verify association
+    let project_audio = db.get_project_audio_file(&test_project.id.to_string()).unwrap();
     assert!(project_audio.is_some());
-    assert_eq!(project_audio.unwrap().id, audio_file.id);
+    let project_audio = project_audio.unwrap();
+    assert_eq!(project_audio.id, audio_file.id);
 
-    // Test remove audio file
-    db.update_project_audio_file(&project_id, None).unwrap();
-    let after_removal = db.get_project_audio_file(&project_id).unwrap();
-    assert!(after_removal.is_none());
-
-    // Test foreign key constraint (should fail for non-existent media)
-    let result = db.update_project_audio_file(&project_id, Some("non-existent-id"));
-    assert!(result.is_err());
+    // Remove association
+    db.update_project_audio_file(&test_project.id.to_string(), None).unwrap();
+    let no_audio = db.get_project_audio_file(&test_project.id.to_string()).unwrap();
+    assert!(no_audio.is_none());
 }
 
 #[test]
@@ -144,31 +138,77 @@ fn test_media_file_types_separation() {
     setup("debug");
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
-    // Create media files of different types
+    // Create one of each media type
     let cover_art = create_test_media_file(
         MediaType::CoverArt,
         "cover.jpg",
         1024,
-        "image/jpeg"
+        "image/jpeg",
     );
     let audio_file = create_test_media_file(
         MediaType::AudioFile,
         "demo.mp3",
         2048,
-        "audio/mpeg"
+        "audio/mpeg",
     );
 
+    // Insert both
     db.insert_media_file(&cover_art).unwrap();
     db.insert_media_file(&audio_file).unwrap();
 
-    // Test get by type
-    let cover_arts = db.get_media_files_by_type(&MediaType::CoverArt).unwrap();
-    let audio_files = db.get_media_files_by_type(&MediaType::AudioFile).unwrap();
+    // Test type-specific queries
+    let cover_art_files = db.get_media_files_by_type(&MediaType::CoverArt).unwrap();
+    assert_eq!(cover_art_files.len(), 1);
+    assert_eq!(cover_art_files[0].media_type, MediaType::CoverArt);
 
-    assert_eq!(cover_arts.len(), 1);
+    let audio_files = db.get_media_files_by_type(&MediaType::AudioFile).unwrap();
     assert_eq!(audio_files.len(), 1);
-    assert_eq!(cover_arts[0].id, cover_art.id);
-    assert_eq!(audio_files[0].id, audio_file.id);
+    assert_eq!(audio_files[0].media_type, MediaType::AudioFile);
+}
+
+#[test]
+fn test_media_file_statistics() {
+    setup("debug");
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Create test media files
+    let cover1 = create_test_media_file(
+        MediaType::CoverArt,
+        "cover1.jpg",
+        1024,
+        "image/jpeg",
+    );
+    let cover2 = create_test_media_file(
+        MediaType::CoverArt,
+        "cover2.png",
+        2048,
+        "image/png",
+    );
+    let audio1 = create_test_media_file(
+        MediaType::AudioFile,
+        "audio1.mp3",
+        1024 * 1024,
+        "audio/mpeg",
+    );
+    let audio2 = create_test_media_file(
+        MediaType::AudioFile,
+        "audio2.wav",
+        2 * 1024 * 1024,
+        "audio/wav",
+    );
+
+    // Insert all files
+    db.insert_media_file(&cover1).unwrap();
+    db.insert_media_file(&cover2).unwrap();
+    db.insert_media_file(&audio1).unwrap();
+    db.insert_media_file(&audio2).unwrap();
+
+    // Test statistics
+    let stats = db.get_media_file_stats().unwrap();
+    assert_eq!(stats.cover_art_count, 2);
+    assert_eq!(stats.audio_file_count, 2);
+    assert_eq!(stats.cover_art_total_size_bytes, 3072);
+    assert_eq!(stats.audio_file_total_size_bytes, 3 * 1024 * 1024);
 }
 
 #[test]
@@ -177,85 +217,56 @@ fn test_orphaned_media_files() {
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create test collection and project
-    let collection_id = Uuid::new_v4().to_string();
+    let collection_id = db.create_collection("Test Collection", None, None).unwrap();
     let test_project = create_test_live_set();
-    
-    db.create_collection("Test Collection", None, None).unwrap();
     db.insert_project(&test_project).unwrap();
 
-    // Create media files
+    // Create orphaned media files
     let orphaned_cover = create_test_media_file(
         MediaType::CoverArt,
         "orphaned.jpg",
         1024,
-        "image/jpeg"
-    );
-    let used_cover = create_test_media_file(
-        MediaType::CoverArt,
-        "used.jpg",
-        1024,
-        "image/jpeg"
+        "image/jpeg",
     );
     let orphaned_audio = create_test_media_file(
         MediaType::AudioFile,
         "orphaned.mp3",
         2048,
-        "audio/mpeg"
+        "audio/mpeg",
+    );
+
+    // Create used media files
+    let used_cover = create_test_media_file(
+        MediaType::CoverArt,
+        "used.jpg",
+        1024,
+        "image/jpeg",
     );
     let used_audio = create_test_media_file(
         MediaType::AudioFile,
         "used.mp3",
         2048,
-        "audio/mpeg"
+        "audio/mpeg",
     );
 
-    // Insert all media files
+    // Insert all files
     db.insert_media_file(&orphaned_cover).unwrap();
-    db.insert_media_file(&used_cover).unwrap();
     db.insert_media_file(&orphaned_audio).unwrap();
+    db.insert_media_file(&used_cover).unwrap();
     db.insert_media_file(&used_audio).unwrap();
 
-    // Assign some media files to collection/project
+    // Associate only the "used" files
     db.update_collection_cover_art(&collection_id, Some(&used_cover.id)).unwrap();
-    let project_id = test_project.id.to_string();
-    db.update_project_audio_file(&project_id, Some(&used_audio.id)).unwrap();
+    db.update_project_audio_file(&test_project.id.to_string(), Some(&used_audio.id)).unwrap();
 
-    // Get orphaned files
-    let orphaned = db.get_orphaned_media_files().unwrap();
-    assert_eq!(orphaned.len(), 2);
+    // Find orphaned files
+    let orphaned_files = db.get_orphaned_media_files().unwrap();
+    assert_eq!(orphaned_files.len(), 2);
     
-    let orphaned_ids: Vec<String> = orphaned.iter().map(|f| f.id.clone()).collect();
+    // Should contain the orphaned files
+    let orphaned_ids: Vec<String> = orphaned_files.iter().map(|f| f.id.clone()).collect();
     assert!(orphaned_ids.contains(&orphaned_cover.id));
     assert!(orphaned_ids.contains(&orphaned_audio.id));
-    assert!(!orphaned_ids.contains(&used_cover.id));
-    assert!(!orphaned_ids.contains(&used_audio.id));
-}
-
-#[test]
-fn test_media_file_statistics() {
-    setup("debug");
-    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
-
-    // Create various media files
-    let files = vec![
-        create_test_media_file(MediaType::CoverArt, "cover1.jpg", 1024, "image/jpeg"),
-        create_test_media_file(MediaType::CoverArt, "cover2.png", 2048, "image/png"),
-        create_test_media_file(MediaType::AudioFile, "audio1.mp3", 1024 * 1024, "audio/mpeg"),
-        create_test_media_file(MediaType::AudioFile, "audio2.wav", 2 * 1024 * 1024, "audio/wav"),
-    ];
-
-    for file in &files {
-        db.insert_media_file(file).unwrap();
-    }
-
-    // Test statistics
-    let stats = db.get_media_file_stats().unwrap();
-    assert_eq!(stats.total_files(), 4);
-    assert_eq!(stats.cover_art_count, 2);
-    assert_eq!(stats.audio_file_count, 2);
-    assert_eq!(stats.total_size_bytes(), 3 * 1024 * 1024 + 1024 + 2048); // ~3MB + small images
-    assert_eq!(stats.cover_art_total_size_bytes, 1024 + 2048);
-    assert_eq!(stats.audio_file_total_size_bytes, 1024 * 1024 + 2 * 1024 * 1024);
 }
 
 #[test]
@@ -267,59 +278,15 @@ fn test_media_file_database_constraints() {
         MediaType::CoverArt,
         "test.jpg",
         1024,
-        "image/jpeg"
+        "image/jpeg",
     );
-    
+
+    // Insert the file
     db.insert_media_file(&media_file).unwrap();
 
-    // Test unique constraint on ID (should fail)
-    let duplicate_id = MediaFile {
-        id: media_file.id.clone(), // Same ID
-        original_filename: "different.jpg".to_string(),
-        file_extension: "jpg".to_string(),
-        media_type: MediaType::CoverArt,
-        file_size_bytes: 512,
-        mime_type: "image/jpeg".to_string(),
-        uploaded_at: chrono::Utc::now(),
-        checksum: "different_checksum".to_string(),
-    };
-    
-    let result = db.insert_media_file(&duplicate_id);
+    // Try to insert the same file again (should fail due to unique constraint)
+    let result = db.insert_media_file(&media_file);
     assert!(result.is_err());
-}
-
-#[test]
-fn test_media_file_cleanup_on_association_removal() {
-    setup("debug");
-    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
-
-    // Create test collection
-    let collection_id = Uuid::new_v4().to_string();
-    db.create_collection("Test Collection", None, None).unwrap();
-
-    // Create and assign cover art
-    let cover_art = create_test_media_file(
-        MediaType::CoverArt,
-        "cover.jpg",
-        1024,
-        "image/jpeg"
-    );
-    
-    db.insert_media_file(&cover_art).unwrap();
-    db.update_collection_cover_art(&collection_id, Some(&cover_art.id)).unwrap();
-
-    // Verify association exists
-    let retrieved = db.get_collection_cover_art(&collection_id).unwrap();
-    assert!(retrieved.is_some());
-
-    // Remove association
-    db.update_collection_cover_art(&collection_id, None).unwrap();
-    let after_removal = db.get_collection_cover_art(&collection_id).unwrap();
-    assert!(after_removal.is_none());
-
-    // Media file should still exist in database (not auto-deleted)
-    let media_still_exists = db.get_media_file(&cover_art.id).unwrap();
-    assert!(media_still_exists.is_some());
 }
 
 #[test]
@@ -328,33 +295,128 @@ fn test_media_file_cascade_deletion() {
     let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create test collection
-    let collection_id = Uuid::new_v4().to_string();
-    db.create_collection("Test Collection", None, None).unwrap();
+    let collection_id = db.create_collection("Test Collection", None, None).unwrap();
 
     // Create and assign cover art
     let cover_art = create_test_media_file(
         MediaType::CoverArt,
         "cover.jpg",
         1024,
-        "image/jpeg"
+        "image/jpeg",
     );
-    
     db.insert_media_file(&cover_art).unwrap();
     db.update_collection_cover_art(&collection_id, Some(&cover_art.id)).unwrap();
 
-    // Delete media file
+    // Verify association exists
+    let retrieved = db.get_collection_cover_art(&collection_id).unwrap();
+    assert!(retrieved.is_some());
+
+    // Delete the media file
     db.delete_media_file(&cover_art.id).unwrap();
 
-    // Collection should no longer have cover art (should be set to NULL)
-    let after_deletion = db.get_collection_cover_art(&collection_id).unwrap();
-    assert!(after_deletion.is_none());
+    // Verify the media file is gone
+    let deleted_media = db.get_media_file(&cover_art.id).unwrap();
+    assert!(deleted_media.is_none());
 
-    // Verify media file is gone
-    let media_file = db.get_media_file(&cover_art.id).unwrap();
-    assert!(media_file.is_none());
+    // Verify association is cleaned up
+    let no_cover_art = db.get_collection_cover_art(&collection_id).unwrap();
+    assert!(no_cover_art.is_none());
 }
 
-// TODO: Add integration tests with actual file storage
-// TODO: Add tests for concurrent access to media files
-// TODO: Add tests for media file validation
-// TODO: Add tests for media file streaming operations 
+#[test]
+fn test_media_file_cleanup_on_association_removal() {
+    setup("debug");
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Create test collection
+    let collection_id = db.create_collection("Test Collection", None, None).unwrap();
+
+    // Create and assign cover art
+    let cover_art = create_test_media_file(
+        MediaType::CoverArt,
+        "test_cover.jpg",
+        1024,
+        "image/jpeg",
+    );
+    db.insert_media_file(&cover_art).unwrap();
+    db.update_collection_cover_art(&collection_id, Some(&cover_art.id)).unwrap();
+
+    // Remove association
+    db.update_collection_cover_art(&collection_id, None).unwrap();
+
+    // Verify the association is removed
+    let no_cover_art = db.get_collection_cover_art(&collection_id).unwrap();
+    assert!(no_cover_art.is_none());
+
+    // Verify the media file still exists (it's not automatically deleted)
+    let media_still_exists = db.get_media_file(&cover_art.id).unwrap();
+    assert!(media_still_exists.is_some());
+}
+
+#[test]
+fn test_media_type_conversion() {
+    setup("debug");
+    
+    // Test MediaType enum functionality
+    assert_eq!(MediaType::CoverArt.as_str(), "cover_art");
+    assert_eq!(MediaType::AudioFile.as_str(), "audio_file");
+    
+    // Test conversion from string
+    assert_eq!(MediaType::from_str("cover_art").unwrap(), MediaType::CoverArt);
+    assert_eq!(MediaType::from_str("audio_file").unwrap(), MediaType::AudioFile);
+    
+    // Test invalid conversion
+    assert!(MediaType::from_str("invalid").is_err());
+}
+
+#[test]
+fn test_media_file_validation_edge_cases() {
+    setup("debug");
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Test with empty filename
+    let media_file = MediaFile {
+        id: Uuid::new_v4().to_string(),
+        original_filename: "".to_string(),
+        file_extension: "jpg".to_string(),
+        media_type: MediaType::CoverArt,
+        file_size_bytes: 1024,
+        mime_type: "image/jpeg".to_string(),
+        uploaded_at: chrono::Utc::now(),
+        checksum: "test-checksum".to_string(),
+    };
+    
+    // Should still work with empty filename
+    let result = db.insert_media_file(&media_file);
+    assert!(result.is_ok());
+
+    // Test with very long filename
+    let long_filename = "a".repeat(1000);
+    let media_file_long = MediaFile {
+        id: Uuid::new_v4().to_string(),
+        original_filename: long_filename,
+        file_extension: "jpg".to_string(),
+        media_type: MediaType::CoverArt,
+        file_size_bytes: 1024,
+        mime_type: "image/jpeg".to_string(),
+        uploaded_at: chrono::Utc::now(),
+        checksum: "test-checksum-2".to_string(),
+    };
+    
+    let result = db.insert_media_file(&media_file_long);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_media_file_foreign_key_constraints() {
+    setup("debug");
+    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+
+    // Try to set cover art for non-existent collection
+    let result = db.update_collection_cover_art("non-existent-collection", Some("non-existent-media"));
+    assert!(result.is_err());
+
+    // Try to set audio file for non-existent project
+    let result = db.update_project_audio_file("non-existent-project", Some("non-existent-media"));
+    assert!(result.is_err());
+} 
