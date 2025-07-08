@@ -41,6 +41,8 @@ pub async fn create_test_server() -> StudioProjectManagerServer {
         scan_status: Arc::new(Mutex::new(ScanStatus::ScanUnknown)),
         scan_progress: Arc::new(Mutex::new(None)),
         media_storage: Arc::new(media_storage),
+        watcher: Arc::new(Mutex::new(None)),
+        watcher_events: Arc::new(Mutex::new(None)),
     }
 }
 

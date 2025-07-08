@@ -12,6 +12,7 @@ use crate::media::{MediaStorageManager, MediaConfig, MediaType};
 use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
 use crate::database::search::SearchQuery;
+use crate::watcher::file_watcher::{FileWatcher, FileEvent};
 
 use super::proto::*;
 
@@ -20,6 +21,8 @@ pub struct StudioProjectManagerServer {
     pub scan_status: Arc<Mutex<ScanStatus>>,
     pub scan_progress: Arc<Mutex<Option<ScanProgressResponse>>>,
     pub media_storage: Arc<MediaStorageManager>,
+    pub watcher: Arc<Mutex<Option<FileWatcher>>>,
+    pub watcher_events: Arc<Mutex<Option<std::sync::mpsc::Receiver<FileEvent>>>>,
 }
 
 impl StudioProjectManagerServer {
@@ -43,6 +46,8 @@ impl StudioProjectManagerServer {
             scan_status: Arc::new(Mutex::new(ScanStatus::ScanUnknown)),
             scan_progress: Arc::new(Mutex::new(None)),
             media_storage: Arc::new(media_storage),
+            watcher: Arc::new(Mutex::new(None)),
+            watcher_events: Arc::new(Mutex::new(None)),
         })
     }
 }
@@ -680,14 +685,71 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         _request: Request<StartWatcherRequest>,
     ) -> Result<Response<StartWatcherResponse>, Status> {
-        Err(Status::unimplemented("File watcher not yet implemented"))
+        debug!("Starting file watcher");
+        
+        let mut watcher_guard = self.watcher.lock().await;
+        let mut events_guard = self.watcher_events.lock().await;
+        
+        // Check if watcher is already active
+        if watcher_guard.is_some() {
+            return Ok(Response::new(StartWatcherResponse {
+                success: true,
+            }));
+        }
+        
+        // Create new watcher
+        match FileWatcher::new(Arc::clone(&self.db)) {
+            Ok((mut watcher, event_receiver)) => {
+                // Add configured watch paths
+                let config = CONFIG.as_ref()
+                    .map_err(|e| Status::internal(format!("Config error: {}", e)))?;
+                
+                for path in &config.paths {
+                    if let Err(e) = watcher.add_watch_path(PathBuf::from(path)) {
+                        warn!("Failed to add watch path {}: {}", path, e);
+                    }
+                }
+                
+                // Store watcher and event receiver
+                *watcher_guard = Some(watcher);
+                *events_guard = Some(event_receiver);
+                
+                info!("File watcher started successfully");
+                Ok(Response::new(StartWatcherResponse {
+                    success: true,
+                }))
+            }
+            Err(e) => {
+                error!("Failed to create file watcher: {}", e);
+                Err(Status::internal(format!("Failed to start watcher: {}", e)))
+            }
+        }
     }
 
     async fn stop_watcher(
         &self,
         _request: Request<StopWatcherRequest>,
     ) -> Result<Response<StopWatcherResponse>, Status> {
-        Err(Status::unimplemented("File watcher not yet implemented"))
+        debug!("Stopping file watcher");
+        
+        let mut watcher_guard = self.watcher.lock().await;
+        let mut events_guard = self.watcher_events.lock().await;
+        
+        // Check if watcher is active
+        if watcher_guard.is_none() {
+            return Ok(Response::new(StopWatcherResponse {
+                success: true,
+            }));
+        }
+        
+        // Stop the watcher by dropping it
+        *watcher_guard = None;
+        *events_guard = None;
+        
+        info!("File watcher stopped successfully");
+        Ok(Response::new(StopWatcherResponse {
+            success: true,
+        }))
     }
 
     type GetWatcherEventsStream = ReceiverStream<Result<WatcherEventResponse, Status>>;
@@ -696,7 +758,55 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         _request: Request<GetWatcherEventsRequest>,
     ) -> Result<Response<Self::GetWatcherEventsStream>, Status> {
-        Err(Status::unimplemented("File watcher not yet implemented"))
+        debug!("Getting watcher events stream");
+        
+        let mut events_guard = self.watcher_events.lock().await;
+        
+        // Check if watcher is active and has events
+        if let Some(event_receiver) = events_guard.take() {
+            let (tx, rx) = mpsc::channel(100);
+            
+            // Spawn a task to convert FileEvent to WatcherEventResponse
+            tokio::spawn(async move {
+                while let Ok(file_event) = event_receiver.recv() {
+                    let watcher_event = match file_event {
+                        FileEvent::Created(path) => WatcherEventResponse {
+                            event_type: WatcherEventType::WatcherCreated as i32,
+                            path: path.to_string_lossy().to_string(),
+                            new_path: None,
+                            timestamp: chrono::Utc::now().timestamp(),
+                        },
+                        FileEvent::Modified(path) => WatcherEventResponse {
+                            event_type: WatcherEventType::WatcherModified as i32,
+                            path: path.to_string_lossy().to_string(),
+                            new_path: None,
+                            timestamp: chrono::Utc::now().timestamp(),
+                        },
+                        FileEvent::Deleted(path) => WatcherEventResponse {
+                            event_type: WatcherEventType::WatcherDeleted as i32,
+                            path: path.to_string_lossy().to_string(),
+                            new_path: None,
+                            timestamp: chrono::Utc::now().timestamp(),
+                        },
+                        FileEvent::Renamed { from, to } => WatcherEventResponse {
+                            event_type: WatcherEventType::WatcherRenamed as i32,
+                            path: from.to_string_lossy().to_string(),
+                            new_path: Some(to.to_string_lossy().to_string()),
+                            timestamp: chrono::Utc::now().timestamp(),
+                        },
+                    };
+                    
+                    if tx.send(Ok(watcher_event)).await.is_err() {
+                        break;
+                    }
+                }
+            });
+            
+            let stream = ReceiverStream::new(rx);
+            Ok(Response::new(stream))
+        } else {
+            Err(Status::failed_precondition("Watcher not active"))
+        }
     }
 
     async fn get_system_info(
@@ -706,10 +816,14 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         let config = CONFIG.as_ref()
             .map_err(|e| Status::new(Code::Internal, format!("Config error: {}", e)))?;
         
+        // Check if watcher is active
+        let watcher_guard = self.watcher.lock().await;
+        let watcher_active = watcher_guard.is_some();
+        
         let response = GetSystemInfoResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
             watch_paths: config.paths.clone(),
-            watcher_active: false, // TODO: Implement actual watcher status
+            watcher_active,
             uptime_seconds: 0, // TODO: Track actual uptime
         };
         
