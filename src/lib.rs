@@ -14,14 +14,14 @@ pub mod scan;
 pub mod utils;
 pub mod watcher;
 
-// Re-export commonly used items for easier imports in tests
+// Re-export commonly used items for easier imports
 pub use config::CONFIG;
 pub use database::LiveSetDatabase;
 pub use live_set::LiveSet;
 pub use models::*;
 pub use utils::decompress_gzip_file;
 
-// Re-export functions from main that are used by other modules
+// Core processing functions
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
