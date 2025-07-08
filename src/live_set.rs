@@ -15,11 +15,11 @@ use crate::utils::{decompress_gzip_file, validate_ableton_file};
 
 #[derive(Debug)]
 pub struct LiveSetPreprocessed {
-    pub(crate) path: PathBuf,
-    pub(crate) name: String,
-    pub(crate) file_hash: String,
-    pub(crate) created_time: DateTime<Local>,
-    pub(crate) modified_time: DateTime<Local>,
+    pub path: PathBuf,
+    pub name: String,
+    pub file_hash: String,
+    pub created_time: DateTime<Local>,
+    pub modified_time: DateTime<Local>,
 }
 
 impl LiveSetPreprocessed {
@@ -43,27 +43,27 @@ impl LiveSetPreprocessed {
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct LiveSet {
-    pub(crate) is_active: bool,
+    pub is_active: bool,
 
-    pub(crate) id: Uuid,
-    pub(crate) file_path: PathBuf,
-    pub(crate) name: String,
-    pub(crate) file_hash: String,
-    pub(crate) created_time: DateTime<Local>,
-    pub(crate) modified_time: DateTime<Local>,
-    pub(crate) last_parsed_timestamp: DateTime<Local>,
+    pub id: Uuid,
+    pub file_path: PathBuf,
+    pub name: String,
+    pub file_hash: String,
+    pub created_time: DateTime<Local>,
+    pub modified_time: DateTime<Local>,
+    pub last_parsed_timestamp: DateTime<Local>,
 
-    pub(crate) ableton_version: AbletonVersion,
+    pub ableton_version: AbletonVersion,
 
-    pub(crate) key_signature: Option<KeySignature>,
-    pub(crate) tempo: f64,
-    pub(crate) time_signature: TimeSignature,
-    pub(crate) furthest_bar: Option<f64>,
-    pub(crate) plugins: HashSet<Plugin>,
-    pub(crate) samples: HashSet<Sample>,
-    pub(crate) tags: HashSet<String>,
+    pub key_signature: Option<KeySignature>,
+    pub tempo: f64,
+    pub time_signature: TimeSignature,
+    pub furthest_bar: Option<f64>,
+    pub plugins: HashSet<Plugin>,
+    pub samples: HashSet<Sample>,
+    pub tags: HashSet<String>,
 
-    pub(crate) estimated_duration: Option<chrono::Duration>,
+    pub estimated_duration: Option<chrono::Duration>,
 }
 
 impl LiveSet {

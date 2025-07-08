@@ -15,7 +15,7 @@ use crate::error::{DatabaseError, SampleError, TimeSignatureError};
 use crate::utils::plugins::get_most_recent_db_file;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct Id(u64);
+pub struct Id(u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AbletonVersion {
@@ -69,7 +69,7 @@ impl Ord for AbletonVersion {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 #[allow(dead_code)]
-pub(crate) enum Scale {
+pub enum Scale {
     Empty,
     Major,
     Minor,
@@ -109,7 +109,7 @@ pub(crate) enum Scale {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 #[allow(dead_code)]
-pub(crate) enum Tonic {
+pub enum Tonic {
     Empty,
     C,
     CSharp,
@@ -237,7 +237,7 @@ impl fmt::Display for Scale {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct KeySignature {
+pub struct KeySignature {
     pub tonic: Tonic,
     pub scale: Scale,
 }
@@ -259,7 +259,7 @@ pub enum PluginFormat {
 }
 
 impl PluginFormat {
-    pub(crate) fn random() -> Self {
+    pub fn random() -> Self {
         let variants = [
             PluginFormat::VST2Instrument,
             PluginFormat::VST2AudioFx,
@@ -269,7 +269,7 @@ impl PluginFormat {
         *variants.choose(&mut thread_rng()).unwrap()
     }
 
-    pub(crate) fn to_dev_type_and_category(self) -> (&'static str, &'static str) {
+    pub fn to_dev_type_and_category(self) -> (&'static str, &'static str) {
         match self {
             PluginFormat::VST2Instrument => ("vst", "instr"),
             PluginFormat::VST2AudioFx => ("vst", "audiofx"),
@@ -293,25 +293,25 @@ impl fmt::Display for PluginFormat {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Plugin {
     // Our database ID
-    pub(crate) id: Uuid,
+    pub id: Uuid,
     // Ableton database IDs
-    pub(crate) plugin_id: Option<i32>,
-    pub(crate) module_id: Option<i32>,
-    pub(crate) dev_identifier: String,
-    pub(crate) name: String,
-    pub(crate) vendor: Option<String>,
-    pub(crate) version: Option<String>,
-    pub(crate) sdk_version: Option<String>,
-    pub(crate) flags: Option<i32>,
-    pub(crate) scanstate: Option<i32>,
-    pub(crate) enabled: Option<i32>,
-    pub(crate) plugin_format: PluginFormat,
-    pub(crate) installed: bool,
+    pub plugin_id: Option<i32>,
+    pub module_id: Option<i32>,
+    pub dev_identifier: String,
+    pub name: String,
+    pub vendor: Option<String>,
+    pub version: Option<String>,
+    pub sdk_version: Option<String>,
+    pub flags: Option<i32>,
+    pub scanstate: Option<i32>,
+    pub enabled: Option<i32>,
+    pub plugin_format: PluginFormat,
+    pub installed: bool,
 }
 
 #[allow(dead_code)]
 impl Plugin {
-    pub(crate) fn new(name: String, dev_identifier: String, plugin_format: PluginFormat) -> Self {
+    pub fn new(name: String, dev_identifier: String, plugin_format: PluginFormat) -> Self {
         Self {
             id: Uuid::new_v4(),
             plugin_id: None,
@@ -350,10 +350,10 @@ impl Plugin {
 
 #[derive(Debug)]
 #[allow(dead_code)]
-pub(crate) struct PluginInfo {
-    pub(crate) name: String,
-    pub(crate) dev_identifier: String,
-    pub(crate) plugin_format: PluginFormat,
+pub struct PluginInfo {
+    pub name: String,
+    pub dev_identifier: String,
+    pub plugin_format: PluginFormat,
 }
 
 impl fmt::Display for PluginInfo {
@@ -391,16 +391,16 @@ pub fn get_installed_plugins() -> Arc<Result<HashSet<(String, PluginFormat)>, Da
 // Sample types
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Sample {
-    pub(crate) id: Uuid,
-    pub(crate) name: String,
-    pub(crate) path: PathBuf,
-    pub(crate) is_present: bool,
+pub struct Sample {
+    pub id: Uuid,
+    pub name: String,
+    pub path: PathBuf,
+    pub is_present: bool,
 }
 
 #[allow(dead_code)]
 impl Sample {
-    pub(crate) fn new(name: String, path: PathBuf) -> Self {
+    pub fn new(name: String, path: PathBuf) -> Self {
         let is_present = path.exists();
         Self {
             id: Uuid::new_v4(),
@@ -410,7 +410,7 @@ impl Sample {
         }
     }
 
-    pub(crate) fn from_pre_11_data(data: &str) -> Result<Self, SampleError> {
+    pub fn from_pre_11_data(data: &str) -> Result<Self, SampleError> {
         let cleaned_data = data.replace('\t', "").replace('\n', "");
         let byte_data = hex::decode(&cleaned_data).map_err(SampleError::HexDecodeError)?;
 
@@ -438,7 +438,7 @@ impl Sample {
         Ok(Self::new(name, path))
     }
 
-    pub(crate) fn from_11_plus_data(path_value: &str) -> Self {
+    pub fn from_11_plus_data(path_value: &str) -> Self {
         let path = PathBuf::from(path_value);
         let name = path
             .file_name()
@@ -448,19 +448,19 @@ impl Sample {
         Self::new(name, path)
     }
 
-    pub(crate) fn is_present(&self) -> bool {
+    pub fn is_present(&self) -> bool {
         self.is_present
     }
 
-    pub(crate) fn update_presence(&mut self) {
+    pub fn update_presence(&mut self) {
         self.is_present = self.path.exists();
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct TimeSignature {
-    pub(crate) numerator: u8,
-    pub(crate) denominator: u8,
+    pub numerator: u8,
+    pub denominator: u8,
 }
 
 impl TimeSignature {

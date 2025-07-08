@@ -98,46 +98,46 @@ impl Default for ParseOptions {
 /// Holds the results of the parsing process
 #[derive(Default)]
 #[allow(dead_code)]
-pub(crate) struct ParseResult {
-    pub(crate) version: AbletonVersion,
-    pub(crate) samples: HashSet<Sample>,
-    pub(crate) plugins: HashSet<Plugin>,
-    pub(crate) tempo: f64,
-    pub(crate) time_signature: TimeSignature,
-    pub(crate) furthest_bar: Option<f64>,
-    pub(crate) key_signature: Option<KeySignature>,
+pub struct ParseResult {
+    pub version: AbletonVersion,
+    pub samples: HashSet<Sample>,
+    pub plugins: HashSet<Plugin>,
+    pub tempo: f64,
+    pub time_signature: TimeSignature,
+    pub furthest_bar: Option<f64>,
+    pub key_signature: Option<KeySignature>,
 }
 
 /// The main parser that processes the XML data
 #[allow(dead_code)]
 pub struct Parser {
     // Core parser state
-    pub(crate) state: ParserState,
-    pub(crate) depth: i32,
-    pub(crate) ableton_version: AbletonVersion,
-    pub(crate) options: ParseOptions,
-    pub(crate) line_tracker: LineTrackingBuffer,
+    pub state: ParserState,
+    pub depth: i32,
+    pub ableton_version: AbletonVersion,
+    pub options: ParseOptions,
+    pub line_tracker: LineTrackingBuffer,
 
     // Sample parsing state
-    pub(crate) sample_paths: HashSet<PathBuf>,
-    pub(crate) current_sample_data: Option<String>,
-    pub(crate) current_file_ref: Option<PathBuf>, // Tracks the current file reference being processed
-    pub(crate) current_path_type: Option<PathType>, // Tracks whether we're processing a direct or encoded path
+    pub sample_paths: HashSet<PathBuf>,
+    pub current_sample_data: Option<String>,
+    pub current_file_ref: Option<PathBuf>, // Tracks the current file reference being processed
+    pub current_path_type: Option<PathType>, // Tracks whether we're processing a direct or encoded path
 
     // Plugin parsing state
-    pub(crate) current_branch_info: Option<String>,
-    pub(crate) plugin_info_tags: HashMap<String, PluginInfo>,
-    pub(crate) in_source_context: bool,
-    pub(crate) plugin_info_processed: bool,
+    pub current_branch_info: Option<String>,
+    pub plugin_info_tags: HashMap<String, PluginInfo>,
+    pub in_source_context: bool,
+    pub plugin_info_processed: bool,
 
     // Tempo and timing state
-    pub(crate) dev_identifiers: Arc<parking_lot::RwLock<HashMap<String, ()>>>,
-    pub(crate) current_tempo: f64,
-    pub(crate) current_time_signature: TimeSignature,
-    pub(crate) current_end_times: Vec<f64>,
+    pub dev_identifiers: Arc<parking_lot::RwLock<HashMap<String, ()>>>,
+    pub current_tempo: f64,
+    pub current_time_signature: TimeSignature,
+    pub current_end_times: Vec<f64>,
 
     // Initialize key parsing state
-    pub(crate) key_frequencies: HashMap<KeySignature, usize>,
+    pub key_frequencies: HashMap<KeySignature, usize>,
     current_scale_info: Option<(Tonic, Scale)>,
     current_clip_in_key: bool,
 }
@@ -262,7 +262,7 @@ impl Parser {
     }
 
     /// Main parsing function that processes the XML data
-    pub(crate) fn parse(&mut self, xml_data: &[u8]) -> Result<ParseResult, LiveSetError> {
+    pub fn parse(&mut self, xml_data: &[u8]) -> Result<ParseResult, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
         reader.config_mut().trim_text(true);
         let mut buf = Vec::new();
@@ -318,7 +318,7 @@ impl Parser {
 
     /// Converts the parser's state into the final ParseResult
     #[cfg(test)]
-    pub(crate) fn finalize_result(
+    pub fn finalize_result(
         &self,
         mut result: ParseResult,
     ) -> Result<ParseResult, LiveSetError> {
@@ -614,7 +614,7 @@ impl Parser {
         Ok(result)
     }
 
-    pub(crate) fn handle_start_event<R: BufRead>(
+    pub fn handle_start_event<R: BufRead>(
         &mut self,
         event: &quick_xml::events::BytesStart,
         reader: &mut Reader<R>,
@@ -1159,7 +1159,7 @@ impl Parser {
         Ok(())
     }
 
-    pub(crate) fn handle_end_event(
+    pub fn handle_end_event(
         &mut self,
         event: &quick_xml::events::BytesEnd,
     ) -> Result<(), LiveSetError> {
@@ -1354,7 +1354,7 @@ impl Parser {
         Ok(())
     }
 
-    pub(crate) fn handle_text_event(
+    pub fn handle_text_event(
         &mut self,
         event: &quick_xml::events::BytesText,
     ) -> Result<(), LiveSetError> {
