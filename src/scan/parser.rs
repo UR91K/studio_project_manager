@@ -116,7 +116,7 @@ pub struct Parser {
     pub depth: i32,
     pub ableton_version: AbletonVersion,
     pub options: ParseOptions,
-    pub line_tracker: LineTrackingBuffer,
+    line_tracker: LineTrackingBuffer,
 
     // Sample parsing state
     pub sample_paths: HashSet<PathBuf>,
@@ -317,159 +317,10 @@ impl Parser {
     }
 
     /// Converts the parser's state into the final ParseResult
-    #[cfg(test)]
     pub fn finalize_result(
         &self,
         mut result: ParseResult,
     ) -> Result<ParseResult, LiveSetError> {
-        // Set the version
-        result.version = self.ableton_version;
-
-        // Validate and set tempo (must be between 10 and 999 BPM)
-        if self.current_tempo < 10.0 || self.current_tempo > 999.0 {
-            return Err(LiveSetError::InvalidProject(format!(
-                "Invalid tempo value: {}",
-                self.current_tempo
-            )));
-        }
-        result.tempo = self.current_tempo;
-
-        // Validate and set time signature (required for a valid project)
-        if self.current_time_signature.is_valid() {
-            result.time_signature = self.current_time_signature.clone();
-        } else {
-            return Err(LiveSetError::InvalidProject(format!(
-                "Invalid time signature: {}/{}",
-                self.current_time_signature.numerator, self.current_time_signature.denominator
-            )));
-        }
-
-        // Calculate furthest bar if requested and we have end times
-        if self.options.calculate_furthest_bar && !self.current_end_times.is_empty() {
-            let beats_per_bar = result.time_signature.numerator as f64;
-            let max_end_time = self
-                .current_end_times
-                .iter()
-                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-            result.furthest_bar = Some(max_end_time / beats_per_bar);
-
-            trace_fn!(
-                "finalize_result",
-                "Calculated furthest bar: {} (max end time: {}, beats per bar: {})",
-                result.furthest_bar.unwrap(),
-                max_end_time,
-                beats_per_bar
-            );
-        }
-
-        // Convert sample paths to Sample structs
-        for path in &self.sample_paths {
-            result.samples.insert(Sample::new(
-                path.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned(),
-                path.clone(),
-            ));
-        }
-
-        // Convert plugin info tags to Plugin instances
-        let config = CONFIG
-            .as_ref()
-            .map_err(|e| LiveSetError::ConfigError(e.clone()))?;
-        let db_dir = &config.live_database_dir;
-        let db_path =
-            get_most_recent_db_file(&PathBuf::from(db_dir)).map_err(LiveSetError::DatabaseError)?;
-        let ableton_db = AbletonDatabase::new(db_path).map_err(LiveSetError::DatabaseError)?;
-
-        for (dev_identifier, info) in &self.plugin_info_tags {
-            let db_plugin = ableton_db
-                .get_plugin_by_dev_identifier(dev_identifier)
-                .map_err(LiveSetError::DatabaseError)?;
-
-            let plugin = match db_plugin {
-                Some(db_plugin) => {
-                    trace_fn!(
-                        "finalize_result",
-                        "Found plugin {} {} on system, flagging as installed",
-                        db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
-                        db_plugin.name.green()
-                    );
-                    Plugin {
-                        id: Uuid::new_v4(),
-                        plugin_id: Some(db_plugin.plugin_id),
-                        module_id: db_plugin.module_id,
-                        dev_identifier: db_plugin.dev_identifier.clone(),
-                        name: db_plugin.name.clone(),
-                        vendor: db_plugin.vendor.clone(),
-                        version: db_plugin.version.clone(),
-                        sdk_version: db_plugin.sdk_version.clone(),
-                        flags: db_plugin.flags,
-                        scanstate: db_plugin.parsestate,
-                        enabled: db_plugin.enabled,
-                        plugin_format: info.plugin_format,
-                        installed: true,
-                    }
-                }
-                None => {
-                    trace_fn!(
-                        "finalize_result",
-                        "Plugin not found in database: {:?}",
-                        info
-                    );
-                    Plugin {
-                        id: Uuid::new_v4(),
-                        plugin_id: None,
-                        module_id: None,
-                        dev_identifier: dev_identifier.clone(),
-                        name: info.name.clone(),
-                        vendor: None,
-                        version: None,
-                        sdk_version: None,
-                        flags: None,
-                        scanstate: None,
-                        enabled: None,
-                        plugin_format: info.plugin_format,
-                        installed: false,
-                    }
-                }
-            };
-            result.plugins.insert(plugin);
-        }
-
-        // Handle key signature if requested
-        // TODO: add fallback to key detection using midi data, use music21 python script to detect key
-        if self.options.parse_key {
-            // Find the most frequent key signature
-            let most_frequent_key = self
-                .key_frequencies
-                .iter()
-                .max_by_key(|&(_, count)| count)
-                .map(|(key, count)| {
-                    trace_fn!(
-                        "finalize_result",
-                        "Found most frequent key signature: {} (count: {})",
-                        key,
-                        count
-                    );
-                    key.clone()
-                })
-                .unwrap_or_else(|| {
-                    trace_fn!("finalize_result", "No key signatures found, using default");
-                    KeySignature::default()
-                });
-
-            result.key_signature = Some(most_frequent_key);
-        } else {
-            result.key_signature = None;
-        }
-
-        Ok(result)
-    }
-
-    /// Converts the parser's state into the final ParseResult
-    #[cfg(not(test))]
-    fn finalize_result(&self, mut result: ParseResult) -> Result<ParseResult, LiveSetError> {
         // Set the version
         result.version = self.ableton_version;
 
@@ -613,6 +464,8 @@ impl Parser {
 
         Ok(result)
     }
+    
+
 
     pub fn handle_start_event<R: BufRead>(
         &mut self,

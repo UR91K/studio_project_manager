@@ -11,7 +11,6 @@ pub mod grpc;
 pub mod live_set;
 pub mod models;
 pub mod scan;
-pub mod test_utils;
 pub mod utils;
 pub mod watcher;
 
@@ -20,6 +19,7 @@ pub use config::CONFIG;
 pub use database::LiveSetDatabase;
 pub use live_set::LiveSet;
 pub use models::*;
+pub use utils::decompress_gzip_file;
 
 // Re-export functions from main that are used by other modules
 use std::collections::HashSet;
@@ -29,9 +29,9 @@ use std::sync::mpsc::RecvTimeoutError;
 use log::{info, debug, error};
 use crate::database::batch::BatchInsertManager;
 use crate::scan::parallel::ParallelParser;
-use crate::scan::project_scanner::ProjectPathScanner;
 use crate::error::LiveSetError;
 use crate::live_set::LiveSetPreprocessed;
+use crate::scan::project_scanner::ProjectPathScanner;
 
 pub fn process_projects() -> Result<(), LiveSetError> {
     // Implementation moved from main.rs
@@ -134,7 +134,7 @@ pub fn process_projects() -> Result<(), LiveSetError> {
     Ok(())
 }
 
-pub fn process_projects_with_progress<F>(mut progress_callback: F) -> Result<(), LiveSetError> 
+pub fn process_projects_with_progress<F>(_progress_callback: F) -> Result<(), LiveSetError> 
 where 
     F: FnMut(u32, u32, f32, String, &str) + Send + 'static,
 {

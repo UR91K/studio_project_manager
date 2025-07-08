@@ -200,7 +200,7 @@ pub(crate) fn format_file_size(size: u64) -> String {
 /// let decompressed_data = decompress_gzip_file(&file_path).expect("Failed to decompress file");
 /// println!("Decompressed {} bytes", decompressed_data.len());
 /// ```
-pub(crate) fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
+pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
     trace!("Attempting to extract gzipped data from: {:?}", file_path);
     trace!("Opening file for gzip decompression");
 

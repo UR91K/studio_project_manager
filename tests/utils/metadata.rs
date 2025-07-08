@@ -1,13 +1,22 @@
-//! Metadata utility tests
-//!
-//! MIGRATION INSTRUCTIONS:
-//! Move the test from src/utils/metadata.rs:
-//! - test_parse_musical_key() (line ~83)
-//! And any other tests from the utils modules
+use std::path::PathBuf;
 
-use super::*;
-use crate::common::setup;
+use studio_project_manager::utils::metadata::load_file_name;
 
-// TODO: Move test_parse_musical_key() from src/utils/metadata.rs (around line 83)
-// TODO: Check other files in src/utils/ for any additional tests
-// TODO: These would be tests of utility functions rather than core business logic 
+#[test]
+fn test_load_file_name() {
+    // Test file with extension
+    let path = PathBuf::from("C:/Users/jake/Desktop/test_file.txt");
+    assert_eq!(load_file_name(&path).unwrap(), "test_file.txt");
+
+    // Test file without extension
+    let path = PathBuf::from("C:/Users/jake/Desktop/test_file");
+    assert_eq!(load_file_name(&path).unwrap(), "test_file");
+
+    // Test file with multiple extensions
+    let path = PathBuf::from("C:/Users/jake/Desktop/test_file.tar.gz");
+    assert_eq!(load_file_name(&path).unwrap(), "test_file.tar.gz");
+
+    // Test file with dots in name
+    let path = PathBuf::from("C:/Users/jake/Desktop/test.file.name.txt");
+    assert_eq!(load_file_name(&path).unwrap(), "test.file.name.txt");
+}

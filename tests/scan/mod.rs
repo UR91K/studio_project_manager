@@ -7,7 +7,7 @@ pub mod parser;
 pub mod parallel;
 
 // Common imports for scanning tests
-use studio_project_manager::scan::*;
-use crate::common::setup;
-use std::path::PathBuf;
-use tempfile::TempDir; 
+// use studio_project_manager::scan::*;
+// use crate::common::setup;
+// use std::path::PathBuf;
+// use tempfile::TempDir; 

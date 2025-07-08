@@ -1,4 +1,3 @@
-#![allow(dead_code, unused)]
-mod file_watcher;
-mod file_watcher_test;
+#![allow(unused)]
+pub mod file_watcher;
 pub use file_watcher::FileWatcher;

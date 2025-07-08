@@ -1,21 +1,84 @@
 //! Project scanner tests
-//!
-//! MIGRATION INSTRUCTIONS:
-//! Move the entire tests module from src/scan/project_scanner.rs (starting around line 60)
-//! Including:
-//! - create_test_file() helper function (line ~66)
-//! - test_basic_file_detection() (line ~73)
-//! - test_backup_file_exclusion() (line ~89)
-//! - test_nested_directory_scanning() (line ~105)
-//! - test_multiple_directory_scanning() (line ~125)
 
-use super::*;
-use crate::common::setup;
-use studio_project_manager::scan::project_scanner::ProjectPathScanner;
+use std::path::{Path, PathBuf};
 use std::fs::{self, File};
-use std::path::Path;
+use studio_project_manager::scan::project_scanner::ProjectPathScanner;
 use tempfile::TempDir;
 
-// TODO: Move create_test_file() helper function from src/scan/project_scanner.rs (around line 66)
-// TODO: Move all 4 tests from src/scan/project_scanner.rs tests module
-// TODO: Update any imports as needed 
+fn create_test_file(dir: &Path, name: &str) -> PathBuf {
+    let path = dir.join(name);
+    File::create(&path).unwrap();
+    path
+}
+
+#[test]
+fn test_basic_file_detection() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create test files
+    create_test_file(temp_dir.path(), "project1.als");
+    create_test_file(temp_dir.path(), "project2.als");
+    create_test_file(temp_dir.path(), "not_a_project.txt");
+    
+    let scanner = ProjectPathScanner::new().unwrap();
+    let paths = scanner.scan_directory(temp_dir.path()).unwrap();
+    
+    assert_eq!(paths.len(), 2);
+    assert!(paths.iter().all(|p| p.extension().unwrap() == "als"));
+}
+
+#[test]
+fn test_backup_file_exclusion() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create test files
+    create_test_file(temp_dir.path(), "project.als");
+    create_test_file(temp_dir.path(), "project [2023-10-15 123456].als");
+    create_test_file(temp_dir.path(), "another [2023-11-20 154321].als");
+    
+    let scanner = ProjectPathScanner::new().unwrap();
+    let paths = scanner.scan_directory(temp_dir.path()).unwrap();
+    
+    assert_eq!(paths.len(), 1);
+    assert_eq!(paths[0].file_name().unwrap(), "project.als");
+}
+
+#[test]
+fn test_nested_directory_scanning() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create nested directory structure
+    let sub_dir = temp_dir.path().join("subdir");
+    fs::create_dir(&sub_dir).unwrap();
+    
+    create_test_file(temp_dir.path(), "root.als");
+    create_test_file(&sub_dir, "nested.als");
+    create_test_file(&sub_dir, "nested [2023-10-15 123456].als");
+    
+    let scanner = ProjectPathScanner::new().unwrap();
+    let paths = scanner.scan_directory(temp_dir.path()).unwrap();
+    
+    assert_eq!(paths.len(), 2);
+    assert!(paths.iter().any(|p| p.file_name().unwrap() == "root.als"));
+    assert!(paths.iter().any(|p| p.file_name().unwrap() == "nested.als"));
+}
+
+#[test]
+fn test_multiple_directory_scanning() {
+    let temp_dir1 = TempDir::new().unwrap();
+    let temp_dir2 = TempDir::new().unwrap();
+    
+    create_test_file(temp_dir1.path(), "project1.als");
+    create_test_file(temp_dir2.path(), "project2.als");
+    create_test_file(temp_dir2.path(), "project2 [2023-10-15 123456].als");
+    
+    let parser = ProjectPathScanner::new().unwrap();
+    let paths = parser.scan_directories(&[
+        temp_dir1.path().to_path_buf(),
+        temp_dir2.path().to_path_buf(),
+    ]).unwrap();
+    
+    assert_eq!(paths.len(), 2);
+    assert!(paths.iter().any(|p| p.file_name().unwrap() == "project1.als"));
+    assert!(paths.iter().any(|p| p.file_name().unwrap() == "project2.als"));
+}

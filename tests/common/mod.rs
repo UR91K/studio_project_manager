@@ -1,7 +1,6 @@
 //! Common test utilities and shared setup
-//! 
-//! This module contains all shared test utilities that were previously in src/test_utils.rs
 
+#![allow(unused)]
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Once};
