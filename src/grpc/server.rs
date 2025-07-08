@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::path::PathBuf;
+use std::time::Instant;
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Code};
@@ -23,6 +24,7 @@ pub struct StudioProjectManagerServer {
     pub media_storage: Arc<MediaStorageManager>,
     pub watcher: Arc<Mutex<Option<FileWatcher>>>,
     pub watcher_events: Arc<Mutex<Option<std::sync::mpsc::Receiver<FileEvent>>>>,
+    pub start_time: Instant,
 }
 
 impl StudioProjectManagerServer {
@@ -48,6 +50,7 @@ impl StudioProjectManagerServer {
             media_storage: Arc::new(media_storage),
             watcher: Arc::new(Mutex::new(None)),
             watcher_events: Arc::new(Mutex::new(None)),
+            start_time: Instant::now(),
         })
     }
 }
@@ -950,11 +953,13 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         let watcher_guard = self.watcher.lock().await;
         let watcher_active = watcher_guard.is_some();
         
+        let uptime_seconds = self.start_time.elapsed().as_secs() as i64;
+        
         let response = GetSystemInfoResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
             watch_paths: config.paths.clone(),
             watcher_active,
-            uptime_seconds: 0, // TODO: Track actual uptime
+            uptime_seconds,
         };
         
         Ok(Response::new(response))

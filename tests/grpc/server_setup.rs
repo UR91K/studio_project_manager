@@ -43,6 +43,7 @@ pub async fn create_test_server() -> StudioProjectManagerServer {
         media_storage: Arc::new(media_storage),
         watcher: Arc::new(Mutex::new(None)),
         watcher_events: Arc::new(Mutex::new(None)),
+        start_time: std::time::Instant::now(),
     }
 }
 
