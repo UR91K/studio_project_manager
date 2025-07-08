@@ -81,6 +81,31 @@ impl LiveSetDatabase {
         Ok(tags)
     }
 
+    /// Get tag IDs for a project (for gRPC responses)
+    pub fn get_project_tag_ids(&mut self, project_id: &str) -> Result<Vec<String>, DatabaseError> {
+        debug!("Getting tag IDs for project: {}", project_id);
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT t.id 
+            FROM tags t
+            JOIN project_tags pt ON pt.tag_id = t.id
+            WHERE pt.project_id = ?
+            "#,
+        )?;
+
+        let tag_ids: Vec<String> = stmt
+            .query_map([project_id], |row| {
+                let tag_id: String = row.get(0)?;
+                debug!("Found tag ID: {}", tag_id);
+                Ok(tag_id)
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Retrieved {} tag IDs for project", tag_ids.len());
+        Ok(tag_ids)
+    }
+
     pub fn get_projects_by_tag(&mut self, tag_id: &str) -> Result<Vec<LiveSet>, DatabaseError> {
         debug!("Getting projects with tag: {}", tag_id);
         let tx = self.conn.transaction()?;

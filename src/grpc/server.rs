@@ -11,6 +11,7 @@ use crate::database::LiveSetDatabase;
 use crate::database::search::SearchQuery;
 use crate::live_set::LiveSet;
 use crate::process_projects_with_progress;
+use crate::error::DatabaseError;
 
 use super::proto::*;
 
@@ -46,25 +47,33 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         debug!("GetProjects request: {:?}", request);
         
         let req = request.into_inner();
-        let db = self.db.lock().await;
+        let mut db = self.db.lock().await;
         match db.get_all_projects_with_status(None) {
             Ok(projects) => {
                 let total_count = projects.len() as i32;
-                
-                // Apply pagination: offset is always applied, limit only if specified
-                // This allows returning all ~4000 projects when no limit is set
                 let projects_iter = projects.into_iter().skip(req.offset.unwrap_or(0) as usize);
-                let proto_projects: Vec<Project> = if let Some(limit) = req.limit {
-                    projects_iter.take(limit as usize).map(|p| convert_live_set_to_proto(p)).collect()
+                let mut proto_projects = Vec::new();
+                
+                let projects_to_convert: Vec<LiveSet> = if let Some(limit) = req.limit {
+                    projects_iter.take(limit as usize).collect()
                 } else {
-                    projects_iter.map(|p| convert_live_set_to_proto(p)).collect()
+                    projects_iter.collect()
                 };
+                
+                for project in projects_to_convert {
+                    match convert_live_set_to_proto(project, &mut *db) {
+                        Ok(proto_project) => proto_projects.push(proto_project),
+                        Err(e) => {
+                            error!("Failed to convert project to proto: {:?}", e);
+                            return Err(Status::internal(format!("Database error: {}", e)));
+                        }
+                    }
+                }
                 
                 let response = GetProjectsResponse {
                     projects: proto_projects,
                     total_count,
                 };
-                
                 Ok(Response::new(response))
             }
             Err(e) => {
@@ -85,10 +94,18 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         
         match db.get_project(&req.project_id) {
             Ok(Some(project)) => {
-                let response = GetProjectResponse {
-                    project: Some(convert_live_set_to_proto(project)),
-                };
-                Ok(Response::new(response))
+                match convert_live_set_to_proto(project, &mut *db) {
+                    Ok(proto_project) => {
+                        let response = GetProjectResponse {
+                            project: Some(proto_project),
+                        };
+                        Ok(Response::new(response))
+                    }
+                    Err(e) => {
+                        error!("Failed to convert project to proto: {:?}", e);
+                        Err(Status::internal(format!("Database error: {}", e)))
+                    }
+                }
             }
             Ok(None) => {
                 let response = GetProjectResponse { project: None };
@@ -152,26 +169,34 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         let req = request.into_inner();
         let mut db = self.db.lock().await;
         
-        let search_query = SearchQuery::parse(&req.query);
+        let _search_query = SearchQuery::parse(&req.query);
         
-        match db.search_fts(&search_query) {
+        match db.search(&req.query) {
             Ok(search_results) => {
                 let total_count = search_results.len() as i32;
-                
-                // Apply pagination: offset is always applied, limit only if specified
-                // This allows returning all search results when no limit is set
                 let results_iter = search_results.into_iter().skip(req.offset.unwrap_or(0) as usize);
-                let projects: Vec<Project> = if let Some(limit) = req.limit {
-                    results_iter.take(limit as usize).map(|result| convert_live_set_to_proto(result.project)).collect()
+                let mut proto_projects = Vec::new();
+                
+                let projects_to_convert: Vec<LiveSet> = if let Some(limit) = req.limit {
+                    results_iter.take(limit as usize).collect()
                 } else {
-                    results_iter.map(|result| convert_live_set_to_proto(result.project)).collect()
+                    results_iter.collect()
                 };
+                
+                for project in projects_to_convert {
+                    match convert_live_set_to_proto(project, &mut *db) {
+                        Ok(proto_project) => proto_projects.push(proto_project),
+                        Err(e) => {
+                            error!("Failed to convert project to proto: {:?}", e);
+                            return Err(Status::internal(format!("Database error: {}", e)));
+                        }
+                    }
+                }
                 
                 let response = SearchResponse {
-                    projects,
+                    projects: proto_projects,
                     total_count,
                 };
-                
                 Ok(Response::new(response))
             }
             Err(e) => {
@@ -1049,13 +1074,51 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
 }
 
 // Helper function to convert LiveSet to protobuf Project
-fn convert_live_set_to_proto(live_set: LiveSet) -> Project {
-    Project {
-        id: live_set.id.to_string(),
+fn convert_live_set_to_proto(live_set: LiveSet, db: &mut LiveSetDatabase) -> Result<Project, DatabaseError> {
+    let project_id = live_set.id.to_string();
+    
+    // Load notes from database
+    let notes = db.get_project_notes(&project_id)?
+        .unwrap_or_default();
+    
+    // Load audio file ID from database
+    let audio_file_id = db.get_project_audio_file(&project_id)?
+        .map(|media_file| media_file.id);
+    
+    // Load collection associations from database
+    let collection_ids = db.get_collections_for_project(&project_id)?;
+    
+    // Load tag IDs from database
+    let tag_ids = db.get_project_tag_ids(&project_id)?;
+    
+    // Load tasks from database
+    let tasks = db.get_project_tasks(&project_id)?
+        .into_iter()
+        .map(|(task_id, description, completed)| super::proto::Task {
+            id: task_id,
+            description,
+            completed,
+            project_id: project_id.clone(), // Add project_id to Task
+            created_at: 0, // TODO: Add creation timestamp to database schema
+        })
+        .collect();
+    
+    // Convert tags with proper IDs
+    let tags = live_set.tags.into_iter()
+        .zip(tag_ids.into_iter())
+        .map(|(tag_name, tag_id)| super::proto::Tag {
+            id: tag_id,
+            name: tag_name,
+            created_at: 0, // TODO: Add creation timestamp to database schema
+        })
+        .collect();
+    
+    Ok(Project {
+        id: project_id,
         name: live_set.name,
         path: live_set.file_path.to_string_lossy().to_string(),
         hash: live_set.file_hash,
-        notes: String::new(), // TODO: Load actual notes from database
+        notes,
         created_at: live_set.created_time.timestamp(),
         modified_at: live_set.modified_time.timestamp(),
         last_parsed_at: live_set.last_parsed_timestamp.timestamp(),
@@ -1102,13 +1165,9 @@ fn convert_live_set_to_proto(live_set: LiveSet) -> Project {
             is_present: s.is_present,
         }).collect(),
         
-        tags: live_set.tags.into_iter().map(|tag_name| super::proto::Tag {
-            id: tag_name.clone(), // TODO: Use actual tag ID from database
-            name: tag_name,
-            created_at: 0, // TODO: Use actual creation timestamp from database
-        }).collect(),
-        tasks: vec![], // TODO: Load actual tasks
-        collection_ids: vec![], // TODO: Load actual collection associations
-        audio_file_id: None, // TODO: Get actual audio file ID from database
-    }
+        tags,
+        tasks,
+        collection_ids,
+        audio_file_id,
+    })
 }

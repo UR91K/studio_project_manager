@@ -442,4 +442,24 @@ impl LiveSetDatabase {
         debug!("Retrieved all collections");
         Ok(collections)
     }
+
+    /// Get all collection IDs that contain a specific project
+    pub fn get_collections_for_project(&mut self, project_id: &str) -> Result<Vec<String>, DatabaseError> {
+        debug!("Getting collections for project: {}", project_id);
+        let mut stmt = self.conn.prepare(
+            "SELECT collection_id FROM collection_projects WHERE project_id = ?"
+        )?;
+
+        let collection_ids: Vec<String> = stmt
+            .query_map([project_id], |row| {
+                let collection_id: String = row.get(0)?;
+                debug!("Found collection: {}", collection_id);
+                Ok(collection_id)
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Retrieved {} collections for project", collection_ids.len());
+        Ok(collection_ids)
+    }
 }
