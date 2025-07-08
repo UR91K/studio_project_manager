@@ -1398,28 +1398,27 @@ fn convert_live_set_to_proto(live_set: LiveSet, db: &mut LiveSetDatabase) -> Res
     // Load collection associations from database
     let collection_ids = db.get_collections_for_project(&project_id)?;
     
-    // Load tag IDs from database
-    let tag_ids = db.get_project_tag_ids(&project_id)?;
+    // Load tag data from database
+    let tag_data = db.get_project_tag_data(&project_id)?;
     
     // Load tasks from database
     let tasks = db.get_project_tasks(&project_id)?
         .into_iter()
-        .map(|(task_id, description, completed)| super::proto::Task {
+        .map(|(task_id, description, completed, created_at)| super::proto::Task {
             id: task_id,
             description,
             completed,
             project_id: project_id.clone(), // Add project_id to Task
-            created_at: 0, // TODO: Add creation timestamp to database schema
+            created_at,
         })
         .collect();
     
-    // Convert tags with proper IDs
-    let tags = live_set.tags.into_iter()
-        .zip(tag_ids.into_iter())
-        .map(|(tag_name, tag_id)| super::proto::Tag {
+    // Convert tags with proper IDs and creation timestamps
+    let tags = tag_data.into_iter()
+        .map(|(tag_id, tag_name, created_at)| super::proto::Tag {
             id: tag_id,
             name: tag_name,
-            created_at: 0, // TODO: Add creation timestamp to database schema
+            created_at,
         })
         .collect();
     

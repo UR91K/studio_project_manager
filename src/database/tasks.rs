@@ -39,29 +39,30 @@ impl LiveSetDatabase {
         Ok(())
     }
 
-    pub fn get_project_tasks(&mut self, project_id: &str) -> Result<Vec<(String, String, bool)>, DatabaseError> {
+    pub fn get_project_tasks(&mut self, project_id: &str) -> Result<Vec<(String, String, bool, i64)>, DatabaseError> {
         debug!("Getting tasks for project {}", project_id);
         let mut stmt = self.conn.prepare(
-            "SELECT id, description, completed FROM project_tasks WHERE project_id = ? ORDER BY created_at"
+            "SELECT id, description, completed, created_at FROM project_tasks WHERE project_id = ? ORDER BY created_at"
         )?;
 
         let tasks = stmt.query_map([project_id], |row| {
             let id: String = row.get(0)?;
             let description: String = row.get(1)?;
             let completed: bool = row.get(2)?;
-            debug!("Found task: {} ({})", description, id);
-            Ok((id, description, completed))
+            let created_at: i64 = row.get(3)?;
+            debug!("Found task: {} ({}) created at {}", description, id, created_at);
+            Ok((id, description, completed, created_at))
         })?.filter_map(|r| r.ok()).collect();
 
         debug!("Successfully retrieved project tasks");
         Ok(tasks)
     }
 
-    pub fn get_collection_tasks(&mut self, collection_id: &str) -> Result<Vec<(String, String, String, bool)>, DatabaseError> {
+    pub fn get_collection_tasks(&mut self, collection_id: &str) -> Result<Vec<(String, String, String, bool, i64)>, DatabaseError> {
         debug!("Getting tasks for all projects in collection {}", collection_id);
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT t.id, p.name, t.description, t.completed
+            SELECT t.id, p.name, t.description, t.completed, t.created_at
             FROM project_tasks t
             JOIN projects p ON p.id = t.project_id
             JOIN collection_projects cp ON cp.project_id = p.id
@@ -75,8 +76,9 @@ impl LiveSetDatabase {
             let project_name: String = row.get(1)?;
             let description: String = row.get(2)?;
             let completed: bool = row.get(3)?;
-            debug!("Found task: {} ({}) from project {}", description, id, project_name);
-            Ok((id, project_name, description, completed))
+            let created_at: i64 = row.get(4)?;
+            debug!("Found task: {} ({}) from project {} created at {}", description, id, project_name, created_at);
+            Ok((id, project_name, description, completed, created_at))
         })?.filter_map(|r| r.ok()).collect();
 
         debug!("Successfully retrieved collection tasks");

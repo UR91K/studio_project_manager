@@ -337,9 +337,9 @@ fn test_notes_and_tasks() {
     let project_tasks = db.get_project_tasks(&project_id)
         .expect("Failed to get project tasks");
     assert_eq!(project_tasks.len(), 3);
-    assert!(project_tasks.iter().any(|(_, desc, _)| desc == "Fix the bass mix"));
-    assert!(project_tasks.iter().any(|(_, desc, _)| desc == "Add more reverb"));
-    assert!(project_tasks.iter().any(|(_, desc, _)| desc == "Export final version"));
+    assert!(project_tasks.iter().any(|(_, desc, _, _)| desc == "Fix the bass mix"));
+    assert!(project_tasks.iter().any(|(_, desc, _, _)| desc == "Add more reverb"));
+    assert!(project_tasks.iter().any(|(_, desc, _, _)| desc == "Export final version"));
 
     // Test completing a task
     db.complete_task(&task1_id, true)
@@ -347,7 +347,7 @@ fn test_notes_and_tasks() {
     let project_tasks = db.get_project_tasks(&project_id)
         .expect("Failed to get project tasks after completion");
     let completed_task = project_tasks.iter()
-        .find(|(id, _, _)| id == &task1_id)
+        .find(|(id, _, _, _)| id == &task1_id)
         .expect("Couldn't find completed task");
     assert!(completed_task.2); // Check completion status
 
@@ -357,7 +357,7 @@ fn test_notes_and_tasks() {
     let project_tasks = db.get_project_tasks(&project_id)
         .expect("Failed to get project tasks after removal");
     assert_eq!(project_tasks.len(), 2);
-    assert!(!project_tasks.iter().any(|(id, _, _)| id == &task2_id));
+    assert!(!project_tasks.iter().any(|(id, _, _, _)| id == &task2_id));
 
     // Test getting collection tasks
     let collection_tasks = db.get_collection_tasks(&collection_id)
@@ -366,7 +366,7 @@ fn test_notes_and_tasks() {
     
     // Verify collection tasks contain project name and correct completion status
     let completed_collection_task = collection_tasks.iter()
-        .find(|(id, _, desc, _)| desc == "Fix the bass mix")
+        .find(|(id, _, desc, _, _)| desc == "Fix the bass mix")
         .expect("Couldn't find completed task in collection");
     assert!(completed_collection_task.3); // Check completion status
     assert_eq!(completed_collection_task.1, "test_project.als"); // Check project name

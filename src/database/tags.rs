@@ -106,6 +106,34 @@ impl LiveSetDatabase {
         Ok(tag_ids)
     }
 
+    /// Get tag data with creation timestamps for a project (for gRPC responses)
+    pub fn get_project_tag_data(&mut self, project_id: &str) -> Result<Vec<(String, String, i64)>, DatabaseError> {
+        debug!("Getting tag data for project: {}", project_id);
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT t.id, t.name, t.created_at
+            FROM tags t
+            JOIN project_tags pt ON pt.tag_id = t.id
+            WHERE pt.project_id = ?
+            ORDER BY t.created_at
+            "#,
+        )?;
+
+        let tag_data: Vec<(String, String, i64)> = stmt
+            .query_map([project_id], |row| {
+                let tag_id: String = row.get(0)?;
+                let tag_name: String = row.get(1)?;
+                let created_at: i64 = row.get(2)?;
+                debug!("Found tag: {} ({}) created at {}", tag_name, tag_id, created_at);
+                Ok((tag_id, tag_name, created_at))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Retrieved {} tag data entries for project", tag_data.len());
+        Ok(tag_data)
+    }
+
     pub fn get_projects_by_tag(&mut self, tag_id: &str) -> Result<Vec<LiveSet>, DatabaseError> {
         debug!("Getting projects with tag: {}", tag_id);
         let tx = self.conn.transaction()?;
