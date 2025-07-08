@@ -140,6 +140,10 @@ database_path = '{USER_HOME}/Documents/ableton_manager/ableton_live_sets.db'
 live_database_dir = '{USER_HOME}/AppData/Local/Ableton/Live Database'
 ```
 
+`paths` is for your project folders
+`database_path` is the path where you want your database to be stored. Leave blank for same directory as the executable.
+`live_database_dir` is the directory where Ableton stores it's database files (used during plugin detection.) Usually this will have a bunch of files with names like `Live-files-1218.db` in it.
+
 The `{USER_HOME}` placeholder will be automatically replaced with your user directory.
 
 ## Usage
