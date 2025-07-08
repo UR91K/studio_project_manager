@@ -32,6 +32,45 @@ impl LiveSetDatabase {
         Ok(())
     }
 
+    pub fn update_task_description(&mut self, task_id: &str, description: &str) -> Result<(), DatabaseError> {
+        debug!("Updating task {} description to: {}", task_id, description);
+        self.conn.execute(
+            "UPDATE project_tasks SET description = ? WHERE id = ?",
+            params![description, task_id],
+        )?;
+        debug!("Successfully updated task description");
+        Ok(())
+    }
+
+    pub fn get_task(&mut self, task_id: &str) -> Result<Option<(String, String, String, bool, i64)>, DatabaseError> {
+        debug!("Getting task by ID: {}", task_id);
+        let mut stmt = self.conn.prepare(
+            "SELECT id, project_id, description, completed, created_at FROM project_tasks WHERE id = ?"
+        )?;
+
+        let result = stmt.query_row([task_id], |row| {
+            let id: String = row.get(0)?;
+            let project_id: String = row.get(1)?;
+            let description: String = row.get(2)?;
+            let completed: bool = row.get(3)?;
+            let created_at: i64 = row.get(4)?;
+            debug!("Found task: {} ({}) for project {}", description, id, project_id);
+            Ok((id, project_id, description, completed, created_at))
+        });
+
+        match result {
+            Ok(task) => {
+                debug!("Successfully retrieved task");
+                Ok(Some(task))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                debug!("Task not found");
+                Ok(None)
+            }
+            Err(e) => Err(DatabaseError::from(e))
+        }
+    }
+
     pub fn remove_task(&mut self, task_id: &str) -> Result<(), DatabaseError> {
         debug!("Removing task {}", task_id);
         self.conn.execute("DELETE FROM project_tasks WHERE id = ?", [task_id])?;

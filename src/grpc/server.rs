@@ -654,31 +654,161 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
 
     async fn get_project_tasks(
         &self,
-        _request: Request<GetProjectTasksRequest>,
+        request: Request<GetProjectTasksRequest>,
     ) -> Result<Response<GetProjectTasksResponse>, Status> {
-        // TODO: Implement tasks
-        Ok(Response::new(GetProjectTasksResponse { tasks: vec![] }))
+        debug!("GetProjectTasks request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.get_project_tasks(&req.project_id) {
+            Ok(task_data) => {
+                let tasks = task_data.into_iter()
+                    .map(|(id, description, completed, created_at)| super::proto::Task {
+                        id,
+                        project_id: req.project_id.clone(),
+                        description,
+                        completed,
+                        created_at,
+                    })
+                    .collect();
+                
+                let response = GetProjectTasksResponse { tasks };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get tasks for project {}: {:?}", req.project_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn create_task(
         &self,
-        _request: Request<CreateTaskRequest>,
+        request: Request<CreateTaskRequest>,
     ) -> Result<Response<CreateTaskResponse>, Status> {
-        Err(Status::unimplemented("Tasks not yet implemented"))
+        debug!("CreateTask request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.add_task(&req.project_id, &req.description) {
+            Ok(task_id) => {
+                // Get the created task to return full details
+                match db.get_task(&task_id) {
+                    Ok(Some((id, project_id, description, completed, created_at))) => {
+                        let task = super::proto::Task {
+                            id,
+                            project_id,
+                            description,
+                            completed,
+                            created_at,
+                        };
+                        
+                        let response = CreateTaskResponse { task: Some(task) };
+                        Ok(Response::new(response))
+                    }
+                    Ok(None) => {
+                        error!("Task was created but could not be retrieved: {}", task_id);
+                        Err(Status::internal("Task created but could not be retrieved"))
+                    }
+                    Err(e) => {
+                        error!("Failed to retrieve created task {}: {:?}", task_id, e);
+                        Err(Status::internal(format!("Database error: {}", e)))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to create task for project {}: {:?}", req.project_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn update_task(
         &self,
-        _request: Request<UpdateTaskRequest>,
+        request: Request<UpdateTaskRequest>,
     ) -> Result<Response<UpdateTaskResponse>, Status> {
-        Err(Status::unimplemented("Tasks not yet implemented"))
+        debug!("UpdateTask request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        // Update description if provided
+        if let Some(description) = req.description {
+            if let Err(e) = db.update_task_description(&req.task_id, &description) {
+                error!("Failed to update task description for {}: {:?}", req.task_id, e);
+                return Err(Status::new(Code::Internal, format!("Database error: {}", e)));
+            }
+        }
+        
+        // Update completion status if provided
+        if let Some(completed) = req.completed {
+            if let Err(e) = db.complete_task(&req.task_id, completed) {
+                error!("Failed to update task completion status for {}: {:?}", req.task_id, e);
+                return Err(Status::new(Code::Internal, format!("Database error: {}", e)));
+            }
+        }
+        
+        // Get the updated task to return
+        match db.get_task(&req.task_id) {
+            Ok(Some((id, project_id, description, completed, created_at))) => {
+                let task = super::proto::Task {
+                    id,
+                    project_id,
+                    description,
+                    completed,
+                    created_at,
+                };
+                
+                let response = UpdateTaskResponse { task: Some(task) };
+                Ok(Response::new(response))
+            }
+            Ok(None) => {
+                error!("Task not found: {}", req.task_id);
+                Err(Status::not_found(format!("Task not found: {}", req.task_id)))
+            }
+            Err(e) => {
+                error!("Failed to retrieve updated task {}: {:?}", req.task_id, e);
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn delete_task(
         &self,
-        _request: Request<DeleteTaskRequest>,
+        request: Request<DeleteTaskRequest>,
     ) -> Result<Response<DeleteTaskResponse>, Status> {
-        Err(Status::unimplemented("Tasks not yet implemented"))
+        debug!("DeleteTask request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        // Check if task exists first
+        match db.get_task(&req.task_id) {
+            Ok(Some(_)) => {
+                // Task exists, proceed with deletion
+                match db.remove_task(&req.task_id) {
+                    Ok(()) => {
+                        debug!("Successfully deleted task: {}", req.task_id);
+                        let response = DeleteTaskResponse { success: true };
+                        Ok(Response::new(response))
+                    }
+                    Err(e) => {
+                        error!("Failed to delete task {}: {:?}", req.task_id, e);
+                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                    }
+                }
+            }
+            Ok(None) => {
+                error!("Task not found: {}", req.task_id);
+                Err(Status::not_found(format!("Task not found: {}", req.task_id)))
+            }
+            Err(e) => {
+                error!("Failed to check if task exists {}: {:?}", req.task_id, e);
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
+        }
     }
 
     async fn start_watcher(
