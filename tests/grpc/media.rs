@@ -38,7 +38,7 @@ async fn test_set_collection_cover_art_success() {
     };
     
     {
-        let mut db = server.db.lock().await;
+        let mut db = server.db().lock().await;
         db.insert_media_file(&media_file).unwrap();
     }
     
@@ -56,7 +56,7 @@ async fn test_set_collection_cover_art_success() {
     
     // Verify the association was created
     {
-        let db = server.db.lock().await;
+        let db = server.db().lock().await;
         let cover_art = db.get_collection_cover_art(&collection_id).unwrap();
         assert!(cover_art.is_some());
         assert_eq!(cover_art.unwrap().id, media_file.id);
@@ -105,7 +105,7 @@ async fn test_remove_collection_cover_art_success() {
     };
     
     {
-        let mut db = server.db.lock().await;
+        let mut db = server.db().lock().await;
         db.insert_media_file(&media_file).unwrap();
         db.update_collection_cover_art(&collection_id, Some(&media_file.id)).unwrap();
     }
@@ -123,7 +123,7 @@ async fn test_remove_collection_cover_art_success() {
     
     // Verify the association was removed
     {
-        let db = server.db.lock().await;
+        let db = server.db().lock().await;
         let cover_art = db.get_collection_cover_art(&collection_id).unwrap();
         assert!(cover_art.is_none());
     }
@@ -134,7 +134,7 @@ async fn test_set_project_audio_file_success() {
     let server = create_test_server().await;
     
     // Create a test project
-    let project_id = create_test_project_in_db(&server.db).await;
+    let project_id = create_test_project_in_db(server.db()).await;
     
     // Create a test audio file in the database
     let audio_file = MediaFile {
@@ -149,7 +149,7 @@ async fn test_set_project_audio_file_success() {
     };
     
     {
-        let mut db = server.db.lock().await;
+        let mut db = server.db().lock().await;
         db.insert_media_file(&audio_file).unwrap();
     }
     
@@ -167,7 +167,7 @@ async fn test_set_project_audio_file_success() {
     
     // Verify the association was created
     {
-        let db = server.db.lock().await;
+        let db = server.db().lock().await;
         let project_audio = db.get_project_audio_file(&project_id).unwrap();
         assert!(project_audio.is_some());
         assert_eq!(project_audio.unwrap().id, audio_file.id);
@@ -179,7 +179,7 @@ async fn test_remove_project_audio_file_success() {
     let server = create_test_server().await;
     
     // Create a test project
-    let project_id = create_test_project_in_db(&server.db).await;
+    let project_id = create_test_project_in_db(server.db()).await;
     
     // Create and set audio file first
     let audio_file = MediaFile {
@@ -194,7 +194,7 @@ async fn test_remove_project_audio_file_success() {
     };
     
     {
-        let mut db = server.db.lock().await;
+        let mut db = server.db().lock().await;
         db.insert_media_file(&audio_file).unwrap();
         db.update_project_audio_file(&project_id, Some(&audio_file.id)).unwrap();
     }
@@ -212,7 +212,7 @@ async fn test_remove_project_audio_file_success() {
     
     // Verify the association was removed
     {
-        let db = server.db.lock().await;
+        let db = server.db().lock().await;
         let project_audio = db.get_project_audio_file(&project_id).unwrap();
         assert!(project_audio.is_none());
     }
@@ -235,7 +235,7 @@ async fn test_delete_media_success() {
     };
     
     {
-        let mut db = server.db.lock().await;
+        let mut db = server.db().lock().await;
         db.insert_media_file(&media_file).unwrap();
     }
     
@@ -252,7 +252,7 @@ async fn test_delete_media_success() {
     
     // Verify the media file was deleted
     {
-        let db = server.db.lock().await;
+        let db = server.db().lock().await;
         let deleted = db.get_media_file(&media_file.id).unwrap();
         assert!(deleted.is_none());
     }
@@ -369,7 +369,7 @@ async fn test_download_media_streaming() {
     let test_data = b"test file content for streaming";
     let filename = "test.jpg";
     
-    let media_file = server.media_storage.store_file(
+    let media_file = server.media_storage().store_file(
         test_data,
         filename,
         MediaType::CoverArt
@@ -377,7 +377,7 @@ async fn test_download_media_streaming() {
     
     // Insert the media file into the database
     {
-        let mut db = server.db.lock().await;
+        let mut db = server.db().lock().await;
         db.insert_media_file(&media_file).unwrap();
     }
     

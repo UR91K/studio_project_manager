@@ -12,7 +12,6 @@ pub mod media;
 
 // Common imports for gRPC tests
 use studio_project_manager::grpc::proto::*;
-use studio_project_manager::grpc::server::StudioProjectManagerServer;
 use studio_project_manager::database::LiveSetDatabase;
 // use crate::common;
 use tonic::{Request, Code};

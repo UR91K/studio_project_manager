@@ -170,7 +170,7 @@ async fn test_add_project_to_collection() {
     let collection_id = create_response.into_inner().collection.unwrap().id;
     
     // Create a test project
-    let project_id = create_test_project_in_db(&server.db).await;
+    let project_id = create_test_project_in_db(server.db()).await;
     
     // Add project to collection
     let add_request = Request::new(AddProjectToCollectionRequest {
@@ -207,8 +207,8 @@ async fn test_add_multiple_projects_to_collection() {
     let collection_id = create_response.into_inner().collection.unwrap().id;
     
     // Create multiple test projects
-    let project_id1 = create_test_project_in_db(&server.db).await;
-    let project_id2 = create_test_project_in_db(&server.db).await;
+    let project_id1 = create_test_project_in_db(server.db()).await;
+    let project_id2 = create_test_project_in_db(server.db()).await;
     
     // Add first project
     let add_request1 = Request::new(AddProjectToCollectionRequest {
@@ -256,7 +256,7 @@ async fn test_remove_project_from_collection() {
     let collection_id = create_response.into_inner().collection.unwrap().id;
     
     // Create and add a test project
-    let project_id = create_test_project_in_db(&server.db).await;
+    let project_id = create_test_project_in_db(server.db()).await;
     
     let add_request = Request::new(AddProjectToCollectionRequest {
         collection_id: collection_id.clone(),
@@ -299,9 +299,9 @@ async fn test_remove_project_maintains_order() {
     let collection_id = create_response.into_inner().collection.unwrap().id;
     
     // Create three test projects
-    let project_id1 = create_test_project_in_db(&server.db).await;
-    let project_id2 = create_test_project_in_db(&server.db).await;
-    let project_id3 = create_test_project_in_db(&server.db).await;
+    let project_id1 = create_test_project_in_db(server.db()).await;
+    let project_id2 = create_test_project_in_db(server.db()).await;
+    let project_id3 = create_test_project_in_db(server.db()).await;
     
     // Add all projects
     for project_id in [&project_id1, &project_id2, &project_id3] {
@@ -336,7 +336,7 @@ async fn test_remove_project_maintains_order() {
 async fn test_add_project_to_nonexistent_collection() {
     let server = create_test_server().await;
     
-    let project_id = create_test_project_in_db(&server.db).await;
+    let project_id = create_test_project_in_db(server.db()).await;
     
     let add_request = Request::new(AddProjectToCollectionRequest {
         collection_id: Uuid::new_v4().to_string(),
@@ -353,7 +353,7 @@ async fn test_add_project_to_nonexistent_collection() {
 async fn test_remove_project_from_nonexistent_collection() {
     let server = create_test_server().await;
     
-    let project_id = create_test_project_in_db(&server.db).await;
+    let project_id = create_test_project_in_db(server.db()).await;
     
     let remove_request = Request::new(RemoveProjectFromCollectionRequest {
         collection_id: Uuid::new_v4().to_string(),

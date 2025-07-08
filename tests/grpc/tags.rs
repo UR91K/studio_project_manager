@@ -106,7 +106,7 @@ async fn test_tag_project() {
     setup("debug");
     
     let server = create_test_server().await;
-    let db = &server.db;
+    let db = server.db();
     
     // Create a test project
     let project_id = create_test_project_in_db(db).await;
@@ -140,7 +140,7 @@ async fn test_untag_project() {
     setup("debug");
     
     let server = create_test_server().await;
-    let db = &server.db;
+    let db = server.db();
     
     // Create a test project
     let project_id = create_test_project_in_db(db).await;
@@ -229,7 +229,7 @@ async fn test_tag_project_nonexistent_tag() {
     setup("debug");
     
     let server = create_test_server().await;
-    let db = &server.db;
+    let db = server.db();
     
     // Create a test project
     let project_id = create_test_project_in_db(db).await;
@@ -275,7 +275,7 @@ async fn test_tag_project_idempotent() {
     setup("debug");
     
     let server = create_test_server().await;
-    let db = &server.db;
+    let db = server.db();
     
     // Create a test project
     let project_id = create_test_project_in_db(db).await;

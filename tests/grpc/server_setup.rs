@@ -9,6 +9,7 @@
 use super::*;
 use crate::common::{setup, LiveSetBuilder};
 use studio_project_manager::media::{MediaStorageManager, MediaConfig};
+use studio_project_manager::grpc::StudioProjectManagerServer;
 use std::path::PathBuf;
 
 // TODO: Move create_test_server() function from src/grpc/server.rs (around line 798)
@@ -36,15 +37,7 @@ pub async fn create_test_server() -> StudioProjectManagerServer {
     let media_storage = MediaStorageManager::new(temp_dir, media_config)
         .expect("Failed to create test media storage");
     
-    StudioProjectManagerServer {
-        db: Arc::new(Mutex::new(db)),
-        scan_status: Arc::new(Mutex::new(ScanStatus::ScanUnknown)),
-        scan_progress: Arc::new(Mutex::new(None)),
-        media_storage: Arc::new(media_storage),
-        watcher: Arc::new(Mutex::new(None)),
-        watcher_events: Arc::new(Mutex::new(None)),
-        start_time: std::time::Instant::now(),
-    }
+    StudioProjectManagerServer::new_for_test(db, media_storage)
 }
 
 pub async fn create_test_project_in_db(db: &Arc<Mutex<LiveSetDatabase>>) -> String {
@@ -112,9 +105,9 @@ mod tests {
             status: ScanStatus::ScanParsing as i32,
         };
         
-        // Set the progress
-        *server.scan_progress.lock().await = Some(progress_response.clone());
-        *server.scan_status.lock().await = ScanStatus::ScanParsing;
+        // Set the progress using the system handler
+        *server.system_handler.scan_progress.lock().await = Some(progress_response.clone());
+        *server.system_handler.scan_status.lock().await = ScanStatus::ScanParsing;
         
         // Now check that the progress is returned
         let request = Request::new(GetScanStatusRequest {});

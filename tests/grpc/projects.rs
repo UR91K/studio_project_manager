@@ -28,7 +28,7 @@ async fn test_update_project_name() {
     setup("debug");
     
     let server = create_test_server().await;
-    let db = &server.db;
+    let db = server.db();
     
     // Create a test project
     let project_id = create_test_project_in_db(db).await;
@@ -86,7 +86,7 @@ async fn test_update_project_name_empty_string() {
     setup("debug");
     
     let server = create_test_server().await;
-    let db = &server.db;
+    let db = server.db();
     
     // Create a test project
     let project_id = create_test_project_in_db(db).await;
@@ -116,7 +116,7 @@ async fn test_update_project_name_special_characters() {
     setup("debug");
     
     let server = create_test_server().await;
-    let db = &server.db;
+    let db = server.db();
     
     // Create a test project
     let project_id = create_test_project_in_db(db).await;
@@ -147,7 +147,7 @@ async fn test_update_project_name_persistence() {
     setup("debug");
     
     let server = create_test_server().await;
-    let db = &server.db;
+    let db = server.db();
     
     // Create a test project
     let project_id = create_test_project_in_db(db).await;
