@@ -3,11 +3,6 @@
 use super::*;
 use crate::{scan::parser::basic::{create_test_scanner, process_xml, setup_valid_scanner}};
 
-// TODO: Move all plugin-related parsing tests from src/scan/parser_test.rs
-// TODO: These tests focus on parsing different plugin formats (VST, VST3, AU, Max4Live)
-// TODO: Also includes plugin deduplication and error handling tests
-// Total: ~10 tests to move 
-
 #[test]
 fn test_vst3_audio_fx() {
     let mut scanner = create_test_scanner();

@@ -45,6 +45,5 @@ fn calculate_checksum(file_data: &[u8]) -> String {
 
 // TODO: Future enhancements can include:
 // - Image thumbnail generation
-// - Audio waveform generation
 // - File format conversion
-// - Metadata extraction 
+// - Metadata extraction
