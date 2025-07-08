@@ -33,6 +33,34 @@ impl LiveSetDatabase {
         Ok(())
     }
 
+    pub fn set_project_name(&mut self, project_id: &str, name: &str) -> Result<(), DatabaseError> {
+        debug!("Setting name for project {} to '{}'", project_id, name);
+        
+        let tx = self.conn.transaction()?;
+        
+        // First verify the project exists
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?)",
+            [project_id],
+            |row| row.get(0),
+        )?;
+
+        if !exists {
+            debug!("Project {} not found", project_id);
+            return Ok(());
+        }
+
+        // Update the name
+        tx.execute(
+            "UPDATE projects SET name = ? WHERE id = ?",
+            params![name, project_id],
+        )?;
+
+        tx.commit()?;
+        debug!("Successfully set name for project {} to '{}'", project_id, name);
+        Ok(())
+    }
+
     pub fn get_project_notes(&mut self, project_id: &str) -> Result<Option<String>, DatabaseError> {
         debug!("Getting notes for project {}", project_id);
         

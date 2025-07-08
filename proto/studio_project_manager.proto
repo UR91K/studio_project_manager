@@ -8,6 +8,7 @@ service StudioProjectManager {
   rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
   rpc UpdateProjectNotes(UpdateProjectNotesRequest) returns (UpdateProjectNotesResponse);
+  rpc UpdateProjectName(UpdateProjectNameRequest) returns (UpdateProjectNameResponse);
   
   // Search
   rpc Search(SearchRequest) returns (SearchResponse);
@@ -167,6 +168,15 @@ message UpdateProjectNotesRequest {
 }
 
 message UpdateProjectNotesResponse {
+  bool success = 1;
+}
+
+message UpdateProjectNameRequest {
+  string project_id = 1;
+  string name = 2;
+}
+
+message UpdateProjectNameResponse {
   bool success = 1;
 }
 
