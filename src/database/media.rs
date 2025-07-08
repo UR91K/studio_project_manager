@@ -110,70 +110,150 @@ impl LiveSetDatabase {
         Ok(())
     }
     
-    /// Get all orphaned media files (files not referenced by any collection or project)
-    pub fn get_orphaned_media_files(&self) -> Result<Vec<MediaFile>, DatabaseError> {
-        debug!("Finding orphaned media files");
+    /// List all media files with optional pagination
+    pub fn list_media_files(&self, limit: Option<i32>, offset: Option<i32>) -> Result<Vec<MediaFile>, DatabaseError> {
+        let mut query = "SELECT id, original_filename, file_extension, media_type, file_size_bytes, mime_type, uploaded_at, checksum FROM media_files ORDER BY uploaded_at DESC".to_string();
         
-        let mut stmt = self.conn.prepare(
-            "SELECT m.id, m.original_filename, m.file_extension, m.media_type, m.file_size_bytes,
-                    m.mime_type, m.uploaded_at, m.checksum
-             FROM media_files m
-             LEFT JOIN collections c ON c.cover_art_id = m.id
-             LEFT JOIN projects p ON p.audio_file_id = m.id
-             WHERE c.id IS NULL AND p.id IS NULL"
-        )?;
-        
-        let orphaned_files = stmt.query_map([], |row| {
-            self.row_to_media_file(row)
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
-        info!("Found {} orphaned media files", orphaned_files.len());
-        Ok(orphaned_files)
-    }
-    
-    /// Get all media files of a specific type
-    pub fn get_media_files_by_type(&self, media_type: &MediaType) -> Result<Vec<MediaFile>, DatabaseError> {
-        debug!("Getting media files of type: {}", media_type.as_str());
-        
-        let mut stmt = self.conn.prepare(
-            "SELECT id, original_filename, file_extension, media_type, file_size_bytes,
-                    mime_type, uploaded_at, checksum
-             FROM media_files 
-             WHERE media_type = ?
-             ORDER BY uploaded_at DESC"
-        )?;
-        
-        let media_files = stmt.query_map([media_type.as_str()], |row| {
-            self.row_to_media_file(row)
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
-        debug!("Found {} media files of type {}", media_files.len(), media_type.as_str());
-        Ok(media_files)
-    }
-    
-    /// Get the cover art for a collection
-    pub fn get_collection_cover_art(&self, collection_id: &str) -> Result<Option<MediaFile>, DatabaseError> {
-        debug!("Getting cover art for collection: {}", collection_id);
-        
-        let media_file = self.conn.query_row(
-            "SELECT m.id, m.original_filename, m.file_extension, m.media_type, m.file_size_bytes,
-                    m.mime_type, m.uploaded_at, m.checksum
-             FROM media_files m
-             JOIN collections c ON c.cover_art_id = m.id
-             WHERE c.id = ?",
-            params![collection_id],
-            |row| self.row_to_media_file(row),
-        ).optional()?;
-        
-        if let Some(ref file) = media_file {
-            debug!("Found cover art for collection {}: {}", collection_id, file.original_filename);
-        } else {
-            debug!("No cover art found for collection: {}", collection_id);
+        if let Some(limit) = limit {
+            query.push_str(&format!(" LIMIT {}", limit));
         }
         
-        Ok(media_file)
+        if let Some(offset) = offset {
+            query.push_str(&format!(" OFFSET {}", offset));
+        }
+        
+        let mut stmt = self.conn.prepare(&query)?;
+        let media_files = stmt.query_map([], |row| {
+            self.row_to_media_file(row)
+        })?;
+        
+        let mut result = Vec::new();
+        for media_file in media_files {
+            result.push(media_file?);
+        }
+        
+        Ok(result)
+    }
+    
+    /// Get media files by type with optional pagination
+    pub fn get_media_files_by_type(&self, media_type: &str, limit: Option<i32>, offset: Option<i32>) -> Result<Vec<MediaFile>, DatabaseError> {
+        let mut query = "SELECT id, original_filename, file_extension, media_type, file_size_bytes, mime_type, uploaded_at, checksum FROM media_files WHERE media_type = ? ORDER BY uploaded_at DESC".to_string();
+        
+        if let Some(limit) = limit {
+            query.push_str(&format!(" LIMIT {}", limit));
+        }
+        
+        if let Some(offset) = offset {
+            query.push_str(&format!(" OFFSET {}", offset));
+        }
+        
+        let mut stmt = self.conn.prepare(&query)?;
+        let media_files = stmt.query_map([media_type], |row| {
+            self.row_to_media_file(row)
+        })?;
+        
+        let mut result = Vec::new();
+        for media_file in media_files {
+            result.push(media_file?);
+        }
+        
+        Ok(result)
+    }
+    
+    /// Get orphaned media files (files not referenced by any project or collection)
+    pub fn get_orphaned_media_files(&self, limit: Option<i32>, offset: Option<i32>) -> Result<Vec<MediaFile>, DatabaseError> {
+        let mut query = r#"
+            SELECT id, original_filename, file_extension, media_type, file_size_bytes, mime_type, uploaded_at, checksum
+            FROM media_files 
+            WHERE id NOT IN (
+                SELECT DISTINCT audio_file_id FROM projects WHERE audio_file_id IS NOT NULL
+                UNION
+                SELECT DISTINCT cover_art_id FROM collections WHERE cover_art_id IS NOT NULL
+            )
+            ORDER BY uploaded_at DESC
+        "#.to_string();
+        
+        if let Some(limit) = limit {
+            query.push_str(&format!(" LIMIT {}", limit));
+        }
+        
+        if let Some(offset) = offset {
+            query.push_str(&format!(" OFFSET {}", offset));
+        }
+        
+        let mut stmt = self.conn.prepare(&query)?;
+        let media_files = stmt.query_map([], |row| {
+            self.row_to_media_file(row)
+        })?;
+        
+        let mut result = Vec::new();
+        for media_file in media_files {
+            result.push(media_file?);
+        }
+        
+        Ok(result)
+    }
+    
+    /// Get media statistics
+    pub fn get_media_statistics(&self) -> Result<(i32, i64, i32, i32, i32, i64), DatabaseError> {
+        // Get total files and size
+        let mut stmt = self.conn.prepare("SELECT COUNT(*), COALESCE(SUM(file_size_bytes), 0) FROM media_files")?;
+        let (total_files, total_size): (i32, i64) = stmt.query_row([], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+        
+        // Get cover art count
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM media_files WHERE media_type = 'cover_art'")?;
+        let cover_art_count: i32 = stmt.query_row([], |row| row.get(0))?;
+        
+        // Get audio file count
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM media_files WHERE media_type = 'audio_file'")?;
+        let audio_file_count: i32 = stmt.query_row([], |row| row.get(0))?;
+        
+        // Get orphaned files count and size
+        let mut stmt = self.conn.prepare(r#"
+            SELECT COUNT(*), COALESCE(SUM(file_size_bytes), 0)
+            FROM media_files 
+            WHERE id NOT IN (
+                SELECT DISTINCT audio_file_id FROM projects WHERE audio_file_id IS NOT NULL
+                UNION
+                SELECT DISTINCT cover_art_id FROM collections WHERE cover_art_id IS NOT NULL
+            )
+        "#)?;
+        let (orphaned_count, orphaned_size): (i32, i64) = stmt.query_row([], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+        
+        Ok((total_files, total_size, cover_art_count, audio_file_count, orphaned_count, orphaned_size))
+    }
+    
+    /// Get count of media files (for pagination)
+    pub fn get_media_files_count(&self) -> Result<i32, DatabaseError> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM media_files")?;
+        let count: i32 = stmt.query_row([], |row| row.get(0))?;
+        Ok(count)
+    }
+    
+    /// Get count of media files by type (for pagination)
+    pub fn get_media_files_count_by_type(&self, media_type: &str) -> Result<i32, DatabaseError> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM media_files WHERE media_type = ?")?;
+        let count: i32 = stmt.query_row([media_type], |row| row.get(0))?;
+        Ok(count)
+    }
+    
+    /// Get count of orphaned media files (for pagination)
+    pub fn get_orphaned_media_files_count(&self) -> Result<i32, DatabaseError> {
+        let mut stmt = self.conn.prepare(r#"
+            SELECT COUNT(*) 
+            FROM media_files 
+            WHERE id NOT IN (
+                SELECT DISTINCT audio_file_id FROM projects WHERE audio_file_id IS NOT NULL
+                UNION
+                SELECT DISTINCT cover_art_id FROM collections WHERE cover_art_id IS NOT NULL
+            )
+        "#)?;
+        let count: i32 = stmt.query_row([], |row| row.get(0))?;
+        Ok(count)
     }
     
     /// Get the audio file for a project
@@ -199,55 +279,27 @@ impl LiveSetDatabase {
         Ok(media_file)
     }
     
-    /// Get media file usage statistics
-    pub fn get_media_file_stats(&self) -> Result<MediaFileStats, DatabaseError> {
-        debug!("Getting media file statistics");
+    /// Get the cover art for a collection
+    pub fn get_collection_cover_art(&self, collection_id: &str) -> Result<Option<MediaFile>, DatabaseError> {
+        debug!("Getting cover art for collection: {}", collection_id);
         
-        let mut stmt = self.conn.prepare(
-            "SELECT 
-                media_type,
-                COUNT(*) as count,
-                SUM(file_size_bytes) as total_size
-             FROM media_files 
-             GROUP BY media_type"
-        )?;
+        let media_file = self.conn.query_row(
+            "SELECT m.id, m.original_filename, m.file_extension, m.media_type, m.file_size_bytes,
+                    m.mime_type, m.uploaded_at, m.checksum
+             FROM media_files m
+             JOIN collections c ON c.cover_art_id = m.id
+             WHERE c.id = ?",
+            params![collection_id],
+            |row| self.row_to_media_file(row),
+        ).optional()?;
         
-        let mut cover_art_count = 0;
-        let mut cover_art_size = 0i64;
-        let mut audio_file_count = 0;
-        let mut audio_file_size = 0i64;
-        
-        let rows = stmt.query_map([], |row| {
-            let media_type: String = row.get(0)?;
-            let count: i64 = row.get(1)?;
-            let total_size: i64 = row.get(2)?;
-            Ok((media_type, count, total_size))
-        })?;
-        
-        for row in rows {
-            let (media_type, count, total_size) = row?;
-            match media_type.as_str() {
-                "cover_art" => {
-                    cover_art_count = count;
-                    cover_art_size = total_size;
-                }
-                "audio_file" => {
-                    audio_file_count = count;
-                    audio_file_size = total_size;
-                }
-                _ => {}
-            }
+        if let Some(ref file) = media_file {
+            debug!("Found cover art for collection {}: {}", collection_id, file.original_filename);
+        } else {
+            debug!("No cover art found for collection: {}", collection_id);
         }
         
-        let stats = MediaFileStats {
-            cover_art_count: cover_art_count as u32,
-            cover_art_total_size_bytes: cover_art_size as u64,
-            audio_file_count: audio_file_count as u32,
-            audio_file_total_size_bytes: audio_file_size as u64,
-        };
-        
-        debug!("Media file stats: {:?}", stats);
-        Ok(stats)
+        Ok(media_file)
     }
     
     /// Convert a database row to a MediaFile
@@ -274,6 +326,7 @@ impl LiveSetDatabase {
 }
 
 /// Statistics about media files in the database
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct MediaFileStats {
     pub cover_art_count: u32,
@@ -282,6 +335,7 @@ pub struct MediaFileStats {
     pub audio_file_total_size_bytes: u64,
 }
 
+#[allow(dead_code)]
 impl MediaFileStats {
     pub fn total_files(&self) -> u32 {
         self.cover_art_count + self.audio_file_count

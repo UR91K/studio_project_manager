@@ -50,14 +50,17 @@ service StudioProjectManager {
   rpc UploadAudioFile(stream UploadAudioFileRequest) returns (UploadAudioFileResponse);
   rpc DownloadMedia(DownloadMediaRequest) returns (stream DownloadMediaResponse);
   rpc DeleteMedia(DeleteMediaRequest) returns (DeleteMediaResponse);
-  
-  // Collection Cover Art
   rpc SetCollectionCoverArt(SetCollectionCoverArtRequest) returns (SetCollectionCoverArtResponse);
   rpc RemoveCollectionCoverArt(RemoveCollectionCoverArtRequest) returns (RemoveCollectionCoverArtResponse);
-  
-  // Project Audio Files
   rpc SetProjectAudioFile(SetProjectAudioFileRequest) returns (SetProjectAudioFileResponse);
   rpc RemoveProjectAudioFile(RemoveProjectAudioFileRequest) returns (RemoveProjectAudioFileResponse);
+  
+  // Media listing and management
+  rpc ListMediaFiles(ListMediaFilesRequest) returns (ListMediaFilesResponse);
+  rpc GetMediaFilesByType(GetMediaFilesByTypeRequest) returns (GetMediaFilesByTypeResponse);
+  rpc GetOrphanedMediaFiles(GetOrphanedMediaFilesRequest) returns (GetOrphanedMediaFilesResponse);
+  rpc GetMediaStatistics(GetMediaStatisticsRequest) returns (GetMediaStatisticsResponse);
+  rpc CleanupOrphanedMedia(CleanupOrphanedMediaRequest) returns (CleanupOrphanedMediaResponse);
 }
 
 // Core Data Types
@@ -525,4 +528,61 @@ message RemoveProjectAudioFileRequest {
 message RemoveProjectAudioFileResponse {
   bool success = 1;
   optional string error_message = 2;
+} 
+
+// Media listing and management messages
+message ListMediaFilesRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+}
+
+message ListMediaFilesResponse {
+  repeated MediaFile media_files = 1;
+  int32 total_count = 2;
+}
+
+message GetMediaFilesByTypeRequest {
+  string media_type = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message GetMediaFilesByTypeResponse {
+  repeated MediaFile media_files = 1;
+  int32 total_count = 2;
+}
+
+message GetOrphanedMediaFilesRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+}
+
+message GetOrphanedMediaFilesResponse {
+  repeated MediaFile orphaned_files = 1;
+  int32 total_count = 2;
+}
+
+message GetMediaStatisticsRequest {
+}
+
+message GetMediaStatisticsResponse {
+  int32 total_files = 1;
+  int64 total_size_bytes = 2;
+  int32 cover_art_count = 3;
+  int32 audio_file_count = 4;
+  int32 orphaned_files_count = 5;
+  int64 orphaned_files_size_bytes = 6;
+  map<string, int32> files_by_type = 7;
+}
+
+message CleanupOrphanedMediaRequest {
+  bool dry_run = 1;
+}
+
+message CleanupOrphanedMediaResponse {
+  int32 files_cleaned = 1;
+  int64 bytes_freed = 2;
+  repeated string deleted_file_ids = 3;
+  bool success = 4;
+  optional string error_message = 5;
 } 

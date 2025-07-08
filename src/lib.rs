@@ -27,7 +27,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::sync::mpsc::RecvTimeoutError;
-use log::{info, debug, error};
+use log::{debug, error, info, trace};
 use crate::database::batch::BatchInsertManager;
 use crate::scan::parallel::ParallelParser;
 use crate::error::LiveSetError;
@@ -220,7 +220,7 @@ fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocesse
     for path in paths {
         match LiveSetPreprocessed::new(path.clone()) {
             Ok(metadata) => {
-                debug!("Successfully preprocessed: {}", metadata.name);
+                trace!("Successfully preprocessed: {}", metadata.name);
                 preprocessed.push(metadata);
             }
             Err(e) => {
@@ -230,7 +230,7 @@ fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocesse
         }
     }
     
-    debug!("Successfully preprocessed {} projects", preprocessed.len());
+    trace!("Successfully preprocessed {} projects", preprocessed.len());
     Ok(preprocessed)
 }
 
@@ -246,10 +246,10 @@ fn filter_unchanged_projects(
         match db.get_last_scanned_time(&project.path)? {
             Some(last_scanned) => {
                 if project.modified_time > last_scanned {
-                    debug!("Project needs update: {}", project.name);
+                    trace!("Project needs update: {}", project.name);
                     to_parse.push(project.path);
                 } else {
-                    debug!("Project unchanged: {}", project.name);
+                    trace!("Project unchanged: {}", project.name);
                 }
             }
             None => {

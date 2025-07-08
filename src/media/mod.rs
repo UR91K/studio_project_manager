@@ -69,11 +69,6 @@ impl MediaFile {
     }
 }
 
-pub struct MediaStorageManager {
-    storage_dir: PathBuf,
-    config: MediaConfig,
-}
-
 #[derive(Debug, Clone)]
 pub struct MediaConfig {
     pub max_cover_art_size_mb: u32,
@@ -91,6 +86,12 @@ impl From<&Config> for MediaConfig {
             allowed_audio_formats: config.allowed_audio_formats.clone(),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct MediaStorageManager {
+    storage_dir: PathBuf,
+    config: MediaConfig,
 }
 
 impl MediaStorageManager {

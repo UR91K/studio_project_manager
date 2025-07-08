@@ -157,11 +157,11 @@ fn test_media_file_types_separation() {
     db.insert_media_file(&audio_file).unwrap();
 
     // Test type-specific queries
-    let cover_art_files = db.get_media_files_by_type(&MediaType::CoverArt).unwrap();
+    let cover_art_files = db.get_media_files_by_type("cover_art", None, None).unwrap();
     assert_eq!(cover_art_files.len(), 1);
     assert_eq!(cover_art_files[0].media_type, MediaType::CoverArt);
 
-    let audio_files = db.get_media_files_by_type(&MediaType::AudioFile).unwrap();
+    let audio_files = db.get_media_files_by_type("audio_file", None, None).unwrap();
     assert_eq!(audio_files.len(), 1);
     assert_eq!(audio_files[0].media_type, MediaType::AudioFile);
 }
@@ -204,11 +204,13 @@ fn test_media_file_statistics() {
     db.insert_media_file(&audio2).unwrap();
 
     // Test statistics
-    let stats = db.get_media_file_stats().unwrap();
-    assert_eq!(stats.cover_art_count, 2);
-    assert_eq!(stats.audio_file_count, 2);
-    assert_eq!(stats.cover_art_total_size_bytes, 3072);
-    assert_eq!(stats.audio_file_total_size_bytes, 3 * 1024 * 1024);
+    let (total_files, total_size, cover_art_count, audio_file_count, orphaned_count, orphaned_size) = db.get_media_statistics().unwrap();
+    assert_eq!(total_files, 4);
+    assert_eq!(cover_art_count, 2);
+    assert_eq!(audio_file_count, 2);
+    assert_eq!(total_size, 3072 + 3 * 1024 * 1024);
+    assert_eq!(orphaned_count, 4); // All files are orphaned since they're not associated
+    assert_eq!(orphaned_size, 3072 + 3 * 1024 * 1024);
 }
 
 #[test]
@@ -260,7 +262,7 @@ fn test_orphaned_media_files() {
     db.update_project_audio_file(&test_project.id.to_string(), Some(&used_audio.id)).unwrap();
 
     // Find orphaned files
-    let orphaned_files = db.get_orphaned_media_files().unwrap();
+    let orphaned_files = db.get_orphaned_media_files(None, None).unwrap();
     assert_eq!(orphaned_files.len(), 2);
     
     // Should contain the orphaned files

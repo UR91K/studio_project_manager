@@ -365,18 +365,17 @@ async fn test_delete_media_not_found() {
 async fn test_download_media_streaming() {
     let server = create_test_server().await;
     
-    // Create a test media file in the database
-    let media_file = MediaFile {
-        id: uuid::Uuid::new_v4().to_string(),
-        original_filename: "test.jpg".to_string(),
-        file_extension: "jpg".to_string(),
-        media_type: MediaType::CoverArt,
-        file_size_bytes: 1024,
-        mime_type: "image/jpeg".to_string(),
-        uploaded_at: chrono::Utc::now(),
-        checksum: "test-checksum".to_string(),
-    };
+    // Create a test file using the MediaStorageManager
+    let test_data = b"test file content for streaming";
+    let filename = "test.jpg";
     
+    let media_file = server.media_storage.store_file(
+        test_data,
+        filename,
+        MediaType::CoverArt
+    ).unwrap();
+    
+    // Insert the media file into the database
     {
         let mut db = server.db.lock().await;
         db.insert_media_file(&media_file).unwrap();
@@ -402,20 +401,25 @@ async fn test_download_media_streaming() {
     match first_response.data {
         Some(download_media_response::Data::Metadata(metadata)) => {
             assert_eq!(metadata.id, media_file.id);
-            assert_eq!(metadata.original_filename, "test.jpg");
+            assert_eq!(metadata.original_filename, filename);
             assert_eq!(metadata.media_type, "cover_art");
         }
         _ => panic!("First response should be metadata"),
     }
     
     // Subsequent responses should be chunks
-    let chunk_response = responses.pop_front().unwrap();
-    match chunk_response.data {
-        Some(download_media_response::Data::Chunk(data)) => {
-            assert!(!data.is_empty());
+    let mut all_chunks = Vec::new();
+    while let Some(response) = responses.pop_front() {
+        match response.data {
+            Some(download_media_response::Data::Chunk(data)) => {
+                all_chunks.extend(data);
+            }
+            _ => panic!("Response should be chunk data"),
         }
-        _ => panic!("Second response should be chunk data"),
     }
+    
+    // Verify the downloaded content matches the original
+    assert_eq!(all_chunks, test_data);
 }
 
 #[tokio::test]

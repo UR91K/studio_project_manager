@@ -18,7 +18,6 @@ use studio_project_manager::database::LiveSetDatabase;
 use tonic::{Request, Code};
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use std::path::PathBuf;
 use uuid::Uuid;
 
 // Re-export commonly used test utilities
