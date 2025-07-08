@@ -1,5 +1,6 @@
 use log::info;
 use studio_project_manager::grpc;
+use studio_project_manager::config::CONFIG;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -7,11 +8,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     info!("Starting Studio Project Manager gRPC Server");
     
+    // Load configuration
+    let config = CONFIG.as_ref().map_err(|e| {
+        eprintln!("Failed to load configuration: {}", e);
+        e
+    })?;
+    
     // Create the gRPC server
     let server = grpc::server::StudioProjectManagerServer::new().await?;
     
     // Set up the gRPC service
-    let addr = "127.0.0.1:50051".parse()?;
+    let addr = format!("127.0.0.1:{}", config.grpc_port).parse()?;
     info!("gRPC server listening on {}", addr);
     
     // Start the server

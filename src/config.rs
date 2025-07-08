@@ -9,6 +9,9 @@ pub struct Config {
     pub paths: Vec<String>,
     pub database_path: String,
     pub live_database_dir: String,
+    // gRPC server configuration
+    #[serde(default = "default_grpc_port")]
+    pub grpc_port: u16,
     // Media storage configuration
     pub media_storage_dir: String,
     #[serde(default = "default_max_cover_art_size")]
@@ -93,6 +96,10 @@ fn default_allowed_image_formats() -> Vec<String> {
 
 fn default_allowed_audio_formats() -> Vec<String> {
     vec!["mp3".to_string(), "wav".to_string(), "m4a".to_string(), "flac".to_string()]
+}
+
+fn default_grpc_port() -> u16 {
+    50051 // Default gRPC port
 }
 
 pub static CONFIG: Lazy<Result<Config, ConfigError>> = Lazy::new(Config::new);
