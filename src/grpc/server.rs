@@ -233,7 +233,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
             };
             
             // Run the scanning process with progress callbacks
-            match process_projects_with_progress(progress_callback) {
+            match process_projects_with_progress(Some(progress_callback)) {
                 Ok(()) => {
                     info!("Scan completed successfully");
                     *scan_status.lock().await = ScanStatus::ScanCompleted;

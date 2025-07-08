@@ -125,7 +125,7 @@ fn test_process_projects_with_progress() {
     };
 
     // Run process_projects_with_progress
-    let result = process_projects_with_progress(progress_callback);
+    let result = process_projects_with_progress(Some(progress_callback));
     assert!(result.is_ok(), "process_projects_with_progress failed: {:?}", result.err());
 
     // Verify progress updates
