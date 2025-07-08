@@ -76,7 +76,7 @@ macro_rules! trace_with_line {
     };
 }
 
-pub(crate) trait StringResultExt {
+pub trait StringResultExt {
     fn to_string_result(&self) -> Result<String, XmlParseError>;
     fn to_str_result(&self) -> Result<&str, XmlParseError>;
 }
@@ -141,7 +141,7 @@ impl<'a> EventExt for BytesStart<'a> {
     }
 }
 
-pub(crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
+pub fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
     if !file_path.exists() {
         return Err(FileError::NotFound(file_path.to_path_buf()));
     }
@@ -162,7 +162,7 @@ pub(crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
 /// # Examples
 ///
 /// ```
-/// use studio_project_manager::helpers::format_file_size;
+/// use studio_project_manager::utils::format_file_size;
 ///
 /// assert_eq!(format_file_size(1023), "1023 B");
 /// assert_eq!(format_file_size(1024), "1.00 KB");
@@ -170,7 +170,7 @@ pub(crate) fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
 /// assert_eq!(format_file_size(1_073_741_824), "1.00 GB");
 /// ```
 #[allow(dead_code)]
-pub(crate) fn format_file_size(size: u64) -> String {
+pub fn format_file_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * KB;
     const GB: u64 = 1024 * MB;
@@ -192,9 +192,9 @@ pub(crate) fn format_file_size(size: u64) -> String {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use std::path::Path;
-/// use studio_project_manager::helpers::decompress_gzip_file;
+/// use studio_project_manager::decompress_gzip_file;
 ///
 /// let file_path = Path::new("path/to/compressed/file.gz");
 /// let decompressed_data = decompress_gzip_file(&file_path).expect("Failed to decompress file");
@@ -244,7 +244,7 @@ static LINE_CACHE: Lazy<Mutex<Vec<(usize, usize)>>> = Lazy::new(|| Mutex::new(Ve
 
 //TODO possibly delete this if we find it is no longer needed
 #[allow(dead_code)]
-pub(crate) fn get_line_number(file_path: &Path, byte_position: usize) -> std::io::Result<usize> {
+pub fn get_line_number(file_path: &Path, byte_position: usize) -> std::io::Result<usize> {
     let mut cache = LINE_CACHE.lock().unwrap();
 
     if cache.is_empty() {
@@ -275,7 +275,7 @@ pub(crate) fn get_line_number(file_path: &Path, byte_position: usize) -> std::io
 }
 
 #[allow(dead_code)]
-pub(crate) fn format_duration(duration: &Duration) -> String {
+pub fn format_duration(duration: &Duration) -> String {
     let total_seconds = duration.num_seconds();
     let milliseconds = duration.num_milliseconds() % 1000;
     let hours = total_seconds / 3600;
