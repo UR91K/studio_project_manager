@@ -57,12 +57,13 @@ where
     
     // Get paths from config
     let config = CONFIG.as_ref().map_err(|e| LiveSetError::ConfigError(e.clone()))?;
-    debug!("Using database path from config: {}", config.database_path);
+    let database_path = config.database_path.as_ref().expect("Database path should be set by config initialization");
+    debug!("Using database path from config: {}", database_path);
     debug!("Using project paths from config: {:?}", config.paths);
     
     // Initialize database early to use for filtering
-    debug!("Initializing database at {}", config.database_path);
-    let mut db = LiveSetDatabase::new(PathBuf::from(&config.database_path))?;
+    debug!("Initializing database at {}", database_path);
+    let mut db = LiveSetDatabase::new(PathBuf::from(database_path))?;
     
     progress!(0, 0, 0.0, "Discovering projects...".to_string(), "discovering");
     

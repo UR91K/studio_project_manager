@@ -28,7 +28,8 @@ impl StudioProjectManagerServer {
             format!("Failed to load config: {}", e)
         })?;
         
-        let db_path = PathBuf::from(&config.database_path);
+        let database_path = config.database_path.as_ref().expect("Database path should be set by config initialization");
+        let db_path = PathBuf::from(database_path);
         let db = LiveSetDatabase::new(db_path)
             .map_err(|e| format!("Failed to initialize database: {}", e))?;
         let db = Arc::new(Mutex::new(db));

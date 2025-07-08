@@ -50,7 +50,8 @@ fn test_process_projects_integration() {
     process_projects().expect("process_projects failed");
 
     // Open database and verify contents
-    let db = LiveSetDatabase::new(PathBuf::from(&config.database_path))
+    let database_path = config.database_path.as_ref().expect("Database path should be set by config initialization");
+    let db = LiveSetDatabase::new(PathBuf::from(database_path))
         .expect("Failed to open database");
 
     // Get actual project names from database

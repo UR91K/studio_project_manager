@@ -8,7 +8,9 @@ paths = [
 
 # use {USER_HOME} as a shortcut to your user folder
 
-database_path = '{USER_HOME}\RustroverProjects\studio_project_manager\live_set_db_test_dir\ableton_live_sets.db'
+# Database configuration
+# If database_path is not specified or empty, it will default to the executable's directory
+# database_path = '{USER_HOME}\RustroverProjects\studio_project_manager\live_set_db_test_dir\ableton_live_sets.db'
 
 live_database_dir = '{USER_HOME}\AppData\Local\Ableton\Live Database'
 

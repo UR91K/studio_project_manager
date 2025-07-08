@@ -7,7 +7,8 @@ use std::path::PathBuf;
 #[derive(Deserialize)]
 pub struct Config {
     pub paths: Vec<String>,
-    pub database_path: String,
+    #[serde(default = "default_database_path")]
+    pub database_path: Option<String>,
     pub live_database_dir: String,
     // gRPC server configuration
     #[serde(default = "default_grpc_port")]
@@ -44,13 +45,27 @@ impl Config {
             .iter()
             .map(|path| path.replace("{USER_HOME}", home_dir_str))
             .collect();
-        config.database_path = config.database_path.replace("{USER_HOME}", home_dir_str);
+        config.database_path = config.database_path.map(|path| path.replace("{USER_HOME}", home_dir_str));
         config.live_database_dir = config
             .live_database_dir
             .replace("{USER_HOME}", home_dir_str);
         config.media_storage_dir = config
             .media_storage_dir
             .replace("{USER_HOME}", home_dir_str);
+
+        // If database_path is None or empty, set it to the executable's directory
+        if config.database_path.is_none() || config.database_path.as_deref().unwrap_or("").trim().is_empty() {
+            let exe_path = std::env::current_exe().map_err(|e| ConfigError::ReadError(e))?;
+            let exe_dir = exe_path.parent().ok_or_else(|| {
+                ConfigError::InvalidPath("Could not get executable directory".into())
+            })?;
+            config.database_path = Some(exe_dir.join("ableton_live_sets.db")
+                .to_str()
+                .ok_or_else(|| {
+                    ConfigError::InvalidPath("Database path is not valid UTF-8".into())
+                })?
+                .to_string());
+        }
 
         Ok(config)
     }
@@ -100,6 +115,10 @@ fn default_allowed_audio_formats() -> Vec<String> {
 
 fn default_grpc_port() -> u16 {
     50051 // Default gRPC port
+}
+
+fn default_database_path() -> Option<String> {
+    None // Default to None, which will be replaced by executable path
 }
 
 pub static CONFIG: Lazy<Result<Config, ConfigError>> = Lazy::new(Config::new);
