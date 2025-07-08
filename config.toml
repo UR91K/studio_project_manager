@@ -17,6 +17,10 @@ live_database_dir = '{USER_HOME}\AppData\Local\Ableton\Live Database'
 # gRPC server configuration
 grpc_port = 50051
 
+# Logging configuration
+# Options: error, warn, info, debug, trace
+log_level = "info"
+
 # Media storage configuration
 media_storage_dir = '{USER_HOME}\AppData\Local\StudioProjectManager\media'
 

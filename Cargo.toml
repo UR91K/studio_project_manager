@@ -38,6 +38,10 @@ prost = "0.12"
 tokio-stream = "0.1"
 strum = "0.27.1"
 strum_macros = "0.27.1"
+tray-icon = "0.21"        # System tray functionality
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
 tonic-build = "0.10"

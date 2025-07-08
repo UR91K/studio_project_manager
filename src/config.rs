@@ -13,6 +13,9 @@ pub struct Config {
     // gRPC server configuration
     #[serde(default = "default_grpc_port")]
     pub grpc_port: u16,
+    // Logging configuration
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
     // Media storage configuration
     pub media_storage_dir: String,
     #[serde(default = "default_max_cover_art_size")]
@@ -119,6 +122,10 @@ fn default_grpc_port() -> u16 {
 
 fn default_database_path() -> Option<String> {
     None // Default to None, which will be replaced by executable path
+}
+
+fn default_log_level() -> String {
+    "info".to_string() // Default log level
 }
 
 pub static CONFIG: Lazy<Result<Config, ConfigError>> = Lazy::new(Config::new);

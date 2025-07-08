@@ -9,11 +9,12 @@ pub mod database;
 pub mod error;
 pub mod grpc;
 pub mod live_set;
+pub mod media;
 pub mod models;
 pub mod scan;
 pub mod utils;
 pub mod watcher;
-pub mod media;
+pub mod tray;
 
 // Re-export commonly used items for easier imports
 pub use config::CONFIG;
