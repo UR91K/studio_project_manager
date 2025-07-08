@@ -9,6 +9,16 @@ pub struct Config {
     pub paths: Vec<String>,
     pub database_path: String,
     pub live_database_dir: String,
+    // Media storage configuration
+    pub media_storage_dir: String,
+    #[serde(default = "default_max_cover_art_size")]
+    pub max_cover_art_size_mb: u32,
+    #[serde(default = "default_max_audio_file_size")]
+    pub max_audio_file_size_mb: u32,
+    #[serde(default = "default_allowed_image_formats")]
+    pub allowed_image_formats: Vec<String>,
+    #[serde(default = "default_allowed_audio_formats")]
+    pub allowed_audio_formats: Vec<String>,
 }
 
 impl Config {
@@ -34,6 +44,9 @@ impl Config {
         config.database_path = config.database_path.replace("{USER_HOME}", home_dir_str);
         config.live_database_dir = config
             .live_database_dir
+            .replace("{USER_HOME}", home_dir_str);
+        config.media_storage_dir = config
+            .media_storage_dir
             .replace("{USER_HOME}", home_dir_str);
 
         Ok(config)
@@ -64,6 +77,22 @@ fn find_config_file() -> Result<PathBuf, ConfigError> {
         std::io::ErrorKind::NotFound,
         "Could not find config.toml",
     )))
+}
+
+fn default_max_cover_art_size() -> u32 {
+    10 // 10MB
+}
+
+fn default_max_audio_file_size() -> u32 {
+    50 // 50MB
+}
+
+fn default_allowed_image_formats() -> Vec<String> {
+    vec!["jpg".to_string(), "jpeg".to_string(), "png".to_string(), "webp".to_string()]
+}
+
+fn default_allowed_audio_formats() -> Vec<String> {
+    vec!["mp3".to_string(), "wav".to_string(), "m4a".to_string(), "flac".to_string()]
 }
 
 pub static CONFIG: Lazy<Result<Config, ConfigError>> = Lazy::new(Config::new);

@@ -4,6 +4,7 @@ mod collections;
 mod notes;
 mod tasks;
 mod models;
+mod media;
 pub mod search;
 pub mod batch;
 

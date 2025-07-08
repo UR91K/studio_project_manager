@@ -293,6 +293,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                                 created_at,
                                 modified_at,
                                 project_ids,
+                                cover_art_id: None, // TODO: Get actual cover art ID from database
                             });
                         }
                         Ok(None) => {
@@ -338,6 +339,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                             created_at,
                             modified_at,
                             project_ids,
+                            cover_art_id: None, // TODO: Get actual cover art ID from database
                         };
                         
                         let response = CreateCollectionResponse { collection: Some(collection) };
@@ -387,6 +389,7 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
                             created_at,
                             modified_at,
                             project_ids,
+                            cover_art_id: None, // TODO: Get actual cover art ID from database
                         };
                         
                         let response = UpdateCollectionResponse { collection: Some(collection) };
@@ -673,6 +676,65 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         
         Ok(Response::new(response))
     }
+    
+    // Media Management - TODO: Implement these methods
+    async fn upload_cover_art(
+        &self,
+        _request: Request<tonic::Streaming<UploadCoverArtRequest>>,
+    ) -> Result<Response<UploadCoverArtResponse>, Status> {
+        Err(Status::unimplemented("Media upload not yet implemented"))
+    }
+    
+    async fn upload_audio_file(
+        &self,
+        _request: Request<tonic::Streaming<UploadAudioFileRequest>>,
+    ) -> Result<Response<UploadAudioFileResponse>, Status> {
+        Err(Status::unimplemented("Media upload not yet implemented"))
+    }
+    
+    type DownloadMediaStream = ReceiverStream<Result<DownloadMediaResponse, Status>>;
+    
+    async fn download_media(
+        &self,
+        _request: Request<DownloadMediaRequest>,
+    ) -> Result<Response<Self::DownloadMediaStream>, Status> {
+        Err(Status::unimplemented("Media download not yet implemented"))
+    }
+    
+    async fn delete_media(
+        &self,
+        _request: Request<DeleteMediaRequest>,
+    ) -> Result<Response<DeleteMediaResponse>, Status> {
+        Err(Status::unimplemented("Media deletion not yet implemented"))
+    }
+    
+    async fn set_collection_cover_art(
+        &self,
+        _request: Request<SetCollectionCoverArtRequest>,
+    ) -> Result<Response<SetCollectionCoverArtResponse>, Status> {
+        Err(Status::unimplemented("Collection cover art not yet implemented"))
+    }
+    
+    async fn remove_collection_cover_art(
+        &self,
+        _request: Request<RemoveCollectionCoverArtRequest>,
+    ) -> Result<Response<RemoveCollectionCoverArtResponse>, Status> {
+        Err(Status::unimplemented("Collection cover art not yet implemented"))
+    }
+    
+    async fn set_project_audio_file(
+        &self,
+        _request: Request<SetProjectAudioFileRequest>,
+    ) -> Result<Response<SetProjectAudioFileResponse>, Status> {
+        Err(Status::unimplemented("Project audio files not yet implemented"))
+    }
+    
+    async fn remove_project_audio_file(
+        &self,
+        _request: Request<RemoveProjectAudioFileRequest>,
+    ) -> Result<Response<RemoveProjectAudioFileResponse>, Status> {
+        Err(Status::unimplemented("Project audio files not yet implemented"))
+    }
 }
 
 // Helper function to convert LiveSet to protobuf Project
@@ -736,5 +798,6 @@ fn convert_live_set_to_proto(live_set: LiveSet) -> Project {
         }).collect(),
         tasks: vec![], // TODO: Load actual tasks
         collection_ids: vec![], // TODO: Load actual collection associations
+        audio_file_id: None, // TODO: Get actual audio file ID from database
     }
 }

@@ -7,6 +7,7 @@ pub mod search;
 pub mod batch;
 pub mod collections;
 pub mod tags;
+pub mod media;
 
 // Common imports for database tests
 use studio_project_manager::database::LiveSetDatabase;

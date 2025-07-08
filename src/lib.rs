@@ -13,6 +13,7 @@ pub mod models;
 pub mod scan;
 pub mod utils;
 pub mod watcher;
+pub mod media;
 
 // Re-export commonly used items for easier imports
 pub use config::CONFIG;

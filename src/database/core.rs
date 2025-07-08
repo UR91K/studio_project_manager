@@ -52,7 +52,9 @@ impl LiveSetDatabase {
                 ableton_version_major INTEGER NOT NULL,
                 ableton_version_minor INTEGER NOT NULL,
                 ableton_version_patch INTEGER NOT NULL,
-                ableton_version_beta BOOLEAN NOT NULL
+                ableton_version_beta BOOLEAN NOT NULL,
+                audio_file_id TEXT,
+                FOREIGN KEY (audio_file_id) REFERENCES media_files(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS plugins (
@@ -79,6 +81,17 @@ impl LiveSetDatabase {
                 is_present BOOLEAN NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS media_files (
+                id TEXT PRIMARY KEY,
+                original_filename TEXT NOT NULL,
+                file_extension TEXT NOT NULL,
+                media_type TEXT NOT NULL,
+                file_size_bytes INTEGER NOT NULL,
+                mime_type TEXT NOT NULL,
+                uploaded_at DATETIME NOT NULL,
+                checksum TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS tags (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
@@ -91,7 +104,9 @@ impl LiveSetDatabase {
                 description TEXT,
                 notes TEXT,
                 created_at DATETIME NOT NULL,
-                modified_at DATETIME NOT NULL
+                modified_at DATETIME NOT NULL,
+                cover_art_id TEXT,
+                FOREIGN KEY (cover_art_id) REFERENCES media_files(id) ON DELETE SET NULL
             );
 
             -- Junction tables
@@ -147,6 +162,7 @@ impl LiveSetDatabase {
             CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
             CREATE INDEX IF NOT EXISTS idx_collection_projects_position ON collection_projects(collection_id, position);
             CREATE INDEX IF NOT EXISTS idx_projects_is_active ON projects(is_active);
+            CREATE INDEX IF NOT EXISTS idx_media_files_type ON media_files(media_type);
 
             -- Full-text search
             CREATE VIRTUAL TABLE IF NOT EXISTS project_search USING fts5(

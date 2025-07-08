@@ -44,6 +44,20 @@ service StudioProjectManager {
   // System Info
   rpc GetSystemInfo(GetSystemInfoRequest) returns (GetSystemInfoResponse);
   rpc GetStatistics(GetStatisticsRequest) returns (GetStatisticsResponse);
+  
+  // Media Management
+  rpc UploadCoverArt(stream UploadCoverArtRequest) returns (UploadCoverArtResponse);
+  rpc UploadAudioFile(stream UploadAudioFileRequest) returns (UploadAudioFileResponse);
+  rpc DownloadMedia(DownloadMediaRequest) returns (stream DownloadMediaResponse);
+  rpc DeleteMedia(DeleteMediaRequest) returns (DeleteMediaResponse);
+  
+  // Collection Cover Art
+  rpc SetCollectionCoverArt(SetCollectionCoverArtRequest) returns (SetCollectionCoverArtResponse);
+  rpc RemoveCollectionCoverArt(RemoveCollectionCoverArtRequest) returns (RemoveCollectionCoverArtResponse);
+  
+  // Project Audio Files
+  rpc SetProjectAudioFile(SetProjectAudioFileRequest) returns (SetProjectAudioFileResponse);
+  rpc RemoveProjectAudioFile(RemoveProjectAudioFileRequest) returns (RemoveProjectAudioFileResponse);
 }
 
 // Core Data Types
@@ -73,6 +87,7 @@ message Project {
   repeated Tag tags = 17;
   repeated Task tasks = 18;
   repeated string collection_ids = 19;
+  optional string audio_file_id = 20;
 }
 
 message Plugin {
@@ -120,6 +135,7 @@ message Collection {
   int64 created_at = 5;
   int64 modified_at = 6;
   repeated string project_ids = 7;
+  optional string cover_art_id = 8;
 }
 
 message TimeSignature {
@@ -137,6 +153,17 @@ message AbletonVersion {
   uint32 minor = 2;
   uint32 patch = 3;
   bool beta = 4;
+}
+
+message MediaFile {
+  string id = 1;
+  string original_filename = 2;
+  string file_extension = 3;
+  string media_type = 4;
+  int64 file_size_bytes = 5;
+  string mime_type = 6;
+  int64 uploaded_at = 7;
+  string checksum = 8;
 }
 
 // Request/Response Messages
@@ -409,4 +436,93 @@ message TempoStatistic {
 message KeyStatistic {
   string key = 1;
   int32 count = 2;
+}
+
+// Media Management Messages
+message UploadCoverArtRequest {
+  oneof data {
+    string collection_id = 1;
+    bytes chunk = 2;
+    string filename = 3;
+  }
+}
+
+message UploadCoverArtResponse {
+  string media_file_id = 1;
+  bool success = 2;
+  optional string error_message = 3;
+}
+
+message UploadAudioFileRequest {
+  oneof data {
+    string project_id = 1;
+    bytes chunk = 2;
+    string filename = 3;
+  }
+}
+
+message UploadAudioFileResponse {
+  string media_file_id = 1;
+  bool success = 2;
+  optional string error_message = 3;
+}
+
+message DownloadMediaRequest {
+  string media_file_id = 1;
+}
+
+message DownloadMediaResponse {
+  oneof data {
+    MediaFile metadata = 1;
+    bytes chunk = 2;
+  }
+}
+
+message DeleteMediaRequest {
+  string media_file_id = 1;
+}
+
+message DeleteMediaResponse {
+  bool success = 1;
+  optional string error_message = 2;
+}
+
+// Collection Cover Art Messages
+message SetCollectionCoverArtRequest {
+  string collection_id = 1;
+  string media_file_id = 2;
+}
+
+message SetCollectionCoverArtResponse {
+  bool success = 1;
+  optional string error_message = 2;
+}
+
+message RemoveCollectionCoverArtRequest {
+  string collection_id = 1;
+}
+
+message RemoveCollectionCoverArtResponse {
+  bool success = 1;
+  optional string error_message = 2;
+}
+
+// Project Audio File Messages
+message SetProjectAudioFileRequest {
+  string project_id = 1;
+  string media_file_id = 2;
+}
+
+message SetProjectAudioFileResponse {
+  bool success = 1;
+  optional string error_message = 2;
+}
+
+message RemoveProjectAudioFileRequest {
+  string project_id = 1;
+}
+
+message RemoveProjectAudioFileResponse {
+  bool success = 1;
+  optional string error_message = 2;
 } 

@@ -198,6 +198,9 @@ pub enum DatabaseError {
     #[error("Invalid database schema: {0}")]
     InvalidSchema(String),
 
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     #[error("File system error: {0}")]
     FileError(#[from] FileError),
 
