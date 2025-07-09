@@ -135,15 +135,17 @@ impl LiveSetDatabase {
                 COUNT(*) as total_tasks,
                 CAST(COUNT(CASE WHEN completed = 1 THEN 1 END) AS REAL) / COUNT(*) as completion_rate
             FROM project_tasks
-            WHERE datetime(created_at, 'unixepoch') >= datetime('now', '-' || ? || ' months')
+            WHERE created_at IS NOT NULL AND datetime(created_at, 'unixepoch') >= datetime('now', '-' || ? || ' months')
             GROUP BY year, month
             ORDER BY year, month
             "#
         )?;
 
         let trends = stmt.query_map([months], |row| {
-            let year: i32 = row.get::<_, String>(0)?.parse().unwrap_or(0);
-            let month: i32 = row.get::<_, String>(1)?.parse().unwrap_or(0);
+            let year_str: Option<String> = row.get(0)?;
+            let month_str: Option<String> = row.get(1)?;
+            let year: i32 = year_str.unwrap_or_default().parse().unwrap_or(0);
+            let month: i32 = month_str.unwrap_or_default().parse().unwrap_or(0);
             let completed_tasks: i32 = row.get(2)?;
             let total_tasks: i32 = row.get(3)?;
             let completion_rate: f64 = row.get(4)?;

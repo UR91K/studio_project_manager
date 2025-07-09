@@ -167,10 +167,10 @@ impl LiveSetDatabase {
     pub fn get_projects_per_year(&self) -> Result<Vec<(i32, i32)>, DatabaseError> {
         let mut stmt = self.conn.prepare(
             "SELECT 
-                CAST(strftime('%Y', created_at) AS INTEGER) as year,
+                CAST(strftime('%Y', datetime(created_at, 'unixepoch')) AS INTEGER) as year,
                 COUNT(*) as count
              FROM projects
-             WHERE is_active = true
+             WHERE is_active = true AND created_at IS NOT NULL
              GROUP BY year
              ORDER BY year DESC"
         )?;
@@ -192,11 +192,11 @@ impl LiveSetDatabase {
     pub fn get_projects_per_month(&self, limit: i32) -> Result<Vec<(i32, i32, i32)>, DatabaseError> {
         let mut stmt = self.conn.prepare(
             "SELECT 
-                CAST(strftime('%Y', created_at) AS INTEGER) as year,
-                CAST(strftime('%m', created_at) AS INTEGER) as month,
+                CAST(strftime('%Y', datetime(created_at, 'unixepoch')) AS INTEGER) as year,
+                CAST(strftime('%m', datetime(created_at, 'unixepoch')) AS INTEGER) as month,
                 COUNT(*) as count
              FROM projects
-             WHERE is_active = true
+             WHERE is_active = true AND created_at IS NOT NULL
              GROUP BY year, month
              ORDER BY year DESC, month DESC
              LIMIT ?"
@@ -392,21 +392,22 @@ impl LiveSetDatabase {
                 SUM(projects_modified) as projects_modified
              FROM (
                  SELECT 
-                     DATE(created_at) as date,
+                     DATE(datetime(created_at, 'unixepoch')) as date,
                      COUNT(*) as projects_created,
                      0 as projects_modified
                  FROM projects
-                 WHERE is_active = true AND created_at >= DATE('now', '-' || ? || ' days')
-                 GROUP BY DATE(created_at)
+                 WHERE is_active = true AND created_at IS NOT NULL AND datetime(created_at, 'unixepoch') >= DATE('now', '-' || ? || ' days')
+                 GROUP BY DATE(datetime(created_at, 'unixepoch'))
                  UNION ALL
                  SELECT 
-                     DATE(modified_at) as date,
+                     DATE(datetime(modified_at, 'unixepoch')) as date,
                      0 as projects_created,
                      COUNT(*) as projects_modified
                  FROM projects
-                 WHERE is_active = true AND modified_at >= DATE('now', '-' || ? || ' days')
-                 GROUP BY DATE(modified_at)
+                 WHERE is_active = true AND modified_at IS NOT NULL AND datetime(modified_at, 'unixepoch') >= DATE('now', '-' || ? || ' days')
+                 GROUP BY DATE(datetime(modified_at, 'unixepoch'))
              )
+             WHERE date IS NOT NULL
              GROUP BY date
              ORDER BY date DESC"
         )?;
