@@ -36,7 +36,9 @@ The application is now feature-complete. It runs as a system tray application by
 - **Collections** - for making tracklists; collects to-do lists of contained projects, support for cover art
 - **Tasks/To-do lists** per project for mix notes, reminders, and project management
 - **Media management** - upload/download cover art and audio files with storage statistics and cleanup
-- **Database statistics** and system information endpoints
+- **Advanced analytics** - collection-level statistics, task completion trends, and historical analytics
+- **Data export** - CSV export of statistics and analytics data
+- **Database statistics** with enhanced filtering (date ranges, collections, tags, Ableton versions)
 - **Configurable settings** via `config.toml`
 
 ### gRPC API Endpoints
@@ -59,11 +61,12 @@ The application is now feature-complete. It runs as a system tray application by
 
 **Collections**
 
-- `GetCollections` - Get all the current collections
+- `GetCollections` - Get all collections with aggregated statistics (duration, project count)
 - `CreateCollection` - Create a new collection
 - `UpdateCollection` - Update an existing collection
 - `AddProjectToCollection` - Add a project to a collection
 - `RemoveProjectFromCollection` - Remove a project from a collection
+- `GetCollectionTasks` - Get consolidated task view for all projects in a collection
 
 **Tags**
 
@@ -88,7 +91,8 @@ The application is now feature-complete. It runs as a system tray application by
 **System Info**
 
 - `GetSystemInfo` - Get system and database information
-- `GetStatistics` - Get database statistics
+- `GetStatistics` - Get database statistics with advanced filtering (date ranges, collections, tags, Ableton versions)
+- `ExportStatistics` - Export statistics and analytics data to CSV format
 
 **Media Management**
 
@@ -110,7 +114,7 @@ The application is now feature-complete. It runs as a system tray application by
 
 - **Version control system** - track project changes over time
 - **Audio file integration** - reference and play demo audio files for auditioning
-- **Analytics dashboard** - "Ableton Wrapped" style statistics
+- **Analytics dashboard frontend** - visual dashboard for the existing analytics backend ("Ableton Wrapped" style)
 - **macOS support** - currently Windows-focused
 
 ## Installation
@@ -236,6 +240,18 @@ grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"limit": 10}' 
 
 # Get orphaned media files
 grpcurl -plaintext -proto proto/studio_project_manager.proto localhost:50051 studio_project_manager.StudioProjectManager/GetOrphanedMediaFiles
+
+# Get statistics with date range filtering
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"date_range": {"start_date": "2024-01-01", "end_date": "2024-12-31"}}' localhost:50051 studio_project_manager.StudioProjectManager/GetStatistics
+
+# Get statistics filtered by collection
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"collection_ids": [1, 2, 3]}' localhost:50051 studio_project_manager.StudioProjectManager/GetStatistics
+
+# Get consolidated tasks for a collection
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"collection_id": 1}' localhost:50051 studio_project_manager.StudioProjectManager/GetCollectionTasks
+
+# Export statistics to CSV
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"format": "EXPORT_CSV"}' localhost:50051 studio_project_manager.StudioProjectManager/ExportStatistics
 ```
 
 ### Client Integration
