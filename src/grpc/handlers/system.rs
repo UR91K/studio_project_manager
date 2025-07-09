@@ -5,6 +5,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Code};
 use log::{debug, error, info, warn};
+use chrono;
 
 use crate::database::LiveSetDatabase;
 use crate::watcher::file_watcher::{FileWatcher, FileEvent};
@@ -306,11 +307,15 @@ impl SystemHandler {
 
     pub async fn get_statistics(
         &self,
-        _request: Request<GetStatisticsRequest>,
+        request: Request<GetStatisticsRequest>,
     ) -> Result<Response<GetStatisticsResponse>, Status> {
-        debug!("Getting comprehensive statistics");
+        debug!("Getting comprehensive statistics: {:?}", request);
+        let _req = request.into_inner();
         
         let mut db = self.db.lock().await;
+        
+        // TODO: Implement filtering based on _req.date_range, _req.collection_ids, _req.tag_ids, _req.ableton_version_filter
+        // For now, we'll use the existing implementation without filtering
         
         // Basic counts
         let (total_projects, total_plugins, total_samples, total_collections, total_tags, total_tasks) = 
@@ -476,6 +481,10 @@ impl SystemHandler {
         let largest_collection = if let Some(collection_id) = largest_collection_id {
             match db.get_collection_by_id(&collection_id) {
                 Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                    // Get collection statistics
+                    let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
+                        .unwrap_or((None, 0));
+                        
                     Some(crate::grpc::proto::Collection {
                         id,
                         name,
@@ -485,6 +494,8 @@ impl SystemHandler {
                         modified_at,
                         project_ids,
                         cover_art_id,
+                        total_duration_seconds,
+                        project_count,
                     })
                 },
                 _ => None,
@@ -492,6 +503,18 @@ impl SystemHandler {
         } else {
             None
         };
+        
+        // Task completion trends
+        let task_completion_trends = db.get_task_completion_trends(12).map_err(|e| Status::internal(format!("Database error: {}", e)))?
+            .into_iter()
+            .map(|(year, month, completed_tasks, total_tasks, completion_rate)| crate::grpc::proto::TaskCompletionTrendStatistic {
+                year,
+                month,
+                completed_tasks,
+                total_tasks,
+                completion_rate,
+            })
+            .collect();
         
         let response = GetStatisticsResponse {
             total_projects,
@@ -523,10 +546,85 @@ impl SystemHandler {
             ableton_versions,
             average_projects_per_collection,
             largest_collection,
+            task_completion_trends,
         };
         
         debug!("Successfully gathered comprehensive statistics");
         Ok(Response::new(response))
+    }
+
+    pub async fn export_statistics(
+        &self,
+        request: Request<ExportStatisticsRequest>,
+    ) -> Result<Response<ExportStatisticsResponse>, Status> {
+        debug!("ExportStatistics request: {:?}", request);
+        let req = request.into_inner();
+        
+        // Get statistics data (optionally with filters)
+        let stats_request = req.filters.clone().unwrap_or_default();
+        let stats_response = self.get_statistics(Request::new(stats_request)).await?;
+        let stats = stats_response.into_inner();
+        
+        match req.format() {
+            ExportFormat::ExportCsv => {
+                // Generate CSV export
+                let csv_data = self.generate_csv_export(stats).await?;
+                let filename = format!("statistics_{}.csv", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+                
+                Ok(Response::new(ExportStatisticsResponse {
+                    data: csv_data,
+                    filename,
+                    success: true,
+                    error_message: None,
+                }))
+            }
+        }
+    }
+
+    async fn generate_csv_export(&self, stats: GetStatisticsResponse) -> Result<Vec<u8>, Status> {
+        let mut csv_content = String::new();
+        
+        // Basic statistics
+        csv_content.push_str("Category,Value\n");
+        csv_content.push_str(&format!("Total Projects,{}\n", stats.total_projects));
+        csv_content.push_str(&format!("Total Plugins,{}\n", stats.total_plugins));
+        csv_content.push_str(&format!("Total Samples,{}\n", stats.total_samples));
+        csv_content.push_str(&format!("Total Collections,{}\n", stats.total_collections));
+        csv_content.push_str(&format!("Total Tags,{}\n", stats.total_tags));
+        csv_content.push_str(&format!("Total Tasks,{}\n", stats.total_tasks));
+        csv_content.push_str(&format!("Completed Tasks,{}\n", stats.completed_tasks));
+        csv_content.push_str(&format!("Pending Tasks,{}\n", stats.pending_tasks));
+        csv_content.push_str(&format!("Task Completion Rate,{:.2}%\n", stats.task_completion_rate * 100.0));
+        csv_content.push_str(&format!("Average Project Duration,{:.2} seconds\n", stats.average_project_duration_seconds));
+        csv_content.push_str(&format!("Average Projects per Collection,{:.2}\n", stats.average_projects_per_collection));
+        csv_content.push_str(&format!("Average Plugins per Project,{:.2}\n", stats.average_plugins_per_project));
+        csv_content.push_str(&format!("Average Samples per Project,{:.2}\n", stats.average_samples_per_project));
+        csv_content.push_str("\n");
+        
+        // Top plugins
+        csv_content.push_str("Top Plugins\n");
+        csv_content.push_str("Plugin Name,Vendor,Usage Count\n");
+        for plugin in stats.top_plugins {
+            csv_content.push_str(&format!("{},{},{}\n", plugin.name, plugin.vendor, plugin.usage_count));
+        }
+        csv_content.push_str("\n");
+        
+        // Tempo distribution
+        csv_content.push_str("Tempo Distribution\n");
+        csv_content.push_str("Tempo,Count\n");
+        for tempo in stats.tempo_distribution {
+            csv_content.push_str(&format!("{},{}\n", tempo.tempo, tempo.count));
+        }
+        csv_content.push_str("\n");
+        
+        // Key distribution
+        csv_content.push_str("Key Distribution\n");
+        csv_content.push_str("Key,Count\n");
+        for key in stats.key_distribution {
+            csv_content.push_str(&format!("{},{}\n", key.key, key.count));
+        }
+        
+        Ok(csv_content.into_bytes())
     }
     
 } 

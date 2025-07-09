@@ -123,4 +123,35 @@ impl LiveSetDatabase {
         debug!("Successfully retrieved collection tasks");
         Ok(tasks)
     }
+
+    pub fn get_task_completion_trends(&mut self, months: i32) -> Result<Vec<(i32, i32, i32, i32, f64)>, DatabaseError> {
+        debug!("Getting task completion trends for last {} months", months);
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT 
+                strftime('%Y', datetime(created_at, 'unixepoch')) as year,
+                strftime('%m', datetime(created_at, 'unixepoch')) as month,
+                COUNT(CASE WHEN completed = 1 THEN 1 END) as completed_tasks,
+                COUNT(*) as total_tasks,
+                CAST(COUNT(CASE WHEN completed = 1 THEN 1 END) AS REAL) / COUNT(*) as completion_rate
+            FROM project_tasks
+            WHERE datetime(created_at, 'unixepoch') >= datetime('now', '-' || ? || ' months')
+            GROUP BY year, month
+            ORDER BY year, month
+            "#
+        )?;
+
+        let trends = stmt.query_map([months], |row| {
+            let year: i32 = row.get::<_, String>(0)?.parse().unwrap_or(0);
+            let month: i32 = row.get::<_, String>(1)?.parse().unwrap_or(0);
+            let completed_tasks: i32 = row.get(2)?;
+            let total_tasks: i32 = row.get(3)?;
+            let completion_rate: f64 = row.get(4)?;
+            debug!("Found trend: {}-{:02}: {}/{} tasks ({:.2}%)", year, month, completed_tasks, total_tasks, completion_rate * 100.0);
+            Ok((year, month, completed_tasks, total_tasks, completion_rate))
+        })?.filter_map(|r| r.ok()).collect();
+
+        debug!("Successfully retrieved task completion trends");
+        Ok(trends)
+    }
 }

@@ -463,4 +463,34 @@ impl LiveSetDatabase {
         debug!("Retrieved {} collections for project", collection_ids.len());
         Ok(collection_ids)
     }
+
+    /// Get statistics for a specific collection (total duration and project count)
+    pub fn get_collection_statistics(&mut self, collection_id: &str) -> Result<(Option<f64>, i32), DatabaseError> {
+        debug!("Getting statistics for collection {}", collection_id);
+        
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT 
+                SUM(COALESCE(p.duration_seconds, 0)) as total_duration,
+                COUNT(p.id) as project_count
+            FROM collection_projects cp
+            LEFT JOIN projects p ON p.id = cp.project_id
+            WHERE cp.collection_id = ?
+            "#
+        )?;
+
+        let result = stmt.query_row([collection_id], |row| {
+            let total_duration: Option<f64> = row.get(0)?;
+            let project_count: i32 = row.get(1)?;
+            Ok((total_duration, project_count))
+        });
+
+        match result {
+            Ok((duration, count)) => {
+                debug!("Collection statistics: {} projects, {:?} total duration", count, duration);
+                Ok((duration, count))
+            }
+            Err(e) => Err(DatabaseError::from(e))
+        }
+    }
 }

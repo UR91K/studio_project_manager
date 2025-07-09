@@ -51,6 +51,10 @@ impl CollectionsHandler {
                     // Get the full collection details including project IDs
                     match db.get_collection_by_id(&id) {
                         Ok(Some((_, _, _, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                            // Get collection statistics
+                            let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
+                                .unwrap_or((None, 0));
+                            
                             collections.push(Collection {
                                 id: id.clone(),
                                 name: name.clone(),
@@ -60,6 +64,8 @@ impl CollectionsHandler {
                                 modified_at,
                                 project_ids,
                                 cover_art_id,
+                                total_duration_seconds,
+                                project_count,
                             });
                         }
                         Ok(None) => {
@@ -97,6 +103,10 @@ impl CollectionsHandler {
                 // Get the created collection details to return in response
                 match db.get_collection_by_id(&collection_id) {
                     Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                        // Get collection statistics
+                        let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
+                            .unwrap_or((None, 0));
+                            
                         let collection = Collection {
                             id,
                             name,
@@ -106,6 +116,8 @@ impl CollectionsHandler {
                             modified_at,
                             project_ids,
                             cover_art_id,
+                            total_duration_seconds,
+                            project_count,
                         };
                         
                         let response = CreateCollectionResponse { collection: Some(collection) };
@@ -147,6 +159,10 @@ impl CollectionsHandler {
                 // Get the updated collection details to return in response
                 match db.get_collection_by_id(&req.collection_id) {
                     Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                        // Get collection statistics
+                        let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
+                            .unwrap_or((None, 0));
+                            
                         let collection = Collection {
                             id,
                             name,
@@ -156,6 +172,8 @@ impl CollectionsHandler {
                             modified_at,
                             project_ids,
                             cover_art_id,
+                            total_duration_seconds,
+                            project_count,
                         };
                         
                         let response = UpdateCollectionResponse { collection: Some(collection) };
@@ -217,6 +235,60 @@ impl CollectionsHandler {
             }
             Err(e) => {
                 error!("Failed to remove project {} from collection {}: {:?}", req.project_id, req.collection_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn get_collection_tasks(
+        &self,
+        request: Request<GetCollectionTasksRequest>,
+    ) -> Result<Response<GetCollectionTasksResponse>, Status> {
+        debug!("GetCollectionTasks request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.get_collection_tasks(&req.collection_id) {
+            Ok(tasks_data) => {
+                let mut tasks = Vec::new();
+                let mut completed_count = 0;
+                
+                for (id, project_name, description, completed, created_at) in tasks_data {
+                    if completed {
+                        completed_count += 1;
+                    }
+                    
+                    tasks.push(Task {
+                        id,
+                        project_id: project_name, // Using project_name in project_id field to show which project the task belongs to
+                        description,
+                        completed,
+                        created_at,
+                    });
+                }
+                
+                let total_tasks = tasks.len() as i32;
+                let pending_tasks = total_tasks - completed_count;
+                let completion_rate = if total_tasks > 0 {
+                    completed_count as f64 / total_tasks as f64
+                } else {
+                    0.0
+                };
+                
+                let response = GetCollectionTasksResponse {
+                    tasks,
+                    total_tasks,
+                    completed_tasks: completed_count,
+                    pending_tasks,
+                    completion_rate,
+                };
+                
+                debug!("Successfully retrieved {} tasks for collection {}", total_tasks, req.collection_id);
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get tasks for collection {}: {:?}", req.collection_id, e);
                 Err(Status::new(Code::Internal, format!("Database error: {}", e)))
             }
         }

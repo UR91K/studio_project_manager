@@ -173,6 +173,13 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         self.collections_handler.remove_project_from_collection(request).await
     }
 
+    async fn get_collection_tasks(
+        &self,
+        request: Request<GetCollectionTasksRequest>,
+    ) -> Result<Response<GetCollectionTasksResponse>, Status> {
+        self.collections_handler.get_collection_tasks(request).await
+    }
+
     // TAG METHODS - delegate to tags_handler
     async fn get_tags(
         &self,
@@ -377,5 +384,12 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         request: Request<GetStatisticsRequest>,
     ) -> Result<Response<GetStatisticsResponse>, Status> {
         self.system_handler.get_statistics(request).await
+    }
+
+    async fn export_statistics(
+        &self,
+        request: Request<ExportStatisticsRequest>,
+    ) -> Result<Response<ExportStatisticsResponse>, Status> {
+        self.system_handler.export_statistics(request).await
     }
 } 

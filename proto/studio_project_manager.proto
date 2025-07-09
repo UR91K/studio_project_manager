@@ -23,6 +23,7 @@ service StudioProjectManager {
   rpc UpdateCollection(UpdateCollectionRequest) returns (UpdateCollectionResponse);
   rpc AddProjectToCollection(AddProjectToCollectionRequest) returns (AddProjectToCollectionResponse);
   rpc RemoveProjectFromCollection(RemoveProjectFromCollectionRequest) returns (RemoveProjectFromCollectionResponse);
+  rpc GetCollectionTasks(GetCollectionTasksRequest) returns (GetCollectionTasksResponse);
   
   // Tags
   rpc GetTags(GetTagsRequest) returns (GetTagsResponse);
@@ -44,6 +45,7 @@ service StudioProjectManager {
   // System Info
   rpc GetSystemInfo(GetSystemInfoRequest) returns (GetSystemInfoResponse);
   rpc GetStatistics(GetStatisticsRequest) returns (GetStatisticsResponse);
+  rpc ExportStatistics(ExportStatisticsRequest) returns (ExportStatisticsResponse);
   
   // Media Management
   rpc UploadCoverArt(stream UploadCoverArtRequest) returns (UploadCoverArtResponse);
@@ -139,6 +141,8 @@ message Collection {
   int64 modified_at = 6;
   repeated string project_ids = 7;
   optional string cover_art_id = 8;
+  optional double total_duration_seconds = 9;
+  int32 project_count = 10;
 }
 
 message TimeSignature {
@@ -167,6 +171,11 @@ message MediaFile {
   string mime_type = 6;
   int64 uploaded_at = 7;
   string checksum = 8;
+}
+
+message DateRange {
+  int64 start_timestamp = 1;
+  int64 end_timestamp = 2;
 }
 
 // Request/Response Messages
@@ -236,6 +245,10 @@ message ScanProgressResponse {
   ScanStatus status = 5;
 }
 
+enum ExportFormat {
+  EXPORT_CSV = 0;
+}
+
 enum ScanStatus {
   SCAN_UNKNOWN = 0;
   SCAN_STARTING = 1;
@@ -298,6 +311,18 @@ message RemoveProjectFromCollectionRequest {
 
 message RemoveProjectFromCollectionResponse {
   bool success = 1;
+}
+
+message GetCollectionTasksRequest {
+  string collection_id = 1;
+}
+
+message GetCollectionTasksResponse {
+  repeated Task tasks = 1;
+  int32 total_tasks = 2;
+  int32 completed_tasks = 3;
+  int32 pending_tasks = 4;
+  double completion_rate = 5;
 }
 
 // Tags
@@ -411,7 +436,12 @@ message GetSystemInfoResponse {
   int64 uptime_seconds = 4;
 }
 
-message GetStatisticsRequest {}
+message GetStatisticsRequest {
+  optional DateRange date_range = 1;
+  repeated string collection_ids = 2;
+  repeated string tag_ids = 3;
+  optional string ableton_version_filter = 4;
+}
 
 message GetStatisticsResponse {
   // Basic counts
@@ -466,6 +496,21 @@ message GetStatisticsResponse {
   // Collection statistics
   double average_projects_per_collection = 28;
   Collection largest_collection = 29;
+  
+  // Historical task analytics
+  repeated TaskCompletionTrendStatistic task_completion_trends = 30;
+}
+
+message ExportStatisticsRequest {
+  ExportFormat format = 1;
+  optional GetStatisticsRequest filters = 2;
+}
+
+message ExportStatisticsResponse {
+  bytes data = 1;
+  string filename = 2;
+  bool success = 3;
+  optional string error_message = 4;
 }
 
 message PluginStatistic {
@@ -536,6 +581,14 @@ message ActivityTrendStatistic {
 message VersionStatistic {
   string version = 1;
   int32 count = 2;
+}
+
+message TaskCompletionTrendStatistic {
+  int32 year = 1;
+  int32 month = 2;
+  int32 completed_tasks = 3;
+  int32 total_tasks = 4;
+  double completion_rate = 5;
 }
 
 // Media Management Messages
