@@ -6,6 +6,8 @@ pub mod tags;
 pub mod tasks;
 pub mod media;
 pub mod system;
+pub mod plugins;
+pub mod samples;
 
 pub use projects::ProjectsHandler;
 pub use search::SearchHandler;
@@ -13,4 +15,6 @@ pub use collections::CollectionsHandler;
 pub use tags::TagsHandler;
 pub use tasks::TasksHandler;
 pub use media::MediaHandler;
-pub use system::SystemHandler; 
+pub use system::SystemHandler;
+pub use plugins::PluginsHandler;
+pub use samples::SamplesHandler; 

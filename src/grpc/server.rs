@@ -20,6 +20,8 @@ pub struct StudioProjectManagerServer {
     pub tasks_handler: TasksHandler,
     pub media_handler: MediaHandler,
     pub system_handler: SystemHandler,
+    pub plugins_handler: PluginsHandler,
+    pub samples_handler: SamplesHandler,
 }
 
 impl StudioProjectManagerServer {
@@ -61,6 +63,8 @@ impl StudioProjectManagerServer {
                 watcher_events,
                 start_time,
             ),
+            plugins_handler: PluginsHandler::new(Arc::clone(&db)),
+            samples_handler: SamplesHandler::new(Arc::clone(&db)),
         })
     }
 
@@ -84,8 +88,10 @@ impl StudioProjectManagerServer {
             tasks_handler: TasksHandler::new(Arc::clone(&db)),
             media_handler: MediaHandler::new(Arc::clone(&db), Arc::clone(&media_storage)),
             system_handler: SystemHandler::new(
-                db, scan_status, scan_progress, watcher, watcher_events, start_time
+                Arc::clone(&db), scan_status, scan_progress, watcher, watcher_events, start_time
             ),
+            plugins_handler: PluginsHandler::new(Arc::clone(&db)),
+            samples_handler: SamplesHandler::new(Arc::clone(&db)),
         }
     }
 
@@ -447,5 +453,77 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         request: Request<ExportStatisticsRequest>,
     ) -> Result<Response<ExportStatisticsResponse>, Status> {
         self.system_handler.export_statistics(request).await
+    }
+
+    // PLUGIN METHODS - delegate to plugins_handler
+    async fn get_all_plugins(
+        &self,
+        request: Request<GetAllPluginsRequest>,
+    ) -> Result<Response<GetAllPluginsResponse>, Status> {
+        self.plugins_handler.get_all_plugins(request).await
+    }
+
+    async fn get_plugin_by_installed_status(
+        &self,
+        request: Request<GetPluginByInstalledStatusRequest>,
+    ) -> Result<Response<GetPluginByInstalledStatusResponse>, Status> {
+        self.plugins_handler.get_plugin_by_installed_status(request).await
+    }
+
+    async fn search_plugins(
+        &self,
+        request: Request<SearchPluginsRequest>,
+    ) -> Result<Response<SearchPluginsResponse>, Status> {
+        self.plugins_handler.search_plugins(request).await
+    }
+
+    async fn get_plugin_stats(
+        &self,
+        request: Request<GetPluginStatsRequest>,
+    ) -> Result<Response<GetPluginStatsResponse>, Status> {
+        self.plugins_handler.get_plugin_stats(request).await
+    }
+
+    async fn get_all_plugin_usage_numbers(
+        &self,
+        request: Request<GetAllPluginUsageNumbersRequest>,
+    ) -> Result<Response<GetAllPluginUsageNumbersResponse>, Status> {
+        self.plugins_handler.get_all_plugin_usage_numbers(request).await
+    }
+
+    // SAMPLE METHODS - delegate to samples_handler
+    async fn get_all_samples(
+        &self,
+        request: Request<GetAllSamplesRequest>,
+    ) -> Result<Response<GetAllSamplesResponse>, Status> {
+        self.samples_handler.get_all_samples(request).await
+    }
+
+    async fn get_sample_by_presence(
+        &self,
+        request: Request<GetSampleByPresenceRequest>,
+    ) -> Result<Response<GetSampleByPresenceResponse>, Status> {
+        self.samples_handler.get_sample_by_presence(request).await
+    }
+
+    async fn search_samples(
+        &self,
+        request: Request<SearchSamplesRequest>,
+    ) -> Result<Response<SearchSamplesResponse>, Status> {
+        self.samples_handler.search_samples(request).await
+    }
+
+    async fn get_sample_stats(
+        &self,
+        request: Request<GetSampleStatsRequest>,
+    ) -> Result<Response<GetSampleStatsResponse>, Status> {
+        self.samples_handler.get_sample_stats(request).await
+    }
+
+    async fn get_all_sample_usage_numbers(
+        &self,
+        request: Request<GetAllSampleUsageNumbersRequest>,
+    ) -> Result<Response<GetAllSampleUsageNumbersResponse>, Status> {
+        self.samples_handler.get_all_sample_usage_numbers(request).await
     }
 } 

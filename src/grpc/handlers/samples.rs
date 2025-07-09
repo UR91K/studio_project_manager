@@ -1,0 +1,187 @@
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tonic::{Request, Response, Status, Code};
+use log::{debug, error};
+
+use crate::database::LiveSetDatabase;
+use super::super::proto::*;
+
+pub struct SamplesHandler {
+    pub db: Arc<Mutex<LiveSetDatabase>>,
+}
+
+impl SamplesHandler {
+    pub fn new(db: Arc<Mutex<LiveSetDatabase>>) -> Self {
+        Self { db }
+    }
+
+    pub async fn get_all_samples(
+        &self,
+        request: Request<GetAllSamplesRequest>,
+    ) -> Result<Response<GetAllSamplesResponse>, Status> {
+        debug!("GetAllSamples request: {:?}", request);
+        
+        let req = request.into_inner();
+        let db = self.db.lock().await;
+        
+        match db.get_all_samples(req.limit, req.offset, req.sort_by, req.sort_desc) {
+            Ok((samples, total_count)) => {
+                let proto_samples = samples.into_iter().map(|sample| {
+                    Sample {
+                        id: sample.id.to_string(),
+                        name: sample.name,
+                        path: sample.path.to_string_lossy().to_string(),
+                        is_present: sample.is_present,
+                    }
+                }).collect();
+
+                let response = GetAllSamplesResponse {
+                    samples: proto_samples,
+                    total_count,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get all samples: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn get_sample_by_presence(
+        &self,
+        request: Request<GetSampleByPresenceRequest>,
+    ) -> Result<Response<GetSampleByPresenceResponse>, Status> {
+        debug!("GetSampleByPresence request: {:?}", request);
+        
+        let req = request.into_inner();
+        let db = self.db.lock().await;
+        
+        match db.get_samples_by_presence(
+            req.is_present,
+            req.limit,
+            req.offset,
+            req.sort_by,
+            req.sort_desc,
+        ) {
+            Ok((samples, total_count)) => {
+                let proto_samples = samples.into_iter().map(|sample| {
+                    Sample {
+                        id: sample.id.to_string(),
+                        name: sample.name,
+                        path: sample.path.to_string_lossy().to_string(),
+                        is_present: sample.is_present,
+                    }
+                }).collect();
+
+                let response = GetSampleByPresenceResponse {
+                    samples: proto_samples,
+                    total_count,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get samples by presence: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn search_samples(
+        &self,
+        request: Request<SearchSamplesRequest>,
+    ) -> Result<Response<SearchSamplesResponse>, Status> {
+        debug!("SearchSamples request: {:?}", request);
+        
+        let req = request.into_inner();
+        let db = self.db.lock().await;
+        
+        match db.search_samples(
+            &req.query,
+            req.limit,
+            req.offset,
+            req.present_only,
+            req.extension_filter,
+        ) {
+            Ok((samples, total_count)) => {
+                let proto_samples = samples.into_iter().map(|sample| {
+                    Sample {
+                        id: sample.id.to_string(),
+                        name: sample.name,
+                        path: sample.path.to_string_lossy().to_string(),
+                        is_present: sample.is_present,
+                    }
+                }).collect();
+
+                let response = SearchSamplesResponse {
+                    samples: proto_samples,
+                    total_count,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to search samples: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn get_sample_stats(
+        &self,
+        _request: Request<GetSampleStatsRequest>,
+    ) -> Result<Response<GetSampleStatsResponse>, Status> {
+        debug!("GetSampleStats request");
+        
+        let db = self.db.lock().await;
+        
+        match db.get_sample_stats() {
+            Ok(stats) => {
+                let response = GetSampleStatsResponse {
+                    total_samples: stats.total_samples,
+                    present_samples: stats.present_samples,
+                    missing_samples: stats.missing_samples,
+                    unique_paths: stats.unique_paths,
+                    samples_by_extension: stats.samples_by_extension,
+                    total_estimated_size_bytes: stats.total_estimated_size_bytes,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get sample stats: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn get_all_sample_usage_numbers(
+        &self,
+        _request: Request<GetAllSampleUsageNumbersRequest>,
+    ) -> Result<Response<GetAllSampleUsageNumbersResponse>, Status> {
+        debug!("GetAllSampleUsageNumbers request");
+        
+        let db = self.db.lock().await;
+        
+        match db.get_all_sample_usage_numbers() {
+            Ok(usage_info) => {
+                let sample_usages = usage_info.into_iter().map(|info| {
+                    SampleUsage {
+                        sample_id: info.sample_id,
+                        name: info.name,
+                        path: info.path,
+                        usage_count: info.usage_count,
+                        project_count: info.project_count,
+                    }
+                }).collect();
+
+                let response = GetAllSampleUsageNumbersResponse {
+                    sample_usages,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get sample usage numbers: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+} 

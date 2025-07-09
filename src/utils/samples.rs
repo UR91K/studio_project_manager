@@ -36,7 +36,7 @@ pub(crate) fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, SampleE
             trace!("Canonicalized path: {:?}", canonical_path);
             Ok(canonical_path)
         }
-        Err(e) => {
+        Err(_e) => {
             // warn!(
             //    "Failed to canonicalize path: {}. Using non-canonicalized path.",
             //    e
