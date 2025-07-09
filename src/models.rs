@@ -1,3 +1,26 @@
+//! # Core Data Models
+//!
+//! This module contains all the core data structures used throughout the Studio Project Manager.
+//! These models represent the various entities found in Ableton Live projects, including projects
+//! themselves, plugins, samples, musical metadata, and more.
+//!
+//! ## Key Types
+//!
+//! - [`AbletonVersion`]: Represents an Ableton Live version with comparison support
+//! - [`Plugin`]: Represents a plugin with installation status and metadata
+//! - [`Sample`]: Represents an audio sample with file presence validation
+//! - [`KeySignature`]: Musical key information combining tonic and scale
+//! - [`TimeSignature`]: Musical time signature with validation
+//! - [`PluginFormat`]: Enumeration of supported plugin formats (VST2/VST3)
+//!
+//! ## Musical Types
+//!
+//! The module includes comprehensive musical type definitions:
+//! - [`Tonic`]: Musical root notes (C, D, E, etc.)
+//! - [`Scale`]: Musical scales (Major, Minor, Dorian, etc.)
+//!
+//! These types support parsing from strings and provide display formatting for UI purposes.
+
 use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
@@ -14,14 +37,50 @@ use crate::config::CONFIG;
 use crate::error::{DatabaseError, SampleError, TimeSignatureError};
 use crate::utils::plugins::get_most_recent_db_file;
 
+/// Unique identifier type for database entities.
+///
+/// This is a wrapper around `u64` that provides type safety for entity IDs.
+/// Currently used internally for database operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Id(u64);
 
+/// Represents an Ableton Live version with semantic version comparison support.
+///
+/// This struct stores version information for Ableton Live projects, including
+/// major, minor, and patch versions, as well as beta status. It implements
+/// proper version ordering where non-beta versions are considered greater
+/// than beta versions of the same number.
+///
+/// # Examples
+///
+/// ```rust
+/// use studio_project_manager::models::AbletonVersion;
+///
+/// let v11_2_0 = AbletonVersion {
+///     major: 11,
+///     minor: 2,
+///     patch: 0,
+///     beta: false,
+/// };
+///
+/// let v11_1_0 = AbletonVersion {
+///     major: 11,
+///     minor: 1,
+///     patch: 0,
+///     beta: false,
+/// };
+///
+/// assert!(v11_2_0 > v11_1_0);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AbletonVersion {
+    /// Major version number (e.g., 11 for Ableton Live 11)
     pub major: u32,
+    /// Minor version number (e.g., 2 for version 11.2.0)
     pub minor: u32,
+    /// Patch version number (e.g., 5 for version 11.2.5)
     pub patch: u32,
+    /// Whether this is a beta release
     pub beta: bool,
 }
 
@@ -67,65 +126,191 @@ impl Ord for AbletonVersion {
     }
 }
 
+/// Musical scales supported by Ableton Live.
+///
+/// This enum represents all the musical scales that can be detected in Ableton Live projects.
+/// It includes common scales like Major and Minor, as well as more exotic scales and modes.
+/// The scales are organized into several categories:
+///
+/// ## Common Scales
+/// - [`Scale::Major`]: Major scale
+/// - [`Scale::Minor`]: Natural minor scale
+/// - [`Scale::HarmonicMinor`]: Harmonic minor scale
+/// - [`Scale::MelodicMinor`]: Melodic minor scale
+///
+/// ## Modes
+/// - [`Scale::Dorian`]: Dorian mode
+/// - [`Scale::Mixolydian`]: Mixolydian mode
+/// - [`Scale::Aeolian`]: Aeolian mode (natural minor)
+/// - [`Scale::Phrygian`]: Phrygian mode
+/// - [`Scale::Locrian`]: Locrian mode
+///
+/// ## Pentatonic Scales
+/// - [`Scale::MajorPentatonic`]: Major pentatonic scale
+/// - [`Scale::MinorPentatonic`]: Minor pentatonic scale
+/// - [`Scale::MinorBlues`]: Minor blues scale
+///
+/// ## Exotic Scales
+/// - [`Scale::WholeTone`]: Whole tone scale
+/// - [`Scale::HalfWholeDim`]: Half-whole diminished scale
+/// - [`Scale::WholeHalfDim`]: Whole-half diminished scale
+/// - [`Scale::Hirajoshi`]: Japanese Hirajoshi scale
+/// - [`Scale::Iwato`]: Japanese Iwato scale
+/// - [`Scale::PelogSelisir`]: Indonesian Pelog Selisir scale
+/// - [`Scale::PelogTembung`]: Indonesian Pelog Tembung scale
+///
+/// ## Messiaen Modes
+/// - [`Scale::Messiaen1`] through [`Scale::Messiaen7`]: Messiaen's modes of limited transposition
+///
+/// The enum supports parsing from strings and display formatting for UI purposes.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 #[allow(dead_code)]
 pub enum Scale {
+    /// Empty/unset scale
     Empty,
+    /// Major scale (Ionian mode)
     Major,
+    /// Natural minor scale
     Minor,
+    /// Dorian mode
     Dorian,
+    /// Mixolydian mode
     Mixolydian,
+    /// Aeolian mode (natural minor)
     Aeolian,
+    /// Phrygian mode
     Phrygian,
+    /// Locrian mode
     Locrian,
+    /// Whole tone scale
     WholeTone,
+    /// Half-whole diminished scale
     HalfWholeDim,
+    /// Whole-half diminished scale
     WholeHalfDim,
+    /// Minor blues scale
     MinorBlues,
+    /// Minor pentatonic scale
     MinorPentatonic,
+    /// Major pentatonic scale
     MajorPentatonic,
+    /// Harmonic minor scale
     HarmonicMinor,
+    /// Melodic minor scale
     MelodicMinor,
+    /// Dorian #4 mode
     Dorian4,
+    /// Phrygian dominant scale
     PhrygianDominant,
+    /// Lydian dominant scale
     LydianDominant,
+    /// Lydian augmented scale
     LydianAugmented,
+    /// Harmonic major scale
     HarmonicMajor,
+    /// Super locrian scale
     SuperLocrian,
+    /// Spanish scale
     BToneSpanish,
+    /// Hungarian minor scale
     HungarianMinor,
+    /// Japanese Hirajoshi scale
     Hirajoshi,
+    /// Japanese Iwato scale
     Iwato,
+    /// Indonesian Pelog Selisir scale
     PelogSelisir,
+    /// Indonesian Pelog Tembung scale
     PelogTembung,
+    /// Messiaen mode 1 (whole tone)
     Messiaen1,
+    /// Messiaen mode 2 (octatonic)
     Messiaen2,
+    /// Messiaen mode 3
     Messiaen3,
+    /// Messiaen mode 4
     Messiaen4,
+    /// Messiaen mode 5
     Messiaen5,
+    /// Messiaen mode 6
     Messiaen6,
+    /// Messiaen mode 7
     Messiaen7,
 }
 
+/// Musical tonic (root note) for key signatures.
+///
+/// This enum represents the twelve chromatic pitches that can serve as the root
+/// note of a key signature. It includes both natural notes (C, D, E, F, G, A, B)
+/// and their sharp variants.
+///
+/// # Examples
+///
+/// ```rust
+/// use studio_project_manager::models::Tonic;
+///
+/// // Create a tonic from MIDI note number
+/// let tonic = Tonic::from_midi_note(60); // Middle C
+/// assert_eq!(tonic, Tonic::C);
+///
+/// // Parse from string
+/// let tonic: Tonic = "CSharp".parse().unwrap();
+/// assert_eq!(tonic, Tonic::CSharp);
+/// ```
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 #[allow(dead_code)]
 pub enum Tonic {
+    /// Empty/unset tonic
     Empty,
+    /// C natural
     C,
+    /// C sharp / D flat
     CSharp,
+    /// D natural
     D,
+    /// D sharp / E flat
     DSharp,
+    /// E natural
     E,
+    /// F natural
     F,
+    /// F sharp / G flat
     FSharp,
+    /// G natural
     G,
+    /// G sharp / A flat
     GSharp,
+    /// A natural
     A,
+    /// A sharp / B flat
     ASharp,
+    /// B natural
     B,
 }
 
 impl Tonic {
+    /// Creates a tonic from a MIDI note number.
+    ///
+    /// This method converts a MIDI note number to the corresponding tonic by
+    /// using modulo 12 arithmetic. MIDI note 60 corresponds to middle C.
+    ///
+    /// # Arguments
+    ///
+    /// * `number` - MIDI note number (0-127, but any i32 is accepted)
+    ///
+    /// # Returns
+    ///
+    /// The corresponding [`Tonic`] variant
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use studio_project_manager::models::Tonic;
+    ///
+    /// assert_eq!(Tonic::from_midi_note(60), Tonic::C);      // Middle C
+    /// assert_eq!(Tonic::from_midi_note(61), Tonic::CSharp); // C#
+    /// assert_eq!(Tonic::from_midi_note(72), Tonic::C);      // C an octave higher
+    /// ```
     pub fn from_midi_note(number: i32) -> Self {
         match number % 12 {
             0 => Tonic::C,
@@ -236,9 +421,35 @@ impl fmt::Display for Scale {
     }
 }
 
+/// Musical key signature combining a tonic and scale.
+///
+/// This struct represents a complete key signature as used in music theory,
+/// combining a root note ([`Tonic`]) with a [`Scale`] to define the key of
+/// a musical piece or section.
+///
+/// # Examples
+///
+/// ```rust
+/// use studio_project_manager::models::{KeySignature, Tonic, Scale};
+///
+/// let c_major = KeySignature {
+///     tonic: Tonic::C,
+///     scale: Scale::Major,
+/// };
+///
+/// let a_minor = KeySignature {
+///     tonic: Tonic::A,
+///     scale: Scale::Minor,
+/// };
+///
+/// // Display formatting
+/// println!("{}", c_major); // "C Major"
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KeySignature {
+    /// The root note of the key
     pub tonic: Tonic,
+    /// The scale type of the key
     pub scale: Scale,
 }
 
@@ -250,15 +461,46 @@ impl fmt::Display for KeySignature {
 
 // PLUGINS
 
+/// Plugin format types supported by Ableton Live.
+///
+/// This enum represents the different plugin formats that can be used in
+/// Ableton Live projects. It distinguishes between VST2 and VST3 formats,
+/// as well as between instruments and audio effects.
+///
+/// # Examples
+///
+/// ```rust
+/// use studio_project_manager::models::PluginFormat;
+///
+/// let format = PluginFormat::VST3Instrument;
+/// println!("{}", format); // "VST3 Instrument"
+///
+/// // Get development type and category
+/// let (dev_type, category) = format.to_dev_type_and_category();
+/// assert_eq!(dev_type, "vst3");
+/// assert_eq!(category, "instr");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PluginFormat {
+    /// VST2 instrument plugin
     VST2Instrument,
+    /// VST2 audio effect plugin
     VST2AudioFx,
+    /// VST3 instrument plugin
     VST3Instrument,
+    /// VST3 audio effect plugin
     VST3AudioFx,
 }
 
 impl PluginFormat {
+    /// Generates a random plugin format for testing purposes.
+    ///
+    /// This method is primarily used in testing and development to create
+    /// random plugin formats. It selects equally from all four format variants.
+    ///
+    /// # Returns
+    ///
+    /// A randomly selected [`PluginFormat`] variant
     pub fn random() -> Self {
         let variants = [
             PluginFormat::VST2Instrument,
@@ -269,6 +511,27 @@ impl PluginFormat {
         *variants.choose(&mut thread_rng()).unwrap()
     }
 
+    /// Converts the plugin format to development type and category strings.
+    ///
+    /// This method maps the plugin format to the string representations used
+    /// in Ableton's plugin database for development type and category.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing `(dev_type, category)` where:
+    /// - `dev_type` is either "vst" or "vst3"
+    /// - `category` is either "instr" or "audiofx"
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use studio_project_manager::models::PluginFormat;
+    ///
+    /// let format = PluginFormat::VST3Instrument;
+    /// let (dev_type, category) = format.to_dev_type_and_category();
+    /// assert_eq!(dev_type, "vst3");
+    /// assert_eq!(category, "instr");
+    /// ```
     pub fn to_dev_type_and_category(self) -> (&'static str, &'static str) {
         match self {
             PluginFormat::VST2Instrument => ("vst", "instr"),
@@ -290,27 +553,97 @@ impl fmt::Display for PluginFormat {
     }
 }
 
+/// Represents a plugin used in an Ableton Live project.
+///
+/// This struct contains comprehensive information about a plugin, including
+/// both metadata extracted from the project file and installation status
+/// determined by checking against Ableton's plugin database.
+///
+/// # Plugin Installation Status
+///
+/// The [`Plugin::installed`] field indicates whether the plugin is currently
+/// installed on the system. This is determined by cross-referencing the
+/// plugin's [`Plugin::dev_identifier`] with Ableton's plugin database.
+///
+/// # Examples
+///
+/// ```rust
+/// use studio_project_manager::models::{Plugin, PluginFormat};
+/// use uuid::Uuid;
+///
+/// let plugin = Plugin::new(
+///     "Serum".to_string(),
+///     "serum_vst".to_string(),
+///     PluginFormat::VST3Instrument,
+/// );
+///
+/// // Check if plugin is installed
+/// if plugin.installed {
+///     println!("Plugin {} is installed", plugin.name);
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Plugin {
-    // Our database ID
+    /// Unique identifier for our database
     pub id: Uuid,
-    // Ableton database IDs
+    /// Ableton database plugin ID (if found)
     pub plugin_id: Option<i32>,
+    /// Ableton database module ID (if found)
     pub module_id: Option<i32>,
+    /// Developer identifier used to uniquely identify the plugin
     pub dev_identifier: String,
+    /// Human-readable plugin name
     pub name: String,
+    /// Plugin vendor/manufacturer
     pub vendor: Option<String>,
+    /// Plugin version string
     pub version: Option<String>,
+    /// SDK version used to build the plugin
     pub sdk_version: Option<String>,
+    /// Plugin-specific flags from Ableton database
     pub flags: Option<i32>,
+    /// Scan state from Ableton database
     pub scanstate: Option<i32>,
+    /// Whether the plugin is enabled in Ableton
     pub enabled: Option<i32>,
+    /// The format/type of this plugin
     pub plugin_format: PluginFormat,
+    /// Whether the plugin is currently installed on the system
     pub installed: bool,
 }
 
 #[allow(dead_code)]
 impl Plugin {
+    /// Creates a new plugin instance with minimal information.
+    ///
+    /// This constructor creates a plugin with the provided basic information
+    /// and sets all optional fields to `None`. The plugin is initially marked
+    /// as not installed until [`Plugin::reparse`] is called.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Human-readable plugin name
+    /// * `dev_identifier` - Unique developer identifier for the plugin
+    /// * `plugin_format` - The format/type of the plugin
+    ///
+    /// # Returns
+    ///
+    /// A new [`Plugin`] instance with a generated UUID
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use studio_project_manager::models::{Plugin, PluginFormat};
+    ///
+    /// let plugin = Plugin::new(
+    ///     "Massive".to_string(),
+    ///     "massive_vst".to_string(),
+    ///     PluginFormat::VST2Instrument,
+    /// );
+    ///
+    /// assert_eq!(plugin.name, "Massive");
+    /// assert_eq!(plugin.installed, false); // Not yet parsed
+    /// ```
     pub fn new(name: String, dev_identifier: String, plugin_format: PluginFormat) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -329,6 +662,40 @@ impl Plugin {
         }
     }
 
+    /// Updates plugin information by querying Ableton's plugin database.
+    ///
+    /// This method looks up the plugin in Ableton's database using the
+    /// [`Plugin::dev_identifier`] and updates all available fields with
+    /// the information found. If the plugin is found, it's marked as installed.
+    ///
+    /// # Arguments
+    ///
+    /// * `db` - Reference to the Ableton database connection
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the database query succeeds (regardless of whether
+    /// the plugin was found), or a [`DatabaseError`] if the query fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use studio_project_manager::models::{Plugin, PluginFormat};
+    /// use studio_project_manager::ableton_db::AbletonDatabase;
+    ///
+    /// let mut plugin = Plugin::new(
+    ///     "Operator".to_string(),
+    ///     "operator_live".to_string(),
+    ///     PluginFormat::VST2Instrument,
+    /// );
+    ///
+    /// let db = AbletonDatabase::new("path/to/ableton.db".into()).unwrap();
+    /// plugin.reparse(&db).unwrap();
+    ///
+    /// if plugin.installed {
+    ///     println!("Plugin {} by {} is installed", plugin.name, plugin.vendor.unwrap_or("Unknown".to_string()));
+    /// }
+    /// ```
     pub fn reparse(&mut self, db: &AbletonDatabase) -> Result<(), DatabaseError> {
         if let Some(db_plugin) = db.get_plugin_by_dev_identifier(&self.dev_identifier)? {
             self.plugin_id = Some(db_plugin.plugin_id);
@@ -383,6 +750,40 @@ static INSTALLED_PLUGINS: Lazy<Arc<Result<HashSet<(String, PluginFormat)>, Datab
         })
     });
 
+/// Returns a set of all plugins installed on the system.
+///
+/// This function queries Ableton's plugin database to get a list of all
+/// currently installed plugins. The result is cached globally for performance.
+///
+/// # Returns
+///
+/// Returns an `Arc<Result<HashSet<(String, PluginFormat)>, DatabaseError>>` where:
+/// - The `HashSet` contains tuples of `(dev_identifier, plugin_format)`
+/// - The `Arc` allows sharing the result between threads
+/// - The `Result` indicates whether the database query succeeded
+///
+/// # Errors
+///
+/// Returns a [`DatabaseError`] if:
+/// - The configuration cannot be loaded
+/// - The Ableton database file cannot be found or opened
+/// - The database query fails
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use studio_project_manager::models::get_installed_plugins;
+///
+/// match get_installed_plugins().as_ref() {
+///     Ok(plugins) => {
+///         println!("Found {} installed plugins", plugins.len());
+///         for (dev_id, format) in plugins.iter() {
+///             println!("  {} ({})", dev_id, format);
+///         }
+///     }
+///     Err(e) => eprintln!("Failed to get installed plugins: {}", e),
+/// }
+/// ```
 #[allow(dead_code)]
 pub fn get_installed_plugins() -> Arc<Result<HashSet<(String, PluginFormat)>, DatabaseError>> {
     INSTALLED_PLUGINS.clone()
@@ -390,11 +791,45 @@ pub fn get_installed_plugins() -> Arc<Result<HashSet<(String, PluginFormat)>, Da
 
 // Sample types
 
+/// Represents an audio sample used in an Ableton Live project.
+///
+/// This struct contains information about audio samples referenced in project files,
+/// including their file system location and whether they are currently present
+/// on the system. The presence check is performed to identify missing samples
+/// that may cause playback issues.
+///
+/// # Sample Presence
+///
+/// The [`Sample::is_present`] field indicates whether the sample file exists
+/// at the specified path. This is useful for identifying projects with missing
+/// samples that may not play correctly.
+///
+/// # Examples
+///
+/// ```rust
+/// use studio_project_manager::models::Sample;
+/// use std::path::PathBuf;
+///
+/// let sample = Sample::new(
+///     "kick.wav".to_string(),
+///     PathBuf::from("/path/to/kick.wav"),
+/// );
+///
+/// if sample.is_present {
+///     println!("Sample {} is available", sample.name);
+/// } else {
+///     println!("Sample {} is missing!", sample.name);
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Sample {
+    /// Unique identifier for our database
     pub id: Uuid,
+    /// Human-readable sample name (usually the filename)
     pub name: String,
+    /// File system path to the sample file
     pub path: PathBuf,
+    /// Whether the sample file exists on the system
     pub is_present: bool,
 }
 
@@ -457,9 +892,41 @@ impl Sample {
     }
 }
 
+/// Musical time signature with validation support.
+///
+/// This struct represents a time signature as used in music theory, consisting
+/// of a numerator (beats per measure) and denominator (note value that gets
+/// the beat). The struct includes validation to ensure the time signature
+/// values are musically valid.
+///
+/// # Validation Rules
+///
+/// - Numerator must be between 1 and 99 inclusive
+/// - Denominator must be between 1 and 16 inclusive and be a power of 2
+///
+/// # Examples
+///
+/// ```rust
+/// use studio_project_manager::models::TimeSignature;
+///
+/// // Common time signatures
+/// let four_four = TimeSignature { numerator: 4, denominator: 4 };
+/// let three_four = TimeSignature { numerator: 3, denominator: 4 };
+/// let six_eight = TimeSignature { numerator: 6, denominator: 8 };
+///
+/// assert!(four_four.is_valid());
+/// assert!(three_four.is_valid());
+/// assert!(six_eight.is_valid());
+///
+/// // Invalid time signature
+/// let invalid = TimeSignature { numerator: 4, denominator: 3 }; // 3 is not a power of 2
+/// assert!(!invalid.is_valid());
+/// ```
 #[derive(Debug, Clone)]
 pub struct TimeSignature {
+    /// Number of beats per measure
     pub numerator: u8,
+    /// Note value that gets the beat (must be a power of 2)
     pub denominator: u8,
 }
 
