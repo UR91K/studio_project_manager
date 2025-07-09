@@ -3,7 +3,8 @@
 # if you change this file while the program is running, you need to restart the program for changes to take effect.
 
 paths = [
-    'C:\Users\judee\Documents\Projects\90s'
+    'C:\Users\judee\Documents\Projects',
+    'E:\Music Creation'
 ]
 
 # use {USER_HOME} as a shortcut to your user folder
@@ -19,7 +20,7 @@ grpc_port = 50051
 
 # Logging configuration
 # Options: error, warn, info, debug, trace
-log_level = "info"
+log_level = "error"
 
 # Media storage configuration
 media_storage_dir = '{USER_HOME}\AppData\Local\StudioProjectManager\media'
