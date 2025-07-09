@@ -21,6 +21,7 @@ service StudioProjectManager {
   rpc GetCollections(GetCollectionsRequest) returns (GetCollectionsResponse);
   rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
   rpc UpdateCollection(UpdateCollectionRequest) returns (UpdateCollectionResponse);
+  rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse);
   rpc AddProjectToCollection(AddProjectToCollectionRequest) returns (AddProjectToCollectionResponse);
   rpc RemoveProjectFromCollection(RemoveProjectFromCollectionRequest) returns (RemoveProjectFromCollectionResponse);
   rpc GetCollectionTasks(GetCollectionTasksRequest) returns (GetCollectionTasksResponse);
@@ -292,6 +293,14 @@ message UpdateCollectionRequest {
 
 message UpdateCollectionResponse {
   Collection collection = 1;
+}
+
+message DeleteCollectionRequest {
+  string collection_id = 1;
+}
+
+message DeleteCollectionResponse {
+  bool success = 1;
 }
 
 message AddProjectToCollectionRequest {

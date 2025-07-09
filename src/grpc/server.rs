@@ -159,6 +159,13 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         self.collections_handler.update_collection(request).await
     }
 
+    async fn delete_collection(
+        &self,
+        request: Request<DeleteCollectionRequest>,
+    ) -> Result<Response<DeleteCollectionResponse>, Status> {
+        self.collections_handler.delete_collection(request).await
+    }
+
     async fn add_project_to_collection(
         &self,
         request: Request<AddProjectToCollectionRequest>,

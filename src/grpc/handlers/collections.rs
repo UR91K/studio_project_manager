@@ -196,6 +196,28 @@ impl CollectionsHandler {
         }
     }
 
+    pub async fn delete_collection(
+        &self,
+        request: Request<DeleteCollectionRequest>,
+    ) -> Result<Response<DeleteCollectionResponse>, Status> {
+        debug!("DeleteCollection request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.delete_collection(&req.collection_id) {
+            Ok(()) => {
+                debug!("Successfully deleted collection: {}", req.collection_id);
+                let response = DeleteCollectionResponse { success: true };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to delete collection '{}': {:?}", req.collection_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
     pub async fn add_project_to_collection(
         &self,
         request: Request<AddProjectToCollectionRequest>,
