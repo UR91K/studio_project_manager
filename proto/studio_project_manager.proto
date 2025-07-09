@@ -9,6 +9,10 @@ service StudioProjectManager {
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
   rpc UpdateProjectNotes(UpdateProjectNotesRequest) returns (UpdateProjectNotesResponse);
   rpc UpdateProjectName(UpdateProjectNameRequest) returns (UpdateProjectNameResponse);
+  rpc MarkProjectDeleted(MarkProjectDeletedRequest) returns (MarkProjectDeletedResponse);
+  rpc ReactivateProject(ReactivateProjectRequest) returns (ReactivateProjectResponse);
+  rpc GetProjectsByDeletionStatus(GetProjectsByDeletionStatusRequest) returns (GetProjectsByDeletionStatusResponse);
+  rpc PermanentlyDeleteProject(PermanentlyDeleteProjectRequest) returns (PermanentlyDeleteProjectResponse);
   
   // Search
   rpc Search(SearchRequest) returns (SearchResponse);
@@ -16,6 +20,7 @@ service StudioProjectManager {
   // Scanning
   rpc ScanDirectories(ScanDirectoriesRequest) returns (stream ScanProgressResponse);
   rpc GetScanStatus(GetScanStatusRequest) returns (GetScanStatusResponse);
+  rpc AddSingleProject(AddSingleProjectRequest) returns (AddSingleProjectResponse);
   
   // Collections
   rpc GetCollections(GetCollectionsRequest) returns (GetCollectionsResponse);
@@ -29,6 +34,8 @@ service StudioProjectManager {
   // Tags
   rpc GetTags(GetTagsRequest) returns (GetTagsResponse);
   rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  rpc UpdateTag(UpdateTagRequest) returns (UpdateTagResponse);
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
   rpc TagProject(TagProjectRequest) returns (TagProjectResponse);
   rpc UntagProject(UntagProjectRequest) returns (UntagProjectResponse);
   
@@ -220,6 +227,41 @@ message UpdateProjectNameResponse {
   bool success = 1;
 }
 
+message MarkProjectDeletedRequest {
+  string project_id = 1;
+}
+
+message MarkProjectDeletedResponse {
+  bool success = 1;
+}
+
+message ReactivateProjectRequest {
+  string project_id = 1;
+}
+
+message ReactivateProjectResponse {
+  bool success = 1;
+}
+
+message GetProjectsByDeletionStatusRequest {
+  bool is_deleted = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message GetProjectsByDeletionStatusResponse {
+  repeated Project projects = 1;
+  int32 total_count = 2;
+}
+
+message PermanentlyDeleteProjectRequest {
+  string project_id = 1;
+}
+
+message PermanentlyDeleteProjectResponse {
+  bool success = 1;
+}
+
 // Search
 message SearchRequest {
   string query = 1;
@@ -265,6 +307,16 @@ message GetScanStatusRequest {}
 message GetScanStatusResponse {
   ScanStatus status = 1;
   optional ScanProgressResponse current_progress = 2;
+}
+
+message AddSingleProjectRequest {
+  string file_path = 1;
+}
+
+message AddSingleProjectResponse {
+  bool success = 1;
+  optional Project project = 2;
+  optional string error_message = 3;
 }
 
 // Collections
@@ -347,6 +399,23 @@ message CreateTagRequest {
 
 message CreateTagResponse {
   Tag tag = 1;
+}
+
+message UpdateTagRequest {
+  string tag_id = 1;
+  string name = 2;
+}
+
+message UpdateTagResponse {
+  Tag tag = 1;
+}
+
+message DeleteTagRequest {
+  string tag_id = 1;
+}
+
+message DeleteTagResponse {
+  bool success = 1;
 }
 
 message TagProjectRequest {
