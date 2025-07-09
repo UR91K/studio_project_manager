@@ -456,7 +456,7 @@ impl LiveSetDatabase {
                 let mut results = Vec::new();
                 let mut rows = stmt.query(param_refs.as_slice())?;
                 while let Some(row) = rows.next()? {
-                    let plugins: String = row.get(4)?;
+                    let plugins: String = row.get::<_, Option<String>>(4)?.unwrap_or_default();
                     debug!("Checking row with plugins: {:?}", plugins);
                     results.push((
                         row.get::<_, String>(0)?, // project_id
@@ -464,7 +464,7 @@ impl LiveSetDatabase {
                         row.get::<_, String>(2)?, // name
                         row.get::<_, String>(3)?, // path
                         plugins,                  // plugins
-                        row.get::<_, String>(5)?, // samples
+                        row.get::<_, Option<String>>(5)?.unwrap_or_default(), // samples
                     ));
                 }
                 debug!("Found {} potential matches", results.len());
