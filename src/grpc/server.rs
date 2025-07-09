@@ -129,6 +129,34 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         self.projects_handler.update_project_name(request).await
     }
 
+    async fn mark_project_deleted(
+        &self,
+        request: Request<MarkProjectDeletedRequest>,
+    ) -> Result<Response<MarkProjectDeletedResponse>, Status> {
+        self.projects_handler.mark_project_deleted(request).await
+    }
+
+    async fn reactivate_project(
+        &self,
+        request: Request<ReactivateProjectRequest>,
+    ) -> Result<Response<ReactivateProjectResponse>, Status> {
+        self.projects_handler.reactivate_project(request).await
+    }
+
+    async fn get_projects_by_deletion_status(
+        &self,
+        request: Request<GetProjectsByDeletionStatusRequest>,
+    ) -> Result<Response<GetProjectsByDeletionStatusResponse>, Status> {
+        self.projects_handler.get_projects_by_deletion_status(request).await
+    }
+
+    async fn permanently_delete_project(
+        &self,
+        request: Request<PermanentlyDeleteProjectRequest>,
+    ) -> Result<Response<PermanentlyDeleteProjectResponse>, Status> {
+        self.projects_handler.permanently_delete_project(request).await
+    }
+
     // SEARCH METHODS - delegate to search_handler
     async fn search(
         &self,

@@ -153,4 +153,158 @@ impl ProjectsHandler {
             }
         }
     }
+
+    pub async fn mark_project_deleted(
+        &self,
+        request: Request<MarkProjectDeletedRequest>,
+    ) -> Result<Response<MarkProjectDeletedResponse>, Status> {
+        debug!("MarkProjectDeleted request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        // Parse project ID to UUID
+        let project_uuid = match uuid::Uuid::parse_str(&req.project_id) {
+            Ok(uuid) => uuid,
+            Err(e) => {
+                error!("Invalid project ID format: {}", e);
+                return Err(Status::new(Code::InvalidArgument, "Invalid project ID format"));
+            }
+        };
+        
+        match db.mark_project_deleted(&project_uuid) {
+            Ok(()) => {
+                debug!("Successfully marked project {} as deleted", req.project_id);
+                let response = MarkProjectDeletedResponse { success: true };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to mark project {} as deleted: {:?}", req.project_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn reactivate_project(
+        &self,
+        request: Request<ReactivateProjectRequest>,
+    ) -> Result<Response<ReactivateProjectResponse>, Status> {
+        debug!("ReactivateProject request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        // Parse project ID to UUID
+        let project_uuid = match uuid::Uuid::parse_str(&req.project_id) {
+            Ok(uuid) => uuid,
+            Err(e) => {
+                error!("Invalid project ID format: {}", e);
+                return Err(Status::new(Code::InvalidArgument, "Invalid project ID format"));
+            }
+        };
+        
+        // We need to get the project's current path for reactivation
+        // Since reactivate_project requires a path, we'll get it from the database
+        match db.get_project_by_id(&req.project_id) {
+            Ok(Some(project)) => {
+                match db.reactivate_project(&project_uuid, &project.file_path) {
+                    Ok(()) => {
+                        debug!("Successfully reactivated project {}", req.project_id);
+                        let response = ReactivateProjectResponse { success: true };
+                        Ok(Response::new(response))
+                    }
+                    Err(e) => {
+                        error!("Failed to reactivate project {}: {:?}", req.project_id, e);
+                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                    }
+                }
+            }
+            Ok(None) => {
+                error!("Project {} not found", req.project_id);
+                Err(Status::new(Code::NotFound, "Project not found"))
+            }
+            Err(e) => {
+                error!("Failed to get project {}: {:?}", req.project_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn get_projects_by_deletion_status(
+        &self,
+        request: Request<GetProjectsByDeletionStatusRequest>,
+    ) -> Result<Response<GetProjectsByDeletionStatusResponse>, Status> {
+        debug!("GetProjectsByDeletionStatus request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        // Convert is_deleted to is_active (inverse)
+        let is_active = Some(!req.is_deleted);
+        
+        match db.get_all_projects_with_status(is_active) {
+            Ok(projects) => {
+                let total_count = projects.len() as i32;
+                let projects_iter = projects.into_iter().skip(req.offset.unwrap_or(0) as usize);
+                let mut proto_projects = Vec::new();
+                
+                let projects_to_convert: Vec<LiveSet> = if let Some(limit) = req.limit {
+                    projects_iter.take(limit as usize).collect()
+                } else {
+                    projects_iter.collect()
+                };
+                
+                for project in projects_to_convert {
+                    match convert_live_set_to_proto(project, &mut *db) {
+                        Ok(proto_project) => proto_projects.push(proto_project),
+                        Err(e) => {
+                            error!("Failed to convert project to proto: {:?}", e);
+                            return Err(Status::internal(format!("Database error: {}", e)));
+                        }
+                    }
+                }
+                
+                let response = GetProjectsByDeletionStatusResponse {
+                    projects: proto_projects,
+                    total_count,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get projects by deletion status: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn permanently_delete_project(
+        &self,
+        request: Request<PermanentlyDeleteProjectRequest>,
+    ) -> Result<Response<PermanentlyDeleteProjectResponse>, Status> {
+        debug!("PermanentlyDeleteProject request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        // Parse project ID to UUID
+        let project_uuid = match uuid::Uuid::parse_str(&req.project_id) {
+            Ok(uuid) => uuid,
+            Err(e) => {
+                error!("Invalid project ID format: {}", e);
+                return Err(Status::new(Code::InvalidArgument, "Invalid project ID format"));
+            }
+        };
+        
+        match db.permanently_delete_project(&project_uuid) {
+            Ok(()) => {
+                debug!("Successfully permanently deleted project {}", req.project_id);
+                let response = PermanentlyDeleteProjectResponse { success: true };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to permanently delete project {}: {:?}", req.project_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
 } 
