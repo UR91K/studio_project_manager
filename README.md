@@ -283,10 +283,35 @@ The application will automatically:
 
 ## Performance
 
-- **Parsing speed**: ~160-270 MB/s on modern hardware
+### Scanning Performance Benchmarks
+
+**Cold Scan (First Run - 3,570 projects)**
+- **Scanning speed**: 38.6 projects/sec (average), 43.7 projects/sec (peak)
+- **Total time**: 92.52 seconds
+- **Time per project**: 0.026 seconds
+- **Throughput**: 2,315 projects/minute
+
+**Warm Scan (Subsequent Runs - 3,570 projects)**
+- **Scanning speed**: 860.7 projects/sec (average), 860.8 projects/sec (peak)
+- **Total time**: 4.15 seconds
+- **Time per project**: 0.001 seconds
+- **Throughput**: 51,645 projects/minute
+
+### System Resources
+
 - **Memory usage**: Minimal - designed for long-running operation
 - **Database**: SQLite with FTS5 for fast full-text search
 - **Concurrency**: Multi-threaded scanning and processing
+
+### Time Estimates
+
+| Projects | Cold Scan | Warm Scan |
+|----------|-----------|-----------|
+| 100      | 2.6s      | 0.1s      |
+| 500      | 13.0s     | 0.6s      |
+| 1000     | 25.9s     | 1.2s      |
+
+*Benchmarks conducted on modern hardware with 3,570 Ableton Live projects*
 
 ## Contributing
 
