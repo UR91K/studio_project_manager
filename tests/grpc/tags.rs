@@ -291,3 +291,247 @@ async fn test_tag_project_idempotent() {
         assert!(project_tags.contains("Idempotent Tag"));
     }
 }
+
+#[tokio::test]
+async fn test_update_tag() {
+    setup("debug");
+    
+    let server = create_test_server().await;
+    
+    // Create a tag
+    let create_req = CreateTagRequest {
+        name: "Original Tag".to_string(),
+    };
+    let create_resp = server.create_tag(Request::new(create_req)).await.unwrap();
+    let tag = create_resp.into_inner().tag.unwrap();
+    
+    // Update the tag
+    let update_req = UpdateTagRequest {
+        tag_id: tag.id.clone(),
+        name: "Updated Tag".to_string(),
+    };
+    let update_resp = server.update_tag(Request::new(update_req)).await.unwrap();
+    let updated_tag = update_resp.into_inner().tag.unwrap();
+    
+    assert_eq!(updated_tag.name, "Updated Tag");
+    assert_eq!(updated_tag.id, tag.id);
+    
+    // Verify the tag was updated by getting all tags
+    let get_req = GetTagsRequest {};
+    let get_resp = server.get_tags(Request::new(get_req)).await.unwrap();
+    let tags = get_resp.into_inner().tags;
+    
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].name, "Updated Tag");
+    assert_eq!(tags[0].id, tag.id);
+}
+
+#[tokio::test]
+async fn test_update_tag_nonexistent() {
+    setup("debug");
+    
+    let server = create_test_server().await;
+    
+    // Try to update a non-existent tag
+    let update_req = UpdateTagRequest {
+        tag_id: "non-existent-tag-id".to_string(),
+        name: "New Name".to_string(),
+    };
+    let update_resp = server.update_tag(Request::new(update_req)).await;
+    
+    // Should return an error for non-existent tag
+    assert!(update_resp.is_err());
+}
+
+#[tokio::test]
+async fn test_update_tag_empty_name() {
+    setup("debug");
+    
+    let server = create_test_server().await;
+    
+    // Create a tag
+    let create_req = CreateTagRequest {
+        name: "Test Tag".to_string(),
+    };
+    let create_resp = server.create_tag(Request::new(create_req)).await.unwrap();
+    let tag = create_resp.into_inner().tag.unwrap();
+    
+    // Update with empty name (should be allowed)
+    let update_req = UpdateTagRequest {
+        tag_id: tag.id.clone(),
+        name: "".to_string(),
+    };
+    let update_resp = server.update_tag(Request::new(update_req)).await.unwrap();
+    let updated_tag = update_resp.into_inner().tag.unwrap();
+    
+    assert_eq!(updated_tag.name, "");
+    assert_eq!(updated_tag.id, tag.id);
+    
+    // Verify the tag was updated to empty name
+    let get_req = GetTagsRequest {};
+    let get_resp = server.get_tags(Request::new(get_req)).await.unwrap();
+    let tags = get_resp.into_inner().tags;
+    
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].name, "");
+}
+
+#[tokio::test]
+async fn test_delete_tag() {
+    setup("debug");
+    
+    let server = create_test_server().await;
+    
+    // Create multiple tags
+    let tag1_req = CreateTagRequest {
+        name: "Tag 1".to_string(),
+    };
+    let tag1_resp = server.create_tag(Request::new(tag1_req)).await.unwrap();
+    let tag1 = tag1_resp.into_inner().tag.unwrap();
+    
+    let tag2_req = CreateTagRequest {
+        name: "Tag 2".to_string(),
+    };
+    let tag2_resp = server.create_tag(Request::new(tag2_req)).await.unwrap();
+    let tag2 = tag2_resp.into_inner().tag.unwrap();
+    
+    // Verify both tags exist
+    let get_req = GetTagsRequest {};
+    let get_resp = server.get_tags(Request::new(get_req)).await.unwrap();
+    let tags = get_resp.into_inner().tags;
+    assert_eq!(tags.len(), 2);
+    
+    // Delete one tag
+    let delete_req = DeleteTagRequest {
+        tag_id: tag1.id.clone(),
+    };
+    let delete_resp = server.delete_tag(Request::new(delete_req)).await.unwrap();
+    let result = delete_resp.into_inner();
+    
+    assert!(result.success);
+    
+    // Verify only one tag remains
+    let get_req = GetTagsRequest {};
+    let get_resp = server.get_tags(Request::new(get_req)).await.unwrap();
+    let tags = get_resp.into_inner().tags;
+    
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].name, "Tag 2");
+    assert_eq!(tags[0].id, tag2.id);
+}
+
+#[tokio::test]
+async fn test_delete_tag_nonexistent() {
+    setup("debug");
+    
+    let server = create_test_server().await;
+    
+    // Try to delete a non-existent tag
+    let delete_req = DeleteTagRequest {
+        tag_id: "non-existent-tag-id".to_string(),
+    };
+    let delete_resp = server.delete_tag(Request::new(delete_req)).await.unwrap();
+    let result = delete_resp.into_inner();
+    
+    // Should succeed but have no effect (graceful handling)
+    assert!(result.success);
+}
+
+#[tokio::test]
+async fn test_delete_tag_with_project_associations() {
+    setup("debug");
+    
+    let server = create_test_server().await;
+    let db = server.db();
+    
+    // Create a test project
+    let project_id = create_test_project_in_db(db).await;
+    
+    // Create a tag
+    let tag_req = CreateTagRequest {
+        name: "Associated Tag".to_string(),
+    };
+    let tag_resp = server.create_tag(Request::new(tag_req)).await.unwrap();
+    let tag = tag_resp.into_inner().tag.unwrap();
+    
+    // Tag the project
+    let tag_project_req = TagProjectRequest {
+        project_id: project_id.clone(),
+        tag_id: tag.id.clone(),
+    };
+    server.tag_project(Request::new(tag_project_req)).await.unwrap();
+    
+    // Verify the association exists
+    {
+        let mut db_guard = db.lock().await;
+        let project_tags = db_guard.get_project_tags(&project_id).unwrap();
+        assert_eq!(project_tags.len(), 1);
+    }
+    
+    // Delete the tag
+    let delete_req = DeleteTagRequest {
+        tag_id: tag.id.clone(),
+    };
+    let delete_resp = server.delete_tag(Request::new(delete_req)).await.unwrap();
+    let result = delete_resp.into_inner();
+    
+    assert!(result.success);
+    
+    // Verify the tag is deleted
+    let get_req = GetTagsRequest {};
+    let get_resp = server.get_tags(Request::new(get_req)).await.unwrap();
+    let tags = get_resp.into_inner().tags;
+    assert_eq!(tags.len(), 0);
+    
+    // Verify the project association is also removed (cascading delete)
+    {
+        let mut db_guard = db.lock().await;
+        let project_tags = db_guard.get_project_tags(&project_id).unwrap();
+        assert_eq!(project_tags.len(), 0);
+    }
+}
+
+#[tokio::test]
+async fn test_update_tag_with_project_associations() {
+    setup("debug");
+    
+    let server = create_test_server().await;
+    let db = server.db();
+    
+    // Create a test project
+    let project_id = create_test_project_in_db(db).await;
+    
+    // Create a tag
+    let tag_req = CreateTagRequest {
+        name: "Original Tag".to_string(),
+    };
+    let tag_resp = server.create_tag(Request::new(tag_req)).await.unwrap();
+    let tag = tag_resp.into_inner().tag.unwrap();
+    
+    // Tag the project
+    let tag_project_req = TagProjectRequest {
+        project_id: project_id.clone(),
+        tag_id: tag.id.clone(),
+    };
+    server.tag_project(Request::new(tag_project_req)).await.unwrap();
+    
+    // Update the tag name
+    let update_req = UpdateTagRequest {
+        tag_id: tag.id.clone(),
+        name: "Updated Tag".to_string(),
+    };
+    let update_resp = server.update_tag(Request::new(update_req)).await.unwrap();
+    let updated_tag = update_resp.into_inner().tag.unwrap();
+    
+    assert_eq!(updated_tag.name, "Updated Tag");
+    assert_eq!(updated_tag.id, tag.id);
+    
+    // Verify the tag name was updated but association remains
+    {
+        let mut db_guard = db.lock().await;
+        let project_tags = db_guard.get_project_tags(&project_id).unwrap();
+        assert_eq!(project_tags.len(), 1);
+        assert!(project_tags.contains("Updated Tag"));
+        assert!(!project_tags.contains("Original Tag"));
+    }
+}
