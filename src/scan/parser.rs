@@ -1,3 +1,49 @@
+//! # Ableton Live Set Parser
+//!
+//! This module contains the core XML parser for Ableton Live Set (`.als`) files.
+//! It's responsible for extracting all metadata from project files including plugins,
+//! samples, tempo, time signature, key signatures, and other musical properties.
+//!
+//! ## Overview
+//!
+//! The parser is built around a state machine that processes XML events from the
+//! compressed Live Set files. It handles multiple Ableton Live versions (9-12) with
+//! version-specific parsing logic for different data formats.
+//!
+//! ## Key Components
+//!
+//! - [`Parser`]: Main state machine that processes XML events
+//! - [`ParserState`]: State enumeration for tracking current parsing context
+//! - [`ParseOptions`]: Configuration for which data to extract
+//! - [`ParseResult`]: Final output containing all extracted metadata
+//!
+//! ## Parsing Process
+//!
+//! 1. **Version Detection**: Identify Ableton Live version from XML header
+//! 2. **State Machine**: Process XML events and maintain parsing state
+//! 3. **Data Extraction**: Extract specific data based on current state
+//! 4. **Result Finalization**: Convert raw data into structured models
+//!
+//! ## Supported Data Types
+//!
+//! - **Musical Properties**: Tempo, time signature, key signature
+//! - **Plugins**: VST2/VST3 instruments and effects with installation status
+//! - **Samples**: Audio file references with presence validation
+//! - **Project Structure**: Track end times for duration calculation
+//!
+//! ## Version Compatibility
+//!
+//! The parser handles version-specific differences:
+//! - **< v11**: Encoded sample paths, limited key detection
+//! - **>= v11**: Direct sample paths, full key signature support
+//!
+//! ## Performance Considerations
+//!
+//! - Streaming XML parsing for large files
+//! - Configurable feature extraction via [`ParseOptions`]
+//! - Memory-efficient state tracking
+//! - Early termination for specific data extraction
+
 #[allow(unused_imports)]
 use log::{debug, trace, warn};
 use quick_xml::events::Event;
@@ -20,59 +66,171 @@ use crate::utils::{EventExt, StringResultExt};
 #[allow(unused_imports)]
 use crate::{trace_fn, warn_fn};
 
+/// Sample path encoding type based on Ableton Live version.
+///
+/// Ableton Live changed how sample paths are stored in project files between versions.
+/// This enum tracks which format we're currently processing.
+///
+/// # Version Compatibility
+///
+/// - **Direct**: Used in Ableton Live 11+ where paths are stored as plain text
+/// - **Encoded**: Used in Ableton Live <11 where paths are hex-encoded UTF-16
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathType {
-    Direct,  // For version >= 11
-    Encoded, // For version < 11
+    /// Direct path storage (version >= 11) - paths stored as plain text
+    Direct,
+    /// Encoded path storage (version < 11) - paths stored as hex-encoded UTF-16
+    Encoded,
 }
 
-/// Represents what type of data we're currently parsing
+/// Parser state machine states for tracking current parsing context.
+///
+/// The parser uses a state machine to track which type of XML element it's currently
+/// processing. This allows context-aware parsing where the same XML tag names can
+/// have different meanings depending on the current parsing state.
+///
+/// # State Categories
+///
+/// ## Sample Parsing States
+/// - [`Root`]: Default state, not inside any specific data structure
+/// - [`InSampleRef`]: Processing a sample reference with version info
+/// - [`InFileRef`]: Inside a file reference for a sample
+/// - [`InData`]: Reading encoded sample path data (pre-v11)
+/// - [`InPath`]: Reading direct sample path data (v11+)
+///
+/// ## Plugin Parsing States
+/// - [`InSourceContext`]: Inside a plugin source context
+/// - [`InValue`]: Reading plugin context values
+/// - [`InBranchSourceContext`]: Processing plugin branch information
+/// - [`InPluginDesc`]: Inside a plugin description with device ID
+/// - [`InVst3PluginInfo`]: Reading VST3 plugin metadata
+/// - [`InVstPluginInfo`]: Reading VST2 plugin metadata
+///
+/// ## Musical Property States
+/// - [`InTempo`]: Processing tempo information
+/// - [`InTempoManual`]: Reading manual tempo values
+/// - [`InTimeSignature`]: Processing time signature data
+/// - [`InMidiClip`]: Inside a MIDI clip (for key detection)
+/// - [`InScaleInformation`]: Reading musical scale information
+///
+/// [`Root`]: ParserState::Root
+/// [`InSampleRef`]: ParserState::InSampleRef
+/// [`InFileRef`]: ParserState::InFileRef
+/// [`InData`]: ParserState::InData
+/// [`InPath`]: ParserState::InPath
+/// [`InSourceContext`]: ParserState::InSourceContext
+/// [`InValue`]: ParserState::InValue
+/// [`InBranchSourceContext`]: ParserState::InBranchSourceContext
+/// [`InPluginDesc`]: ParserState::InPluginDesc
+/// [`InVst3PluginInfo`]: ParserState::InVst3PluginInfo
+/// [`InVstPluginInfo`]: ParserState::InVstPluginInfo
+/// [`InTempo`]: ParserState::InTempo
+/// [`InTempoManual`]: ParserState::InTempoManual
+/// [`InTimeSignature`]: ParserState::InTimeSignature
+/// [`InMidiClip`]: ParserState::InMidiClip
+/// [`InScaleInformation`]: ParserState::InScaleInformation
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum ParserState {
+    /// Default state - not inside any specific data structure
     Root,
 
     // Sample parsing states
+    /// Processing a sample reference with version-specific logic
     InSampleRef { version: u32 },
+    /// Inside a file reference element for a sample
     InFileRef,
+    /// Reading encoded sample path data (pre-v11 format)
     InData { current_data: String },
+    /// Reading direct sample path data (v11+ format)
     InPath { path_type: PathType },
 
     // Plugin states
+    /// Inside a plugin source context element
     InSourceContext,
+    /// Reading plugin context values
     InValue,
+    /// Processing plugin branch source context
     InBranchSourceContext,
+    /// Inside a plugin description with associated device ID
     InPluginDesc { device_id: String },
+    /// Reading VST3 plugin metadata
     InVst3PluginInfo,
+    /// Reading VST2 plugin metadata
     InVstPluginInfo,
 
     // Tempo states
+    /// Processing tempo information with version context
     InTempo { version: u32 },
+    /// Reading manual tempo values
     InTempoManual,
 
     // Time signature state
+    /// Processing time signature data
     InTimeSignature,
 
     // Key parsing states
+    /// Inside a MIDI clip (used for key signature detection)
     InMidiClip,
+    /// Reading musical scale information within a MIDI clip
     InScaleInformation,
 }
 
-/// Configuration for what should be parsed
+/// Configuration options for controlling which data to extract during parsing.
+///
+/// This struct allows fine-grained control over which elements of the Ableton Live
+/// project should be parsed and extracted. This is useful for performance optimization
+/// when only specific data is needed, or for compatibility with different Live versions.
+///
+/// # Default Behavior
+///
+/// By default, all parsing options are enabled to extract comprehensive project metadata.
+/// Individual options can be disabled to improve parsing performance when that data isn't needed.
+///
+/// # Examples
+///
+/// ```rust
+/// use studio_project_manager::scan::parser::ParseOptions;
+///
+/// // Parse only basic musical properties
+/// let basic_options = ParseOptions {
+///     parse_plugins: false,
+///     parse_samples: false,
+///     parse_tempo: true,
+///     parse_time_signature: true,
+///     parse_key: true,
+///     ..Default::default()
+/// };
+///
+/// // Parse everything (default)
+/// let full_options = ParseOptions::default();
+/// ```
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct ParseOptions {
+    /// Extract plugin information (instruments and effects)
     pub parse_plugins: bool,
+    /// Extract sample file references and paths
     pub parse_samples: bool,
+    /// Extract project tempo information
     pub parse_tempo: bool,
+    /// Extract time signature information
     pub parse_time_signature: bool,
+    /// Extract MIDI clip data (required for key detection)
     pub parse_midi: bool,
+    /// Extract audio clip data
     pub parse_audio: bool,
+    /// Extract automation data
     pub parse_automation: bool,
+    /// Extract return track information
     pub parse_return_tracks: bool,
+    /// Extract master track information
     pub parse_master_track: bool,
+    /// Calculate estimated project duration
     pub estimate_duration: bool,
+    /// Calculate the furthest bar position in the project
     pub calculate_furthest_bar: bool,
+    /// Extract key signature information (requires Ableton Live 11+)
     pub parse_key: bool,
 }
 
@@ -95,55 +253,201 @@ impl Default for ParseOptions {
     }
 }
 
-/// Holds the results of the parsing process
+/// Complete parsing results containing all extracted project metadata.
+///
+/// This struct holds all the data extracted from an Ableton Live project file.
+/// It represents the final output of the parsing process and contains structured
+/// data that can be stored in the database or used by other parts of the application.
+///
+/// # Data Categories
+///
+/// ## Required Properties
+/// - [`version`]: Ableton Live version used to create the project
+/// - [`tempo`]: Project tempo in BPM (beats per minute)
+/// - [`time_signature`]: Musical time signature (e.g., 4/4, 3/4)
+///
+/// ## Optional Properties
+/// - [`furthest_bar`]: Calculated project length in bars
+/// - [`key_signature`]: Musical key signature (Live 11+ only)
+///
+/// ## Collections
+/// - [`samples`]: Set of audio samples referenced in the project
+/// - [`plugins`]: Set of plugins used in the project with installation status
+///
+/// [`version`]: ParseResult::version
+/// [`tempo`]: ParseResult::tempo
+/// [`time_signature`]: ParseResult::time_signature
+/// [`furthest_bar`]: ParseResult::furthest_bar
+/// [`key_signature`]: ParseResult::key_signature
+/// [`samples`]: ParseResult::samples
+/// [`plugins`]: ParseResult::plugins
 #[derive(Default)]
 #[allow(dead_code)]
 pub struct ParseResult {
+    /// Ableton Live version that created this project
     pub version: AbletonVersion,
+    /// Set of audio samples referenced in the project
     pub samples: HashSet<Sample>,
+    /// Set of plugins used in the project with installation status
     pub plugins: HashSet<Plugin>,
+    /// Project tempo in beats per minute (BPM)
     pub tempo: f64,
+    /// Musical time signature of the project
     pub time_signature: TimeSignature,
+    /// Calculated furthest bar position (project length)
     pub furthest_bar: Option<f64>,
+    /// Musical key signature (available in Live 11+ only)
     pub key_signature: Option<KeySignature>,
 }
 
-/// The main parser that processes the XML data
+/// High-performance XML parser for Ableton Live Set files.
+///
+/// The parser is built around a state machine that processes XML events from compressed
+/// Live Set files. It maintains extensive state to handle the complex, nested structure
+/// of Ableton's XML format and extract meaningful data from various contexts.
+///
+/// # Architecture
+///
+/// The parser operates as a streaming XML processor with:
+/// - **State Machine**: Tracks current parsing context via [`ParserState`]
+/// - **Version Awareness**: Handles format differences between Live versions
+/// - **Configurable Extraction**: Selective data extraction via [`ParseOptions`]
+/// - **Memory Efficiency**: Streaming processing without loading entire XML into memory
+///
+/// # State Management
+///
+/// The parser maintains several categories of state:
+///
+/// ## Core Parser State
+/// - Current parsing state and XML depth
+/// - Ableton Live version for format compatibility
+/// - Configuration options for data extraction
+///
+/// ## Sample Processing State
+/// - Collected sample paths
+/// - Current sample being processed
+/// - Path encoding type (direct vs encoded)
+///
+/// ## Plugin Processing State
+/// - Current plugin context information
+/// - Plugin metadata collection
+/// - Plugin processing flags
+///
+/// ## Musical Property State
+/// - Tempo and timing information
+/// - Key signature frequency analysis
+/// - Time signature data
+///
+/// # Usage
+///
+/// ```rust,no_run
+/// use studio_project_manager::scan::parser::{Parser, ParseOptions};
+///
+/// let xml_data = b"<Ableton>...</Ableton>";
+/// let options = ParseOptions::default();
+/// let mut parser = Parser::new(xml_data, options)?;
+/// let result = parser.parse(xml_data)?;
+///
+/// println!("Project tempo: {}", result.tempo);
+/// println!("Found {} plugins", result.plugins.len());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[allow(dead_code)]
 pub struct Parser {
     // Core parser state
+    /// Current state in the parsing state machine
     pub state: ParserState,
+    /// Current XML nesting depth for context tracking
     pub depth: i32,
+    /// Detected Ableton Live version for format compatibility
     pub ableton_version: AbletonVersion,
+    /// Configuration options controlling what data to extract
     pub options: ParseOptions,
+    /// Line tracking for error reporting and debugging
     line_tracker: LineTrackingBuffer,
 
     // Sample parsing state
+    /// Collected sample file paths discovered during parsing
     pub sample_paths: HashSet<PathBuf>,
+    /// Raw sample data being accumulated (for encoded paths)
     pub current_sample_data: Option<String>,
-    pub current_file_ref: Option<PathBuf>, // Tracks the current file reference being processed
-    pub current_path_type: Option<PathType>, // Tracks whether we're processing a direct or encoded path
+    /// Current file reference being processed
+    pub current_file_ref: Option<PathBuf>,
+    /// Path encoding type for current sample (direct vs encoded)
+    pub current_path_type: Option<PathType>,
 
     // Plugin parsing state
+    /// Current plugin branch information (device ID)
     pub current_branch_info: Option<String>,
+    /// Collected plugin metadata keyed by device identifier
     pub plugin_info_tags: HashMap<String, PluginInfo>,
+    /// Flag indicating if we're inside a plugin source context
     pub in_source_context: bool,
+    /// Flag to prevent duplicate plugin info processing
     pub plugin_info_processed: bool,
 
     // Tempo and timing state
+    /// Thread-safe collection of device identifiers
     pub dev_identifiers: Arc<parking_lot::RwLock<HashMap<String, ()>>>,
+    /// Current project tempo in BPM
     pub current_tempo: f64,
+    /// Current project time signature
     pub current_time_signature: TimeSignature,
+    /// Collected end times for duration calculation
     pub current_end_times: Vec<f64>,
 
-    // Initialize key parsing state
+    // Key signature parsing state
+    /// Frequency count of detected key signatures
     pub key_frequencies: HashMap<KeySignature, usize>,
+    /// Current scale information being processed
     current_scale_info: Option<(Tonic, Scale)>,
+    /// Flag indicating if current clip is in a detected key
     current_clip_in_key: bool,
 }
 
 #[allow(dead_code)]
 impl Parser {
+    /// Creates a new parser instance with version detection and compatibility handling.
+    ///
+    /// This constructor performs initial version detection from the XML data and
+    /// automatically adjusts parsing options based on version compatibility.
+    /// For example, key signature detection is only available in Ableton Live 11+.
+    ///
+    /// # Arguments
+    ///
+    /// * `xml_data` - Raw XML data from the decompressed .als file
+    /// * `options` - Parsing configuration options (will be modified for compatibility)
+    ///
+    /// # Returns
+    ///
+    /// Returns a new [`Parser`] instance ready to process the XML data, or an error
+    /// if version detection fails or the version is unsupported.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LiveSetError`] if:
+    /// - XML version information cannot be found or parsed
+    /// - Ableton Live version is unsupported (< 9 or > 12)
+    /// - XML format is corrupted or invalid
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use studio_project_manager::scan::parser::{Parser, ParseOptions};
+    ///
+    /// let xml_data = b"<Ableton MinorVersion=\"11.2_11215\">...</Ableton>";
+    /// let options = ParseOptions::default();
+    ///
+    /// let parser = Parser::new(xml_data, options)?;
+    /// println!("Detected version: {}", parser.ableton_version);
+    /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
+    /// ```
+    ///
+    /// # Version Compatibility
+    ///
+    /// The parser automatically adjusts options based on detected version:
+    /// - **< v11**: Disables key signature parsing (not supported)
+    /// - **>= v11**: Full feature support including key signatures
     pub fn new(xml_data: &[u8], mut options: ParseOptions) -> Result<Self, LiveSetError> {
         // First, detect and validate the version
         let version = Self::detect_version(xml_data)?;
@@ -191,7 +495,50 @@ impl Parser {
         })
     }
 
-    /// Detects the Ableton Live version from the XML data
+    /// Detects the Ableton Live version from XML header information.
+    ///
+    /// This method performs a fast scan of the XML header to extract version information
+    /// without parsing the entire file. It reads the `MinorVersion` and `SchemaChangeCount`
+    /// attributes from the root `<Ableton>` element to determine the exact Live version.
+    ///
+    /// # Version Format
+    ///
+    /// Ableton Live stores version information in the format: `"major.minor_patch"`
+    /// - Example: `"11.2_11215"` represents Live 11.2 patch 11215
+    /// - Beta versions are indicated by `SchemaChangeCount="beta"`
+    ///
+    /// # Arguments
+    ///
+    /// * `xml_data` - Raw XML data to scan for version information
+    ///
+    /// # Returns
+    ///
+    /// Returns an [`AbletonVersion`] struct with parsed version components,
+    /// or an error if version information cannot be found or parsed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LiveSetError`] if:
+    /// - No `<Ableton>` root element is found
+    /// - `MinorVersion` attribute is missing or malformed
+    /// - Version format doesn't match expected pattern
+    /// - Version numbers cannot be parsed as integers
+    /// - Major version is outside supported range (9-12)
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use studio_project_manager::scan::parser::Parser;
+    ///
+    /// let xml_data = br#"<Ableton MinorVersion="11.2_11215" SchemaChangeCount="3">..."#;
+    /// let version = Parser::detect_version(xml_data)?;
+    ///
+    /// assert_eq!(version.major, 11);
+    /// assert_eq!(version.minor, 2);
+    /// assert_eq!(version.patch, 11215);
+    /// assert_eq!(version.beta, false);
+    /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
+    /// ```
     fn detect_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
         reader.config_mut().trim_text(true);
@@ -261,7 +608,62 @@ impl Parser {
         Err(LiveSetError::MissingVersion)
     }
 
-    /// Main parsing function that processes the XML data
+    /// Parses the complete XML data and extracts all configured project metadata.
+    ///
+    /// This is the main parsing method that processes the entire XML structure using
+    /// a streaming parser. It maintains state throughout the parsing process and
+    /// delegates specific XML events to specialized handler methods.
+    ///
+    /// # Parsing Process
+    ///
+    /// 1. **Stream Processing**: Uses quick-xml to stream through XML events
+    /// 2. **State Management**: Maintains parsing state and XML depth tracking
+    /// 3. **Event Handling**: Delegates start, end, and text events to handlers
+    /// 4. **Result Finalization**: Converts accumulated state into final result
+    ///
+    /// # Arguments
+    ///
+    /// * `xml_data` - Complete XML data from the decompressed .als file
+    ///
+    /// # Returns
+    ///
+    /// Returns a [`ParseResult`] containing all extracted project metadata,
+    /// or an error if parsing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LiveSetError`] if:
+    /// - XML is malformed or cannot be parsed
+    /// - Required project properties (tempo, time signature) are invalid
+    /// - Plugin database queries fail during finalization
+    /// - Memory allocation fails during processing
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use studio_project_manager::scan::parser::{Parser, ParseOptions};
+    ///
+    /// let xml_data = include_bytes!("project.als");
+    /// let options = ParseOptions::default();
+    /// let mut parser = Parser::new(xml_data, options)?;
+    /// 
+    /// let result = parser.parse(xml_data)?;
+    /// println!("Project: {} BPM, {}/{} time signature", 
+    ///          result.tempo, 
+    ///          result.time_signature.numerator,
+    ///          result.time_signature.denominator);
+    /// println!("Found {} plugins and {} samples", 
+    ///          result.plugins.len(), 
+    ///          result.samples.len());
+    /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
+    /// ```
+    ///
+    /// # Performance Notes
+    ///
+    /// - Uses streaming XML parsing to handle large files efficiently
+    /// - Memory usage scales with number of plugins/samples, not file size
+    /// - Processing time is roughly linear with XML file size
+    /// - Configure [`ParseOptions`] to skip unnecessary data extraction
     pub fn parse(&mut self, xml_data: &[u8]) -> Result<ParseResult, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
         reader.config_mut().trim_text(true);
@@ -316,7 +718,64 @@ impl Parser {
         self.finalize_result(result)
     }
 
-    /// Converts the parser's state into the final ParseResult
+    /// Converts accumulated parser state into the final structured result.
+    ///
+    /// This method performs the final processing step that transforms the raw data
+    /// collected during XML parsing into structured model objects. It handles
+    /// validation, plugin installation detection, and key signature analysis.
+    ///
+    /// # Processing Steps
+    ///
+    /// 1. **Version Assignment**: Sets the detected Ableton Live version
+    /// 2. **Property Validation**: Validates tempo and time signature values
+    /// 3. **Duration Calculation**: Computes project length from end times
+    /// 4. **Sample Processing**: Converts file paths to Sample objects
+    /// 5. **Plugin Resolution**: Queries Ableton database for plugin installation status
+    /// 6. **Key Analysis**: Determines most frequent key signature (Live 11+)
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - Pre-initialized ParseResult to populate with data
+    ///
+    /// # Returns
+    ///
+    /// Returns a complete [`ParseResult`] with all extracted and processed data,
+    /// or an error if validation or processing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LiveSetError`] if:
+    /// - Tempo is outside valid range (10-999 BPM)
+    /// - Time signature is invalid (numerator 1-99, denominator power of 2)
+    /// - Configuration cannot be loaded for plugin database access
+    /// - Ableton plugin database cannot be opened or queried
+    ///
+    /// # Plugin Installation Detection
+    ///
+    /// For each plugin found in the project:
+    /// - Queries Ableton's plugin database using the device identifier
+    /// - If found: Populates full metadata and marks as installed
+    /// - If not found: Creates basic plugin record marked as not installed
+    ///
+    /// # Key Signature Analysis
+    ///
+    /// When key parsing is enabled (Live 11+):
+    /// - Analyzes frequency of detected key signatures across MIDI clips
+    /// - Selects the most frequently occurring key as the project key
+    /// - Falls back to empty key signature if none detected
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use studio_project_manager::scan::parser::{Parser, ParseResult, ParseOptions};
+    ///
+    /// let mut parser = Parser::new(b"<xml>", ParseOptions::default())?;
+    /// // ... parsing happens here ...
+    /// 
+    /// let result = parser.finalize_result(ParseResult::default())?;
+    /// println!("Final result: {} BPM", result.tempo);
+    /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
+    /// ```
     pub fn finalize_result(
         &self,
         mut result: ParseResult,
@@ -467,6 +926,65 @@ impl Parser {
     
 
 
+    /// Handles XML start/empty element events with context-aware processing.
+    ///
+    /// This is the core event handler that processes XML start and empty elements.
+    /// It uses the current parser state to determine how to interpret each XML tag
+    /// and what data to extract. The method handles complex nested structures and
+    /// maintains state transitions throughout the parsing process.
+    ///
+    /// # Key Processing Areas
+    ///
+    /// ## Sample Processing
+    /// - **SampleRef**: Initiates sample processing with version awareness
+    /// - **FileRef**: Handles file reference contexts
+    /// - **Data/Path**: Extracts sample paths (encoded vs direct format)
+    ///
+    /// ## Plugin Processing
+    /// - **SourceContext**: Plugin context initialization
+    /// - **BranchSourceContext**: Plugin branch analysis with lookahead
+    /// - **PluginDesc**: Plugin description processing
+    /// - **Vst3PluginInfo/VstPluginInfo**: Plugin metadata extraction
+    ///
+    /// ## Musical Properties
+    /// - **Tempo/Manual**: Tempo extraction and validation
+    /// - **EnumEvent**: Time signature processing
+    /// - **CurrentEnd**: End time collection for duration calculation
+    /// - **MidiClip/ScaleInformation**: Key signature detection (Live 11+)
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - XML start or empty element event
+    /// * `reader` - XML reader for lookahead operations
+    /// * `byte_pos` - Current byte position for line tracking
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the event was processed successfully, or an error
+    /// if parsing fails or required attributes are missing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LiveSetError`] if:
+    /// - Required XML attributes are missing or malformed
+    /// - State transitions are invalid
+    /// - XML lookahead operations fail
+    /// - Numeric parsing fails for tempo/time signature values
+    ///
+    /// # State Machine Behavior
+    ///
+    /// The method implements a complex state machine where the same XML tag
+    /// can have different meanings based on current state:
+    /// - `<Name>` in plugin context → plugin name
+    /// - `<Name>` in scale context → scale name
+    /// - `<Manual>` in tempo context → tempo value
+    ///
+    /// # Performance Considerations
+    ///
+    /// - Uses selective processing based on [`ParseOptions`]
+    /// - Implements lookahead for complex plugin detection
+    /// - Maintains efficient state transitions
+    /// - Skips irrelevant XML subtrees when possible
     pub fn handle_start_event<R: BufRead>(
         &mut self,
         event: &quick_xml::events::BytesStart,
@@ -1012,6 +1530,42 @@ impl Parser {
         Ok(())
     }
 
+    /// Handles XML end element events and manages state transitions.
+    ///
+    /// This method processes XML closing tags and manages the parser's state machine
+    /// transitions. It's responsible for finalizing data collection for completed
+    /// elements and returning to appropriate parent states.
+    ///
+    /// # Key Responsibilities
+    ///
+    /// - **State Restoration**: Returns to appropriate parent states after element processing
+    /// - **Data Finalization**: Completes data collection for finished elements
+    /// - **Context Cleanup**: Resets temporary state variables
+    /// - **Sample Registration**: Adds completed sample paths to the collection
+    ///
+    /// # State Transitions
+    ///
+    /// The method handles complex state transitions such as:
+    /// - Exiting nested plugin contexts back to source contexts
+    /// - Finalizing sample path processing and adding to collection
+    /// - Completing tempo and time signature processing
+    /// - Cleaning up plugin processing flags and temporary data
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - XML end element event containing the closing tag name
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the state transition completed successfully,
+    /// or an error if data processing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LiveSetError`] if:
+    /// - Sample path decoding fails (for encoded paths)
+    /// - State transitions are inconsistent
+    /// - Required data is missing when finalizing elements
     pub fn handle_end_event(
         &mut self,
         event: &quick_xml::events::BytesEnd,
@@ -1207,6 +1761,49 @@ impl Parser {
         Ok(())
     }
 
+    /// Handles XML text content events for data accumulation.
+    ///
+    /// This method processes XML text content that appears between opening and
+    /// closing tags. It's primarily used for accumulating encoded sample path
+    /// data that may be split across multiple text events in older Live versions.
+    ///
+    /// # Processing Behavior
+    ///
+    /// - **Selective Processing**: Only processes text when in specific states
+    /// - **Data Accumulation**: Appends text to current data buffer
+    /// - **Encoding Handling**: Properly unescapes XML entities
+    ///
+    /// # State-Specific Behavior
+    ///
+    /// Currently only processes text content when in [`ParserState::InData`] state,
+    /// which occurs when reading encoded sample paths in Ableton Live versions < 11.
+    /// The text content is accumulated and later decoded as hex-encoded UTF-16.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - XML text event containing the text content
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if text processing succeeds, or an error if
+    /// XML unescaping fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LiveSetError`] if:
+    /// - XML entity unescaping fails
+    /// - Text content contains invalid characters
+    ///
+    /// # Examples
+    ///
+    /// For encoded sample paths in pre-v11 Live files:
+    /// ```xml
+    /// <Data>
+    ///   48006500780020004400610074006100200032003000310038002D00...
+    /// </Data>
+    /// ```
+    /// 
+    /// The hex-encoded text is accumulated and later decoded to a file path.
     pub fn handle_text_event(
         &mut self,
         event: &quick_xml::events::BytesText,
