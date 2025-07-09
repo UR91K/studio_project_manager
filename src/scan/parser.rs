@@ -455,11 +455,11 @@ impl Parser {
         // Disable features not supported in older versions
         if version.major < 11 {
             options.parse_key = false; // Key detection only available in v11+
-            warn_fn!(
-                "parser",
-                "Key detection not supported in version {}",
-                version
-            );
+            // warn_fn!(
+            //     "parser",
+            //     "Key detection not supported in version {}",
+            //     version
+            // );
             // Add other version-specific feature flags here
         }
 
