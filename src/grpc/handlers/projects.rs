@@ -86,7 +86,7 @@ impl ProjectsHandler {
         let req = request.into_inner();
         let mut db = self.db.lock().await;
         
-        match db.get_project(&req.project_id) {
+        match db.get_project_by_id(&req.project_id) {
             Ok(Some(project)) => {
                 match convert_live_set_to_proto(project, &mut *db) {
                     Ok(proto_project) => {

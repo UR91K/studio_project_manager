@@ -397,7 +397,7 @@ impl SystemHandler {
             db.get_duration_analytics().map_err(|e| Status::internal(format!("Database error: {}", e)))?;
         
         let longest_project = if let Some(project_id) = longest_project_id {
-            match db.get_project(&project_id) {
+            match db.get_project_by_id(&project_id) {
                 Ok(Some(project)) => {
                     match convert_live_set_to_proto(project, &mut *db) {
                         Ok(proto_project) => Some(proto_project),
@@ -418,7 +418,7 @@ impl SystemHandler {
         let mut proto_complex_projects = Vec::new();
         
         for (project_id, plugin_count, sample_count, complexity_score) in most_complex_projects {
-            if let Ok(Some(project)) = db.get_project(&project_id) {
+            if let Ok(Some(project)) = db.get_project_by_id(&project_id) {
                 if let Ok(proto_project) = convert_live_set_to_proto(project, &mut *db) {
                     proto_complex_projects.push(crate::grpc::proto::ProjectComplexityStatistic {
                         project: Some(proto_project),

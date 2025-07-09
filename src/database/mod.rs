@@ -1,4 +1,7 @@
 mod core;
+mod helpers;
+mod projects;
+mod stats;
 mod tags;
 mod collections;
 mod notes;

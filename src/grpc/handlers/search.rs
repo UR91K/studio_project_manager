@@ -35,7 +35,7 @@ impl SearchHandler {
         
         let _search_query = SearchQuery::parse(&req.query);
         
-        match db.search(&req.query) {
+        match db.search_simple(&req.query) {
             Ok(search_results) => {
                 let total_count = search_results.len() as i32;
                 let results_iter = search_results.into_iter().skip(req.offset.unwrap_or(0) as usize);

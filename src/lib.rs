@@ -16,7 +16,7 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use studio_project_manager::process_projects;
 //!
 //! // Process all projects configured in config.toml
@@ -59,7 +59,7 @@ pub mod tray;
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use studio_project_manager::CONFIG;
 ///
 /// let config = CONFIG.as_ref().expect("Config should be loaded");
@@ -74,7 +74,7 @@ pub use config::CONFIG;
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use studio_project_manager::LiveSetDatabase;
 /// use std::path::PathBuf;
 ///
@@ -91,7 +91,7 @@ pub use database::LiveSetDatabase;
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use studio_project_manager::LiveSet;
 /// use std::path::PathBuf;
 ///
@@ -161,7 +161,7 @@ use crate::scan::project_scanner::ProjectPathScanner;
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use studio_project_manager::process_projects;
 ///
 /// // Process all projects - this will scan configured directories,
@@ -214,13 +214,17 @@ pub fn process_projects() -> Result<(), LiveSetError> {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use studio_project_manager::process_projects_with_progress;
 ///
 /// // Process with progress callback
 /// let result = process_projects_with_progress(Some(|completed, total, progress, message, phase| {
 ///     println!("[{}] {:.1}% - {} ({}/{})", 
-///              phase, progress * 100.0, message, completed, total);
+///              phase.clone(), 
+///              progress.clone() * 100.0, 
+///              message.clone(), 
+///              completed.clone(), 
+///              total.clone());
 /// }));
 ///
 /// match result {

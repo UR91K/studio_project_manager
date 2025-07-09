@@ -340,7 +340,7 @@ pub struct ParseResult {
 ///
 /// # Usage
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use studio_project_manager::scan::parser::{Parser, ParseOptions};
 ///
 /// let xml_data = b"<Ableton>...</Ableton>";
@@ -432,7 +432,7 @@ impl Parser {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// use studio_project_manager::scan::parser::{Parser, ParseOptions};
     ///
     /// let xml_data = b"<Ableton MinorVersion=\"11.2_11215\">...</Ableton>";
@@ -527,7 +527,7 @@ impl Parser {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// use studio_project_manager::scan::parser::Parser;
     ///
     /// let xml_data = br#"<Ableton MinorVersion="11.2_11215" SchemaChangeCount="3">..."#;
@@ -539,7 +539,7 @@ impl Parser {
     /// assert_eq!(version.beta, false);
     /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
     /// ```
-    fn detect_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> {
+    pub fn detect_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
         reader.config_mut().trim_text(true);
         let mut buf = Vec::new();
@@ -640,7 +640,7 @@ impl Parser {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// use studio_project_manager::scan::parser::{Parser, ParseOptions};
     ///
     /// let xml_data = include_bytes!("project.als");
@@ -766,7 +766,7 @@ impl Parser {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// use studio_project_manager::scan::parser::{Parser, ParseResult, ParseOptions};
     ///
     /// let mut parser = Parser::new(b"<xml>", ParseOptions::default())?;

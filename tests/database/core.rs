@@ -265,13 +265,13 @@ pub fn test_multiple_projects() {
         .any(|p| p.name == "Pro-Q 3" && p.vendor == Some("FabFilter".to_string())));
 
     // Test basic search functionality
-    let fab_filter_results = db.search("FabFilter").expect("Search failed");
+    let fab_filter_results = db.search_simple("FabFilter").expect("Search failed");
     assert_eq!(fab_filter_results.len(), 3); // All projects have a FabFilter plugin
 
-    let edm_results = db.search("kick.wav").expect("Search failed");
+    let edm_results = db.search_simple("kick.wav").expect("Search failed");
     assert_eq!(edm_results.len(), 1); // Only EDM project has kick.wav
 
-    let serum_results = db.search("Serum").expect("Search failed");
+    let serum_results = db.search_simple("Serum").expect("Search failed");
     assert_eq!(serum_results.len(), 1); // Only EDM project has Serum
 }
 #[test]

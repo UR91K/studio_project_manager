@@ -7,7 +7,7 @@ use crate::common::setup;
 
 #[tokio::test]
 async fn test_update_project_name() {
-    setup("debug");
+    setup("error");
     
     let server = create_test_server().await;
     let db = server.db();
@@ -47,7 +47,7 @@ async fn test_update_project_name() {
 
 #[tokio::test]
 async fn test_update_project_name_nonexistent_project() {
-    setup("debug");
+    setup("error");
     
     let server = create_test_server().await;
     
@@ -65,7 +65,7 @@ async fn test_update_project_name_nonexistent_project() {
 
 #[tokio::test]
 async fn test_update_project_name_empty_string() {
-    setup("debug");
+    setup("error");
     
     let server = create_test_server().await;
     let db = server.db();
@@ -95,7 +95,7 @@ async fn test_update_project_name_empty_string() {
 
 #[tokio::test]
 async fn test_update_project_name_special_characters() {
-    setup("debug");
+    setup("error");
     
     let server = create_test_server().await;
     let db = server.db();
@@ -126,7 +126,7 @@ async fn test_update_project_name_special_characters() {
 
 #[tokio::test]
 async fn test_update_project_name_persistence() {
-    setup("debug");
+    setup("error");
     
     let server = create_test_server().await;
     let db = server.db();
