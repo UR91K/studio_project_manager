@@ -115,6 +115,69 @@ impl TagsHandler {
         }
     }
 
+    pub async fn update_tag(
+        &self,
+        request: Request<UpdateTagRequest>,
+    ) -> Result<Response<UpdateTagResponse>, Status> {
+        debug!("UpdateTag request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.update_tag(&req.tag_id, &req.name) {
+            Ok(()) => {
+                // Get the updated tag details to return in response
+                match db.get_tag_by_id(&req.tag_id) {
+                    Ok(Some((id, name, created_at))) => {
+                        let tag = Tag {
+                            id,
+                            name,
+                            created_at,
+                        };
+                        
+                        let response = UpdateTagResponse { tag: Some(tag) };
+                        debug!("Successfully updated tag: {}", req.tag_id);
+                        Ok(Response::new(response))
+                    }
+                    Ok(None) => {
+                        error!("Tag {} not found after update", req.tag_id);
+                        Err(Status::new(Code::NotFound, "Tag not found"))
+                    }
+                    Err(e) => {
+                        error!("Failed to retrieve updated tag {}: {:?}", req.tag_id, e);
+                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to update tag '{}': {:?}", req.tag_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn delete_tag(
+        &self,
+        request: Request<DeleteTagRequest>,
+    ) -> Result<Response<DeleteTagResponse>, Status> {
+        debug!("DeleteTag request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.remove_tag(&req.tag_id) {
+            Ok(()) => {
+                debug!("Successfully deleted tag: {}", req.tag_id);
+                let response = DeleteTagResponse { success: true };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to delete tag '{}': {:?}", req.tag_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
     pub async fn tag_project(
         &self,
         request: Request<TagProjectRequest>,

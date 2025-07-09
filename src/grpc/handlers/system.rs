@@ -12,6 +12,7 @@ use crate::watcher::file_watcher::{FileWatcher, FileEvent};
 use crate::config::CONFIG;
 use crate::process_projects_with_progress;
 use crate::grpc::proto::*;
+use crate::live_set::LiveSet;
 use super::utils::convert_live_set_to_proto;
 
 pub struct SystemHandler {
@@ -144,8 +145,13 @@ impl SystemHandler {
         &self,
         _request: Request<GetScanStatusRequest>,
     ) -> Result<Response<GetScanStatusResponse>, Status> {
-        let status = *self.scan_status.lock().await;
-        let current_progress = self.scan_progress.lock().await.clone();
+        let status_guard = self.scan_status.lock().await;
+        let status = *status_guard;
+        drop(status_guard);
+        
+        let progress_guard = self.scan_progress.lock().await;
+        let current_progress = progress_guard.clone();
+        drop(progress_guard);
         
         let response = GetScanStatusResponse {
             status: status as i32,
@@ -153,6 +159,85 @@ impl SystemHandler {
         };
         
         Ok(Response::new(response))
+    }
+
+    pub async fn add_single_project(
+        &self,
+        request: Request<AddSingleProjectRequest>,
+    ) -> Result<Response<AddSingleProjectResponse>, Status> {
+        debug!("AddSingleProject request: {:?}", request);
+        
+        let req = request.into_inner();
+        let file_path = PathBuf::from(&req.file_path);
+        
+        // Validate file path
+        if !file_path.exists() {
+            return Ok(Response::new(AddSingleProjectResponse {
+                success: false,
+                project: None,
+                error_message: Some("File does not exist".to_string()),
+            }));
+        }
+        
+        // Validate file extension
+        if !file_path.extension().map_or(false, |ext| ext == "als") {
+            return Ok(Response::new(AddSingleProjectResponse {
+                success: false,
+                project: None,
+                error_message: Some("File must have .als extension".to_string()),
+            }));
+        }
+        
+        // Parse the file
+        match LiveSet::new(file_path.clone()) {
+            Ok(live_set) => {
+                debug!("Successfully parsed project: {}", live_set.name);
+                
+                // Insert into database
+                let mut db = self.db.lock().await;
+                match db.insert_project(&live_set) {
+                    Ok(()) => {
+                        debug!("Successfully inserted project into database: {}", live_set.name);
+                        
+                        // Convert to proto project
+                        match convert_live_set_to_proto(live_set, &mut *db) {
+                            Ok(proto_project) => {
+                                info!("Successfully added single project: {}", req.file_path);
+                                Ok(Response::new(AddSingleProjectResponse {
+                                    success: true,
+                                    project: Some(proto_project),
+                                    error_message: None,
+                                }))
+                            }
+                            Err(e) => {
+                                error!("Failed to convert project to proto: {:?}", e);
+                                Ok(Response::new(AddSingleProjectResponse {
+                                    success: false,
+                                    project: None,
+                                    error_message: Some(format!("Failed to convert project: {}", e)),
+                                }))
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to insert project into database: {:?}", e);
+                        Ok(Response::new(AddSingleProjectResponse {
+                            success: false,
+                            project: None,
+                            error_message: Some(format!("Database error: {}", e)),
+                        }))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to parse project file {}: {:?}", req.file_path, e);
+                Ok(Response::new(AddSingleProjectResponse {
+                    success: false,
+                    project: None,
+                    error_message: Some(format!("Failed to parse project: {}", e)),
+                }))
+            }
+        }
     }
 
     
@@ -239,9 +324,51 @@ impl SystemHandler {
         if let Some(event_receiver) = events_guard.take() {
             let (tx, rx) = mpsc::channel(100);
             
+            // Clone the database reference for the spawn task
+            let db_clone = Arc::clone(&self.db);
+            
             // Spawn a task to convert FileEvent to WatcherEventResponse
             tokio::spawn(async move {
                 while let Ok(file_event) = event_receiver.recv() {
+                    // Handle database operations for file events
+                    match &file_event {
+                        FileEvent::Deleted(path) => {
+                            debug!("Processing file deletion for database update: {:?}", path);
+                            let mut db = db_clone.lock().await;
+                            
+                            // Try to find the project by path and mark it as deleted
+                            match db.get_project_by_path(&path.to_string_lossy()) {
+                                Ok(Some(project)) => {
+                                    debug!("Found project for deleted file: {} ({})", project.name, project.id);
+                                    if let Err(e) = db.mark_project_deleted(&project.id) {
+                                        warn!("Failed to mark project as deleted: {}", e);
+                                    } else {
+                                        info!("Successfully marked project as deleted: {}", project.name);
+                                    }
+                                }
+                                Ok(None) => {
+                                    debug!("No project found for deleted file: {:?}", path);
+                                }
+                                Err(e) => {
+                                    warn!("Error looking up project for deleted file: {}", e);
+                                }
+                            }
+                        }
+                        FileEvent::Created(_) => {
+                            // TODO: Could trigger a scan of the new file in the future
+                            debug!("File created event - no database action needed");
+                        }
+                        FileEvent::Modified(_) => {
+                            // TODO: Could trigger a re-scan of the modified file in the future
+                            debug!("File modified event - no database action needed");
+                        }
+                        FileEvent::Renamed { from, to: _ } => {
+                            // TODO: Could update the project path in the database
+                            debug!("File renamed event - no database action implemented for: {:?}", from);
+                        }
+                    }
+                    
+                    // Convert to WatcherEventResponse for streaming
                     let watcher_event = match file_event {
                         FileEvent::Created(path) => WatcherEventResponse {
                             event_type: WatcherEventType::WatcherCreated as i32,

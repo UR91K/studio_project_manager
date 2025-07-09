@@ -34,6 +34,21 @@ impl LiveSetDatabase {
         Ok(())
     }
 
+    pub fn update_tag(&mut self, tag_id: &str, name: &str) -> Result<(), DatabaseError> {
+        debug!("Updating tag {} to name: {}", tag_id, name);
+        let rows_affected = self.conn.execute(
+            "UPDATE tags SET name = ? WHERE id = ?",
+            params![name, tag_id],
+        )?;
+        
+        if rows_affected == 0 {
+            return Err(DatabaseError::NotFound(format!("Tag with id {} not found", tag_id)));
+        }
+        
+        debug!("Successfully updated tag: {}", tag_id);
+        Ok(())
+    }
+
     pub fn tag_project(&mut self, project_id: &str, tag_id: &str) -> Result<(), DatabaseError> {
         debug!("Tagging project {} with tag {}", project_id, tag_id);
         let now = Local::now();

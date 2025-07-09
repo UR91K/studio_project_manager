@@ -230,6 +230,20 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         self.tags_handler.create_tag(request).await
     }
 
+    async fn update_tag(
+        &self,
+        request: Request<UpdateTagRequest>,
+    ) -> Result<Response<UpdateTagResponse>, Status> {
+        self.tags_handler.update_tag(request).await
+    }
+
+    async fn delete_tag(
+        &self,
+        request: Request<DeleteTagRequest>,
+    ) -> Result<Response<DeleteTagResponse>, Status> {
+        self.tags_handler.delete_tag(request).await
+    }
+
     async fn tag_project(
         &self,
         request: Request<TagProjectRequest>,
@@ -382,6 +396,13 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         request: Request<GetScanStatusRequest>,
     ) -> Result<Response<GetScanStatusResponse>, Status> {
         self.system_handler.get_scan_status(request).await
+    }
+
+    async fn add_single_project(
+        &self,
+        request: Request<AddSingleProjectRequest>,
+    ) -> Result<Response<AddSingleProjectResponse>, Status> {
+        self.system_handler.add_single_project(request).await
     }
 
     async fn start_watcher(
