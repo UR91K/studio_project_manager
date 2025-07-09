@@ -486,6 +486,10 @@ impl LiveSetDatabase {
                 debug!("  notes: {:?}", row.get::<_, Option<String>>(6)?);
                 debug!("  created_at: {:?}", row.get::<_, Option<String>>(7)?);
                 debug!("  modified_at: {:?}", row.get::<_, Option<String>>(8)?);
+                debug!("  tempo: {:?}", row.get::<_, Option<String>>(9)?);
+                debug!("  key_signature: {:?}", row.get::<_, Option<String>>(10)?);
+                debug!("  time_signature: {:?}", row.get::<_, Option<String>>(11)?);
+                debug!("  version: {:?}", row.get::<_, Option<String>>(12)?);
                 Ok(Some(()))
             },
         ) {

@@ -170,6 +170,9 @@ impl LiveSetDatabase {
                 created_at,           -- Creation timestamp
                 modified_at,          -- Modification timestamp
                 tempo,                -- Project tempo
+                key_signature,        -- Key signature (C Major, F# Minor, etc.)
+                time_signature,       -- Time signature (4/4, 3/4, etc.)
+                version,              -- Ableton version (11.0.0, 12.0.1, etc.)
                 tokenize='porter unicode61'
             );
 
@@ -177,7 +180,8 @@ impl LiveSetDatabase {
             CREATE TRIGGER IF NOT EXISTS projects_au AFTER UPDATE ON projects BEGIN
                 DELETE FROM project_search WHERE project_id = old.id;
                 INSERT INTO project_search (
-                    project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo
+                    project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo,
+                    key_signature, time_signature, version
                 )
                 SELECT 
                     p.id,
@@ -198,7 +202,14 @@ impl LiveSetDatabase {
                     COALESCE(p.notes, ''),
                     strftime('%Y-%m-%d %H:%M:%S', datetime(p.created_at, 'unixepoch')),
                     strftime('%Y-%m-%d %H:%M:%S', datetime(p.modified_at, 'unixepoch')),
-                    CAST(p.tempo AS TEXT)
+                    CAST(p.tempo AS TEXT),
+                    CASE 
+                        WHEN p.key_signature_tonic IS NOT NULL AND p.key_signature_scale IS NOT NULL 
+                        THEN p.key_signature_tonic || ' ' || p.key_signature_scale
+                        ELSE ''
+                    END,
+                    CAST(p.time_signature_numerator AS TEXT) || '/' || CAST(p.time_signature_denominator AS TEXT),
+                    CAST(p.ableton_version_major AS TEXT) || '.' || CAST(p.ableton_version_minor AS TEXT) || '.' || CAST(p.ableton_version_patch AS TEXT)
                 FROM projects p
                 WHERE p.id = new.id;
             END;
@@ -210,7 +221,8 @@ impl LiveSetDatabase {
             -- Update FTS index after project insert (done manually to ensure all relations are set)
             CREATE TRIGGER IF NOT EXISTS projects_ai AFTER INSERT ON projects BEGIN
                 INSERT INTO project_search (
-                    project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo
+                    project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo,
+                    key_signature, time_signature, version
                 )
                 SELECT 
                     p.id,
@@ -222,9 +234,39 @@ impl LiveSetDatabase {
                     COALESCE(p.notes, ''),
                     strftime('%Y-%m-%d %H:%M:%S', datetime(p.created_at, 'unixepoch')),
                     strftime('%Y-%m-%d %H:%M:%S', datetime(p.modified_at, 'unixepoch')),
-                    CAST(p.tempo AS TEXT)
+                    CAST(p.tempo AS TEXT),
+                    CASE 
+                        WHEN p.key_signature_tonic IS NOT NULL AND p.key_signature_scale IS NOT NULL 
+                        THEN p.key_signature_tonic || ' ' || p.key_signature_scale
+                        ELSE ''
+                    END,
+                    CAST(p.time_signature_numerator AS TEXT) || '/' || CAST(p.time_signature_denominator AS TEXT),
+                    CAST(p.ableton_version_major AS TEXT) || '.' || CAST(p.ableton_version_minor AS TEXT) || '.' || CAST(p.ableton_version_patch AS TEXT)
                 FROM projects p
                 WHERE p.id = new.id;
+            END;
+
+            -- Triggers to update FTS5 when project tags change
+            CREATE TRIGGER IF NOT EXISTS project_tags_ai AFTER INSERT ON project_tags BEGIN
+                UPDATE project_search SET
+                    tags = (
+                        SELECT GROUP_CONCAT(t.name, ' ')
+                        FROM tags t
+                        JOIN project_tags pt ON pt.tag_id = t.id
+                        WHERE pt.project_id = new.project_id
+                    )
+                WHERE project_id = new.project_id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS project_tags_ad AFTER DELETE ON project_tags BEGIN
+                UPDATE project_search SET
+                    tags = COALESCE((
+                        SELECT GROUP_CONCAT(t.name, ' ')
+                        FROM tags t
+                        JOIN project_tags pt ON pt.tag_id = t.id
+                        WHERE pt.project_id = old.project_id
+                    ), '')
+                WHERE project_id = old.project_id;
             END;
             "#,
         )?;
@@ -265,7 +307,8 @@ impl LiveSetDatabase {
         self.conn.execute(
             r#"
             INSERT INTO project_search (
-                project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo
+                project_id, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo,
+                key_signature, time_signature, version
             )
             SELECT 
                 p.id,
@@ -286,7 +329,14 @@ impl LiveSetDatabase {
                 COALESCE(p.notes, ''),
                 strftime('%Y-%m-%d %H:%M:%S', datetime(p.created_at, 'unixepoch')),
                 strftime('%Y-%m-%d %H:%M:%S', datetime(p.modified_at, 'unixepoch')),
-                CAST(p.tempo AS TEXT)
+                CAST(p.tempo AS TEXT),
+                CASE 
+                    WHEN p.key_signature_tonic IS NOT NULL AND p.key_signature_scale IS NOT NULL 
+                    THEN p.key_signature_tonic || ' ' || p.key_signature_scale
+                    ELSE ''
+                END,
+                CAST(p.time_signature_numerator AS TEXT) || '/' || CAST(p.time_signature_denominator AS TEXT),
+                CAST(p.ableton_version_major AS TEXT) || '.' || CAST(p.ableton_version_minor AS TEXT) || '.' || CAST(p.ableton_version_patch AS TEXT)
             FROM projects p
             WHERE p.is_active = true
             "#,

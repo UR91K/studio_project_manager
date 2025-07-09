@@ -34,6 +34,12 @@ pub async fn create_test_project_in_db(db: &Arc<Mutex<LiveSetDatabase>>) -> Stri
         .with_plugin("Serum")
         .with_sample("kick.wav")
         .with_tempo(140.0)
+        .with_time_signature(4, 4)
+        .with_key_signature(studio_project_manager::models::KeySignature {
+            tonic: studio_project_manager::models::Tonic::C,
+            scale: studio_project_manager::models::Scale::Major,
+        })
+        .with_version(11, 0, 0, false)
         .build();
     
     let unique_id = uuid::Uuid::new_v4();

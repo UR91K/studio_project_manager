@@ -210,7 +210,7 @@ impl SearchQuery {
         };
 
         let query = format!(
-            "SELECT project_id, rank, name, path, plugins, samples 
+            "SELECT project_id, rank, name, path, plugins, samples, tags, notes, created_at, modified_at, tempo, key_signature, time_signature, version
              FROM project_search 
              WHERE project_search MATCH ? 
              ORDER BY rank"
@@ -434,11 +434,17 @@ impl LiveSetDatabase {
     pub fn search_fts(&mut self, query: &SearchQuery) -> Result<Vec<SearchResult>, DatabaseError> {
         debug!("Performing FTS5 search with query: {:?}", query);
 
+        // Check if query is effectively empty
+        let (sql_query, params) = query.build_fts5_query();
+        if params.is_empty() || params[0].is_empty() {
+            debug!("Empty query detected, returning empty results");
+            return Ok(Vec::new());
+        }
+
         // First collect all matching paths in a transaction
         let matching_paths = {
             let tx = self.conn.transaction()?;
             
-            let (sql_query, params) = query.build_fts5_query();
             debug!("FTS5 query: {}", sql_query);
             debug!("Query params: {:?}", params);
 
