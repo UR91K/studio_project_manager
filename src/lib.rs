@@ -1,7 +1,41 @@
-//! Studio Project Manager Library
+//! # Studio Project Manager Library
 //! 
-//! This library provides functionality for scanning, parsing, and managing 
-//! Ableton Live project files.
+//! A high-performance library for scanning, parsing, and managing Ableton Live project files.
+//! This library provides the core functionality for indexing Ableton Live projects, extracting
+//! metadata, and storing it in a searchable database.
+//!
+//! ## Features
+//!
+//! - **Fast scanning**: Efficiently discovers Ableton Live projects across multiple directories
+//! - **Parallel parsing**: Multi-threaded parsing of `.als` files for maximum performance
+//! - **Comprehensive metadata extraction**: Tempo, plugins, samples, key signatures, and more
+//! - **SQLite database**: Persistent storage with full-text search capabilities
+//! - **gRPC API**: Remote access and integration capabilities
+//! - **Media management**: Handle cover art and audio files
+//! - **Real-time watching**: Monitor file system changes
+//!
+//! ## Quick Start
+//!
+//! ```rust,no_run
+//! use studio_project_manager::process_projects;
+//!
+//! // Process all projects configured in config.toml
+//! process_projects().expect("Failed to process projects");
+//! ```
+//!
+//! ## Architecture
+//!
+//! The library is organized into several key modules:
+//! - [`scan`]: Project discovery and parallel parsing
+//! - [`database`]: SQLite storage and full-text search
+//! - [`grpc`]: gRPC server and API handlers
+//! - [`models`]: Core data structures and types
+//! - [`media`]: Media file storage and management
+//! - [`watcher`]: File system monitoring
+//!
+//! ## Configuration
+//!
+//! The library uses a `config.toml` file for configuration. See [`config`] module for details.
 
 pub mod ableton_db;
 pub mod config;
@@ -17,10 +51,77 @@ pub mod watcher;
 pub mod tray;
 
 // Re-export commonly used items for easier imports
+
+/// Global configuration instance loaded from `config.toml`.
+/// 
+/// This provides access to all configuration settings including project paths,
+/// database location, gRPC port, and other runtime options.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use studio_project_manager::CONFIG;
+///
+/// let config = CONFIG.as_ref().expect("Config should be loaded");
+/// println!("gRPC port: {}", config.grpc_port);
+/// ```
 pub use config::CONFIG;
+
+/// SQLite database interface for managing Ableton Live project data.
+///
+/// This is the main database abstraction that provides methods for storing,
+/// retrieving, and searching project information, tags, collections, and more.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use studio_project_manager::LiveSetDatabase;
+/// use std::path::PathBuf;
+///
+/// let db = LiveSetDatabase::new(PathBuf::from("projects.db"))
+///     .expect("Failed to create database");
+/// ```
 pub use database::LiveSetDatabase;
+
+/// Represents a parsed Ableton Live project with all extracted metadata.
+///
+/// This is the primary data structure containing all information extracted
+/// from an Ableton Live Set (`.als`) file, including musical properties,
+/// plugins, samples, and file metadata.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use studio_project_manager::LiveSet;
+/// use std::path::PathBuf;
+///
+/// let project_path = PathBuf::from("project.als");
+/// let live_set = LiveSet::new(project_path).expect("Failed to parse project");
+/// println!("Project tempo: {}", live_set.tempo);
+/// ```
 pub use live_set::LiveSet;
+
+/// All core data structures and types used throughout the library.
+///
+/// This includes enums for plugin formats, key signatures, time signatures,
+/// and other musical and technical data types.
 pub use models::*;
+
+/// Utility function for decompressing gzip files.
+///
+/// This is commonly used for processing compressed Ableton Live project files.
+///
+/// # Arguments
+///
+/// * `path` - Path to the gzip file to decompress
+///
+/// # Returns
+///
+/// Returns `Vec<u8>` containing the decompressed data
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or decompressed
 pub use utils::decompress_gzip_file;
 
 // Core processing functions
@@ -35,10 +136,108 @@ use crate::error::LiveSetError;
 use crate::live_set::LiveSetPreprocessed;
 use crate::scan::project_scanner::ProjectPathScanner;
 
+/// Processes all Ableton Live projects found in configured directories.
+///
+/// This is the main entry point for scanning and indexing projects. It discovers
+/// projects in all configured paths, parses them in parallel, and stores the results
+/// in the database. Only projects that are new or have been modified since the last
+/// scan will be processed.
+///
+/// The function uses configuration from `config.toml` to determine which directories
+/// to scan and where to store the database.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if all projects were processed successfully, or an error if
+/// the operation failed.
+///
+/// # Errors
+///
+/// Returns [`LiveSetError`] in the following cases:
+/// - Configuration file cannot be loaded
+/// - Database cannot be initialized
+/// - Project directories cannot be accessed
+/// - Critical parsing errors occur
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use studio_project_manager::process_projects;
+///
+/// // Process all projects - this will scan configured directories,
+/// // parse any new or modified projects, and update the database
+/// match process_projects() {
+///     Ok(()) => println!("All projects processed successfully"),
+///     Err(e) => eprintln!("Failed to process projects: {}", e),
+/// }
+/// ```
+///
+/// # Configuration
+///
+/// This function requires a valid `config.toml` file with at least:
+/// ```toml
+/// paths = ["/path/to/projects"]
+/// database_path = "projects.db"
+/// ```
 pub fn process_projects() -> Result<(), LiveSetError> {
     process_projects_with_progress::<fn(u32, u32, f32, String, &str)>(None)
 }
 
+/// Processes all Ableton Live projects with progress callback support.
+///
+/// This function provides the same functionality as [`process_projects`] but allows
+/// you to receive progress updates throughout the scanning and parsing process.
+/// This is useful for building UIs or monitoring long-running operations.
+///
+/// # Arguments
+///
+/// * `progress_callback` - Optional callback function that receives progress updates.
+///   The callback receives:
+///   - `completed`: Number of items completed
+///   - `total`: Total number of items to process
+///   - `progress`: Progress as a float between 0.0 and 1.0
+///   - `message`: Human-readable status message
+///   - `phase`: Current phase ("starting", "discovering", "parsing", "inserting", "completed")
+///
+/// # Returns
+///
+/// Returns `Ok(())` if all projects were processed successfully, or an error if
+/// the operation failed.
+///
+/// # Errors
+///
+/// Returns [`LiveSetError`] in the following cases:
+/// - Configuration file cannot be loaded
+/// - Database cannot be initialized
+/// - Project directories cannot be accessed
+/// - Critical parsing errors occur
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use studio_project_manager::process_projects_with_progress;
+///
+/// // Process with progress callback
+/// let result = process_projects_with_progress(Some(|completed, total, progress, message, phase| {
+///     println!("[{}] {:.1}% - {} ({}/{})", 
+///              phase, progress * 100.0, message, completed, total);
+/// }));
+///
+/// match result {
+///     Ok(()) => println!("Processing complete!"),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+///
+/// # Progress Phases
+///
+/// The callback will receive updates during these phases:
+/// - `"starting"`: Initial setup and validation
+/// - `"discovering"`: Scanning directories for project files
+/// - `"preprocessing"`: Extracting basic metadata for filtering
+/// - `"parsing"`: Full parsing of project files
+/// - `"inserting"`: Saving results to database
+/// - `"completed"`: Operation finished successfully
 pub fn process_projects_with_progress<F>(mut progress_callback: Option<F>) -> Result<(), LiveSetError> 
 where 
     F: FnMut(u32, u32, f32, String, &str) + Send + 'static,
@@ -215,6 +414,26 @@ where
     Ok(())
 }
 
+/// Converts a set of project paths into preprocessed metadata objects.
+///
+/// This function performs lightweight preprocessing on discovered project files,
+/// extracting basic metadata like file modification times and names without
+/// fully parsing the project content. This allows for efficient filtering
+/// of projects that haven't changed since the last scan.
+///
+/// # Arguments
+///
+/// * `paths` - Set of filesystem paths to Ableton Live project files
+///
+/// # Returns
+///
+/// Returns a vector of [`LiveSetPreprocessed`] objects containing basic metadata
+/// for each successfully processed project.
+///
+/// # Errors
+///
+/// Returns [`LiveSetError`] if the preprocessing operation fails critically.
+/// Individual project preprocessing failures are logged but don't stop the overall process.
 fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocessed>, LiveSetError> {
     debug!("Preprocessing {} projects", paths.len());
     let mut preprocessed = Vec::with_capacity(paths.len());
@@ -236,6 +455,24 @@ fn preprocess_projects(paths: HashSet<PathBuf>) -> Result<Vec<LiveSetPreprocesse
     Ok(preprocessed)
 }
 
+/// Filters out projects that haven't changed since the last scan.
+///
+/// This function compares the modification time of each preprocessed project
+/// against the last scan time stored in the database. Only projects that are
+/// new or have been modified since the last scan are returned for full parsing.
+///
+/// # Arguments
+///
+/// * `preprocessed` - Vector of preprocessed project metadata
+/// * `db` - Database reference for checking last scan times
+///
+/// # Returns
+///
+/// Returns a vector of [`PathBuf`] objects for projects that need to be parsed.
+///
+/// # Errors
+///
+/// Returns [`LiveSetError`] if database queries fail during the filtering process.
 fn filter_unchanged_projects(
     preprocessed: Vec<LiveSetPreprocessed>, 
     db: &LiveSetDatabase
