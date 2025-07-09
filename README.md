@@ -2,13 +2,16 @@
 
 ## Overview
 
-A high-performance gRPC server for indexing and searching Ableton Live projects. This tool provides the fastest Ableton Live set parser available. It offers comprehensive project analysis and search, and organisation capabilities through a clean gRPC API.
+A high-performance gRPC server for indexing and searching Ableton Live projects. This tool provides the fastest Ableton Live set parser available, offering comprehensive project analysis, search, and organization capabilities through a clean gRPC API.
+
+The application is now feature-complete. It runs as a system tray application by default for seamless background operation.
 
 ## Features
 
-### Currently implemented
+### Core Features
 
 - **Extremely fast scanning and parsing** of Ableton Live Set (.als) files (~160-270 MB/s)
+- **System tray application** - runs silently in the background with minimal system impact
 - **gRPC API** for remote access and integration with any client application
 - **Comprehensive project data extraction**:
     - Tempo
@@ -27,9 +30,14 @@ A high-performance gRPC server for indexing and searching Ableton Live projects.
     - `key:Cmaj` - search by key signature
     - `missing:true` - find projects with missing plugins
     - And more fuzzy search capabilities across all project data
-- **Real-time file watching** (planned integration with gRPC streaming)
-- **Notes** - a description for each project
+- **Real-time file watching** with gRPC streaming integration
+- **Notes** - descriptions for each project
+- **Tags** - tag projects for categorization (e.g., artists, genres)
+- **Collections** - for making tracklists; collects to-do lists of contained projects, support for cover art
+- **Tasks/To-do lists** per project for mix notes, reminders, and project management
+- **Media management** - upload/download cover art and audio files with storage statistics and cleanup
 - **Database statistics** and system information endpoints
+- **Configurable settings** via `config.toml`
 
 ### gRPC API Endpoints
 
@@ -38,6 +46,7 @@ A high-performance gRPC server for indexing and searching Ableton Live projects.
 - `GetProjects` - List all projects with pagination
 - `GetProject` - Get detailed information about a specific project
 - `UpdateProjectNotes` - Add or update project notes
+- `UpdateProjectName` - Update a project's name
 
 **Search**
 
@@ -81,15 +90,23 @@ A high-performance gRPC server for indexing and searching Ableton Live projects.
 - `GetSystemInfo` - Get system and database information
 - `GetStatistics` - Get database statistics
 
-### Coming soon - high priority
+**Media Management**
 
-- **To-do lists** per project for mix notes, etc. (already implemented internally)
-- **Tags** - tag projects for categorisation (e.g., artists, genres) [already implemented internally]
-- **Collections** - for making tracklists; collects to-do lists of contained projects, support for cover art [already implemented internally]
-- **Real-time file watcher streaming** - get notified of project changes
-- **Configuration management** - add/remove project directories via API
+- `UploadCoverArt` - Upload cover art for collections (streaming)
+- `UploadAudioFile` - Upload audio files for projects (streaming)
+- `DownloadMedia` - Download media files (streaming)
+- `DeleteMedia` - Delete media files
+- `SetCollectionCoverArt` - Associate cover art with a collection
+- `RemoveCollectionCoverArt` - Remove cover art from a collection
+- `SetProjectAudioFile` - Associate audio file with a project
+- `RemoveProjectAudioFile` - Remove audio file from a project
+- `ListMediaFiles` - List all media files with pagination
+- `GetMediaFilesByType` - Get media files filtered by type
+- `GetOrphanedMediaFiles` - Find media files not associated with any project/collection
+- `GetMediaStatistics` - Get media storage statistics
+- `CleanupOrphanedMedia` - Remove orphaned media files from storage
 
-### Planned - lower priority
+### Future Enhancements
 
 - **Version control system** - track project changes over time
 - **Audio file integration** - reference and play demo audio files for auditioning
@@ -118,46 +135,78 @@ cd studio_project_manager
 cargo build --release
 ```
 
-3. Run the server:
+3. Run the application:
 ```bash
 cargo run --release
 ```
 
-The gRPC server will start on `localhost:50051` by default.
+The application will start in system tray mode by default, with the gRPC server running on `localhost:50051`.
 
 ## Configuration
 
-Edit the `config.toml` file to set up your project directories and database location:
+The application is configured via `config.toml`. All settings are optional with sensible defaults:
 
 ```toml
+# Project directories to scan
 paths = [
     '{USER_HOME}/Documents/Ableton Live Projects',
     '{USER_HOME}/Music/Ableton Projects'
 ]
 
-database_path = '{USER_HOME}/Documents/ableton_manager/ableton_live_sets.db'
+# Database location (optional - defaults to executable directory)
+database_path = ""
 
+# Ableton Live database directory for plugin detection
 live_database_dir = '{USER_HOME}/AppData/Local/Ableton/Live Database'
+
+# gRPC server port (default: 50051)
+grpc_port = 50051
+
+# Log level: error, warn, info, debug, trace (default: info)
+log_level = "info"
 ```
 
-* `paths` is for your project folders.
-* `database_path` is the path where you want your database to be stored. Leave blank for same directory as the executable.
-* `live_database_dir` is the directory where Ableton stores it's database files (used during plugin detection.) Usually this will have a bunch of files with names like `Live-files-1218.db` in it.
+### Configuration Options
+
+- **`paths`** - Array of project directories to scan
+- **`database_path`** - SQLite database location (leave empty for executable directory)
+- **`live_database_dir`** - Ableton Live's database directory for plugin detection
+- **`grpc_port`** - Port for the gRPC server (default: 50051)
+- **`log_level`** - Logging verbosity level (default: "info")
 
 The `{USER_HOME}` placeholder will be automatically replaced with your user directory.
 
 ## Usage
 
-### Starting the server
+### System Tray Mode (Default)
 
 ```bash
+# Start as system tray application
+./studio_project_manager.exe
+
+# Or with cargo
 cargo run --release
 ```
 
-The server will:
+The application will:
 1. Load configuration from `config.toml`
 2. Initialize the SQLite database
-3. Start the gRPC server on `localhost:50051`
+3. Start the gRPC server
+4. Run silently in the system tray
+
+Right-click the tray icon to quit the application.
+
+### CLI Mode
+
+```bash
+# Start in CLI mode (shows logs in terminal)
+./studio_project_manager.exe --cli
+
+# Or with cargo
+cargo run --release -- --cli
+```
+
+Use CLI mode for debugging or when you want to see log output directly.
 
 ### Testing with grpcurl
 
@@ -175,11 +224,53 @@ grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"query": "plug
 
 # Search by tempo
 grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"query": "bpm:128"}' localhost:50051 studio_project_manager.StudioProjectManager/Search
+
+# Start file watcher
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"directories": ["C:/Users/YourName/Documents/Ableton Live Projects"]}' localhost:50051 studio_project_manager.StudioProjectManager/StartWatcher
+
+# Get media statistics
+grpcurl -plaintext -proto proto/studio_project_manager.proto localhost:50051 studio_project_manager.StudioProjectManager/GetMediaStatistics
+
+# List media files
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"limit": 10}' localhost:50051 studio_project_manager.StudioProjectManager/ListMediaFiles
+
+# Get orphaned media files
+grpcurl -plaintext -proto proto/studio_project_manager.proto localhost:50051 studio_project_manager.StudioProjectManager/GetOrphanedMediaFiles
 ```
 
 ### Client Integration
 
 The gRPC service can be integrated with any language that supports gRPC. The protobuf definitions are available in `proto/studio_project_manager.proto`.
+
+## Deployment
+
+1. **Build the release binary:**
+   ```bash
+   cargo build --release
+   ```
+
+2. **Copy the executable and config:**
+   ```
+   studio_project_manager.exe
+   config.toml
+   ```
+
+3. **Run the application:**
+   - Double-click the executable for tray mode
+   - Or run from command line: `./studio_project_manager.exe`
+
+The application will automatically:
+- Create the database if it doesn't exist
+- Start the gRPC server
+- Run in the system tray
+- Begin scanning configured directories
+
+## Performance
+
+- **Parsing speed**: ~160-270 MB/s on modern hardware
+- **Memory usage**: Minimal - designed for long-running operation
+- **Database**: SQLite with FTS5 for fast full-text search
+- **Concurrency**: Multi-threaded scanning and processing
 
 ## Contributing
 
