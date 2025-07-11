@@ -7,6 +7,7 @@ pub mod basic;
 pub mod plugins;
 pub mod samples;
 pub mod edge_cases;
+pub mod unicode_encoding;
 
 // Common imports for parser tests
 use studio_project_manager::scan::parser::*;
