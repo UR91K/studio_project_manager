@@ -13,7 +13,7 @@ async fn test_get_statistics_with_trace_logging() {
     let db = server.db();
     
     // Create a test project to ensure we have some data
-    let project_id = create_test_project_in_db(db).await;
+    let _ = create_test_project_in_db(db).await;
     
     // Test the get_statistics endpoint
     let get_stats_req = GetStatisticsRequest {
@@ -95,7 +95,7 @@ async fn test_individual_statistics_functions() {
     let db = server.db();
     
     // Create a test project
-    let project_id = create_test_project_in_db(db).await;
+    let _ = create_test_project_in_db(db).await;
     
     // Test individual statistics functions that might be causing issues
     {
