@@ -526,4 +526,18 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<GetAllSampleUsageNumbersResponse>, Status> {
         self.samples_handler.get_all_sample_usage_numbers(request).await
     }
+
+    async fn get_projects_by_sample(
+        &self,
+        request: Request<GetProjectsBySampleRequest>,
+    ) -> Result<Response<GetProjectsBySampleResponse>, Status> {
+        self.samples_handler.get_projects_by_sample(request).await
+    }
+
+    async fn get_projects_by_plugin(
+        &self,
+        request: Request<GetProjectsByPluginRequest>,
+    ) -> Result<Response<GetProjectsByPluginResponse>, Status> {
+        self.plugins_handler.get_projects_by_plugin(request).await
+    }
 } 

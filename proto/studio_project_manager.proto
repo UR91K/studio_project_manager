@@ -83,6 +83,10 @@ service StudioProjectManager {
   rpc GetSampleStats(GetSampleStatsRequest) returns (GetSampleStatsResponse);
   rpc GetAllPluginUsageNumbers(GetAllPluginUsageNumbersRequest) returns (GetAllPluginUsageNumbersResponse);
   rpc GetAllSampleUsageNumbers(GetAllSampleUsageNumbersRequest) returns (GetAllSampleUsageNumbersResponse);
+  
+  // Reverse Lookup - Projects by Plugin/Sample
+  rpc GetProjectsBySample(GetProjectsBySampleRequest) returns (GetProjectsBySampleResponse);
+  rpc GetProjectsByPlugin(GetProjectsByPluginRequest) returns (GetProjectsByPluginResponse);
 }
 
 // Core Data Types
@@ -959,4 +963,28 @@ message SampleUsage {
 
 message GetAllSampleUsageNumbersResponse {
   repeated SampleUsage sample_usages = 1;
+}
+
+// Reverse Lookup Messages
+
+message GetProjectsBySampleRequest {
+  string sample_id = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message GetProjectsBySampleResponse {
+  repeated Project projects = 1;
+  int32 total_count = 2;
+}
+
+message GetProjectsByPluginRequest {
+  string plugin_id = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message GetProjectsByPluginResponse {
+  repeated Project projects = 1;
+  int32 total_count = 2;
 } 

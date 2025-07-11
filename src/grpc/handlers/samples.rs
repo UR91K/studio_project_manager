@@ -5,6 +5,7 @@ use log::{debug, error};
 
 use crate::database::LiveSetDatabase;
 use super::super::proto::*;
+use super::utils::convert_live_set_to_proto;
 
 pub struct SamplesHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
@@ -180,6 +181,42 @@ impl SamplesHandler {
             }
             Err(e) => {
                 error!("Failed to get sample usage numbers: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn get_projects_by_sample(
+        &self,
+        request: Request<GetProjectsBySampleRequest>,
+    ) -> Result<Response<GetProjectsBySampleResponse>, Status> {
+        debug!("GetProjectsBySample request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.get_projects_by_sample_id(&req.sample_id, req.limit, req.offset) {
+            Ok((projects, total_count)) => {
+                let mut proto_projects = Vec::new();
+                
+                for project in projects {
+                    match convert_live_set_to_proto(project, &mut *db) {
+                        Ok(proto_project) => proto_projects.push(proto_project),
+                        Err(e) => {
+                            error!("Failed to convert project to proto: {:?}", e);
+                            return Err(Status::internal(format!("Database error: {}", e)));
+                        }
+                    }
+                }
+
+                let response = GetProjectsBySampleResponse {
+                    projects: proto_projects,
+                    total_count,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get projects by sample: {:?}", e);
                 Err(Status::new(Code::Internal, format!("Database error: {}", e)))
             }
         }

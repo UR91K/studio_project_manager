@@ -5,6 +5,7 @@ use log::{debug, error};
 
 use crate::database::LiveSetDatabase;
 use super::super::proto::*;
+use super::utils::convert_live_set_to_proto;
 
 pub struct PluginsHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
@@ -195,7 +196,7 @@ impl PluginsHandler {
                     PluginUsage {
                         plugin_id: info.plugin_id,
                         name: info.name,
-                        vendor: info.vendor.unwrap_or_default(),
+                        vendor: info.vendor.unwrap_or_default(), // TODO: plugin should not ever be in incorrect state.
                         usage_count: info.usage_count,
                         project_count: info.project_count,
                     }
@@ -208,6 +209,42 @@ impl PluginsHandler {
             }
             Err(e) => {
                 error!("Failed to get plugin usage numbers: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn get_projects_by_plugin(
+        &self,
+        request: Request<GetProjectsByPluginRequest>,
+    ) -> Result<Response<GetProjectsByPluginResponse>, Status> {
+        debug!("GetProjectsByPlugin request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.get_projects_by_plugin_id(&req.plugin_id, req.limit, req.offset) {
+            Ok((projects, total_count)) => {
+                let mut proto_projects = Vec::new();
+                
+                for project in projects {
+                    match convert_live_set_to_proto(project, &mut *db) {
+                        Ok(proto_project) => proto_projects.push(proto_project),
+                        Err(e) => {
+                            error!("Failed to convert project to proto: {:?}", e);
+                            return Err(Status::internal(format!("Database error: {}", e)));
+                        }
+                    }
+                }
+
+                let response = GetProjectsByPluginResponse {
+                    projects: proto_projects,
+                    total_count,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get projects by plugin: {:?}", e);
                 Err(Status::new(Code::Internal, format!("Database error: {}", e)))
             }
         }

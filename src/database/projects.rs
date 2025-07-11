@@ -639,4 +639,194 @@ impl LiveSetDatabase {
         tx.commit().map_err(DatabaseError::from)?;
         Ok(())
     }
+
+    /// Get projects that use a specific sample
+    pub fn get_projects_by_sample_id(
+        &self,
+        sample_id: &str,
+        limit: Option<i32>,
+        offset: Option<i32>,
+    ) -> Result<(Vec<LiveSet>, i32), DatabaseError> {
+        // Get total count first
+        let total_count: i32 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT p.id) FROM projects p 
+             JOIN project_samples ps ON ps.project_id = p.id 
+             WHERE ps.sample_id = ? AND p.is_active = true",
+            params![sample_id],
+            |row| row.get(0),
+        )?;
+
+        // Get the projects with pagination
+        let query = "
+            SELECT DISTINCT p.* FROM projects p 
+            JOIN project_samples ps ON ps.project_id = p.id 
+            WHERE ps.sample_id = ? AND p.is_active = true
+            ORDER BY p.name ASC
+            LIMIT ? OFFSET ?
+        ";
+
+        let mut stmt = self.conn.prepare(query)?;
+        let rows = stmt.query_map(
+            params![
+                sample_id,
+                limit.unwrap_or(1000),
+                offset.unwrap_or(0)
+            ],
+            |row| row_to_live_set(row),
+        )?;
+
+        let mut projects = Vec::new();
+        for row_result in rows {
+            let mut project = row_result?;
+            let project_id_str = project.id.to_string();
+            
+            // Load plugins for this project
+            {
+                let mut plugin_stmt = self.conn.prepare(
+                    "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
+                )?;
+                project.plugins = plugin_stmt.query_map([&project_id_str], |row| {
+                    Ok(Plugin {
+                        id: Uuid::new_v4(),
+                        plugin_id: row.get(1)?,
+                        module_id: row.get(2)?,
+                        dev_identifier: row.get(3)?,
+                        name: row.get(4)?,
+                        plugin_format: row.get::<_, String>(5)?.parse()
+                            .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                        installed: row.get(6)?,
+                        vendor: row.get(7)?,
+                        version: row.get(8)?,
+                        sdk_version: row.get(9)?,
+                        flags: row.get(10)?,
+                        scanstate: row.get(11)?,
+                        enabled: row.get(12)?,
+                    })
+                })?.filter_map(|r| r.ok()).collect();
+            }
+            
+            // Load samples for this project
+            {
+                let mut sample_stmt = self.conn.prepare(
+                    "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
+                )?;
+                project.samples = sample_stmt.query_map([&project_id_str], |row| {
+                    Ok(Sample {
+                        id: Uuid::new_v4(),
+                        name: row.get(1)?,
+                        path: PathBuf::from(row.get::<_, String>(2)?),
+                        is_present: row.get(3)?,
+                    })
+                })?.filter_map(|r| r.ok()).collect();
+            }
+            
+            // Load tags for this project
+            {
+                let mut tag_stmt = self.conn.prepare(
+                    "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
+                )?;
+                project.tags = tag_stmt.query_map([&project_id_str], |row| row.get(0))
+                    ?.filter_map(|r| r.ok()).collect();
+            }
+            
+            projects.push(project);
+        }
+
+        Ok((projects, total_count))
+    }
+
+    /// Get projects that use a specific plugin
+    pub fn get_projects_by_plugin_id(
+        &self,
+        plugin_id: &str,
+        limit: Option<i32>,
+        offset: Option<i32>,
+    ) -> Result<(Vec<LiveSet>, i32), DatabaseError> {
+        // Get total count first
+        let total_count: i32 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT p.id) FROM projects p 
+             JOIN project_plugins pp ON pp.project_id = p.id 
+             WHERE pp.plugin_id = ? AND p.is_active = true",
+            params![plugin_id],
+            |row| row.get(0),
+        )?;
+
+        // Get the projects with pagination
+        let query = "
+            SELECT DISTINCT p.* FROM projects p 
+            JOIN project_plugins pp ON pp.project_id = p.id 
+            WHERE pp.plugin_id = ? AND p.is_active = true
+            ORDER BY p.name ASC
+            LIMIT ? OFFSET ?
+        ";
+
+        let mut stmt = self.conn.prepare(query)?;
+        let rows = stmt.query_map(
+            params![
+                plugin_id,
+                limit.unwrap_or(1000),
+                offset.unwrap_or(0)
+            ],
+            |row| row_to_live_set(row),
+        )?;
+
+        let mut projects = Vec::new();
+        for row_result in rows {
+            let mut project = row_result?;
+            let project_id_str = project.id.to_string();
+            
+            // Load plugins for this project
+            {
+                let mut plugin_stmt = self.conn.prepare(
+                    "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
+                )?;
+                project.plugins = plugin_stmt.query_map([&project_id_str], |row| {
+                    Ok(Plugin {
+                        id: Uuid::new_v4(),
+                        plugin_id: row.get(1)?,
+                        module_id: row.get(2)?,
+                        dev_identifier: row.get(3)?,
+                        name: row.get(4)?,
+                        plugin_format: row.get::<_, String>(5)?.parse()
+                            .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                        installed: row.get(6)?,
+                        vendor: row.get(7)?,
+                        version: row.get(8)?,
+                        sdk_version: row.get(9)?,
+                        flags: row.get(10)?,
+                        scanstate: row.get(11)?,
+                        enabled: row.get(12)?,
+                    })
+                })?.filter_map(|r| r.ok()).collect();
+            }
+            
+            // Load samples for this project
+            {
+                let mut sample_stmt = self.conn.prepare(
+                    "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
+                )?;
+                project.samples = sample_stmt.query_map([&project_id_str], |row| {
+                    Ok(Sample {
+                        id: Uuid::new_v4(),
+                        name: row.get(1)?,
+                        path: PathBuf::from(row.get::<_, String>(2)?),
+                        is_present: row.get(3)?,
+                    })
+                })?.filter_map(|r| r.ok()).collect();
+            }
+            
+            // Load tags for this project
+            {
+                let mut tag_stmt = self.conn.prepare(
+                    "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
+                )?;
+                project.tags = tag_stmt.query_map([&project_id_str], |row| row.get(0))
+                    ?.filter_map(|r| r.ok()).collect();
+            }
+            
+            projects.push(project);
+        }
+
+        Ok((projects, total_count))
+    }
 } 
