@@ -4,6 +4,7 @@ use tonic::{Request, Response, Status, Code};
 use log::{debug, error};
 
 use crate::database::LiveSetDatabase;
+use crate::error::DatabaseError;
 use crate::LiveSet;
 use super::super::proto::*;
 use super::utils::convert_live_set_to_proto;
@@ -205,7 +206,8 @@ impl ProjectsHandler {
         
         // We need to get the project's current path for reactivation
         // Since reactivate_project requires a path, we'll get it from the database
-        match db.get_project_by_id(&req.project_id) {
+        // Use get_project_by_id_any_status to find the project regardless of active status
+        match db.get_project_by_id_any_status(&req.project_id) {
             Ok(Some(project)) => {
                 match db.reactivate_project(&project_uuid, &project.file_path) {
                     Ok(()) => {
@@ -302,8 +304,17 @@ impl ProjectsHandler {
                 Ok(Response::new(response))
             }
             Err(e) => {
-                error!("Failed to permanently delete project {}: {:?}", req.project_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                match e {
+                    DatabaseError::InvalidOperation(msg) if msg == "Cannot permanently delete an active project" => {
+                        debug!("Cannot permanently delete active project {}", req.project_id);
+                        let response = PermanentlyDeleteProjectResponse { success: false };
+                        Ok(Response::new(response))
+                    }
+                    _ => {
+                        error!("Failed to permanently delete project {}: {:?}", req.project_id, e);
+                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                    }
+                }
             }
         }
     }

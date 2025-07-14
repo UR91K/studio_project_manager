@@ -311,8 +311,10 @@ async fn test_permanently_delete_project() {
     };
     let get_project_resp = server.get_project(Request::new(get_project_req)).await;
     
-    // Should fail since project no longer exists
-    assert!(get_project_resp.is_err());
+    // Should return None since project no longer exists
+    assert!(get_project_resp.is_ok());
+    let response = get_project_resp.unwrap().into_inner();
+    assert!(response.project.is_none());
 }
 
 #[tokio::test]
@@ -433,7 +435,7 @@ async fn test_get_projects_by_deletion_status_pagination() {
 
 #[tokio::test]
 async fn test_project_deletion_workflow() {
-    setup("error");
+    setup("trace");
     
     let server = create_test_server().await;
     let db = server.db();
