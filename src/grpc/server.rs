@@ -193,6 +193,13 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         self.collections_handler.get_collections(request).await
     }
 
+    async fn get_collection(
+        &self,
+        request: Request<GetCollectionRequest>,
+    ) -> Result<Response<GetCollectionResponse>, Status> {
+        self.collections_handler.get_collection(request).await
+    }
+
     async fn create_collection(
         &self,
         request: Request<CreateCollectionRequest>,

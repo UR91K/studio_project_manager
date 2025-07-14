@@ -28,6 +28,7 @@ service StudioProjectManager {
   
   // Collections
   rpc GetCollections(GetCollectionsRequest) returns (GetCollectionsResponse);
+  rpc GetCollection(GetCollectionRequest) returns (GetCollectionResponse);
   rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
   rpc UpdateCollection(UpdateCollectionRequest) returns (UpdateCollectionResponse);
   rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse);
@@ -357,6 +358,14 @@ message GetCollectionsRequest {}
 
 message GetCollectionsResponse {
   repeated Collection collections = 1;
+}
+
+message GetCollectionRequest {
+  string collection_id = 1;
+}
+
+message GetCollectionResponse {
+  optional Collection collection = 1;
 }
 
 message CreateCollectionRequest {

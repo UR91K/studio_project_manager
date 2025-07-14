@@ -409,3 +409,97 @@ async fn test_collection_timestamps() {
     assert!(updated_collection.modified_at <= after_update);
     assert!(updated_collection.modified_at > collection.modified_at); // Should be newer
 }
+
+#[tokio::test]
+async fn test_get_collection() {
+    let server = create_test_server().await;
+    
+    // Create a collection
+    let create_request = Request::new(CreateCollectionRequest {
+        name: "Test Collection for Get".to_string(),
+        description: Some("Test Description".to_string()),
+        notes: Some("Test Notes".to_string()),
+    });
+    
+    let create_response = server.create_collection(create_request).await.unwrap();
+    let created_collection = create_response.into_inner().collection.unwrap();
+    let collection_id = created_collection.id.clone();
+    
+    // Get the collection by ID
+    let get_request = Request::new(GetCollectionRequest {
+        collection_id: collection_id.clone(),
+    });
+    
+    let get_response = server.get_collection(get_request).await.unwrap();
+    let collection = get_response.into_inner().collection.expect("Collection should be present");
+    
+    // Verify the collection details
+    assert_eq!(collection.id, collection_id);
+    assert_eq!(collection.name, "Test Collection for Get");
+    assert_eq!(collection.description, Some("Test Description".to_string()));
+    assert_eq!(collection.notes, Some("Test Notes".to_string()));
+    assert_eq!(collection.project_ids.len(), 0);
+    assert!(collection.created_at > 0);
+    assert!(collection.modified_at > 0);
+}
+
+#[tokio::test]
+async fn test_get_collection_not_found() {
+    let server = create_test_server().await;
+    
+    // Try to get a non-existent collection
+    let get_request = Request::new(GetCollectionRequest {
+        collection_id: Uuid::new_v4().to_string(),
+    });
+    
+    let get_response = server.get_collection(get_request).await.unwrap();
+    let collection = get_response.into_inner().collection;
+    
+    // Verify the collection is None
+    assert!(collection.is_none());
+}
+
+#[tokio::test]
+async fn test_get_collection_with_projects() {
+    let server = create_test_server().await;
+    
+    // Create a collection
+    let create_request = Request::new(CreateCollectionRequest {
+        name: "Collection with Projects".to_string(),
+        description: None,
+        notes: None,
+    });
+    
+    let create_response = server.create_collection(create_request).await.unwrap();
+    let collection_id = create_response.into_inner().collection.unwrap().id;
+    
+    // Create and add test projects
+    let project_id1 = create_test_project_in_db(server.db()).await;
+    let project_id2 = create_test_project_in_db(server.db()).await;
+    
+    // Add projects to collection
+    for project_id in [&project_id1, &project_id2] {
+        let add_request = Request::new(AddProjectToCollectionRequest {
+            collection_id: collection_id.clone(),
+            project_id: project_id.clone(),
+            position: None,
+        });
+        server.add_project_to_collection(add_request).await.unwrap();
+    }
+    
+    // Get the collection by ID
+    let get_request = Request::new(GetCollectionRequest {
+        collection_id: collection_id.clone(),
+    });
+    
+    let get_response = server.get_collection(get_request).await.unwrap();
+    let collection = get_response.into_inner().collection.expect("Collection should be present");
+    
+    // Verify the collection has the projects
+    assert_eq!(collection.id, collection_id);
+    assert_eq!(collection.name, "Collection with Projects");
+    assert_eq!(collection.project_ids.len(), 2);
+    assert!(collection.project_ids.contains(&project_id1));
+    assert!(collection.project_ids.contains(&project_id2));
+    assert_eq!(collection.project_count, 2);
+}

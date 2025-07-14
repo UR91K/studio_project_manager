@@ -89,6 +89,49 @@ impl CollectionsHandler {
         }
     }
 
+    pub async fn get_collection(
+        &self,
+        request: Request<GetCollectionRequest>,
+    ) -> Result<Response<GetCollectionResponse>, Status> {
+        debug!("GetCollection request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.get_collection_by_id(&req.collection_id) {
+            Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                // Get collection statistics
+                let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
+                    .unwrap_or((None, 0));
+                    
+                let collection = Collection {
+                    id,
+                    name,
+                    description,
+                    notes,
+                    created_at,
+                    modified_at,
+                    project_ids,
+                    cover_art_id,
+                    total_duration_seconds,
+                    project_count,
+                };
+                
+                let response = GetCollectionResponse { collection: Some(collection) };
+                Ok(Response::new(response))
+            }
+            Ok(None) => {
+                debug!("Collection {} not found", req.collection_id);
+                let response = GetCollectionResponse { collection: None };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get collection {}: {:?}", req.collection_id, e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
     pub async fn create_collection(
         &self,
         request: Request<CreateCollectionRequest>,
