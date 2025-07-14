@@ -8,3 +8,4 @@ live_set_db_test_dir/ableton_live_sets.db
 Cargo.lock
 tests/MIGRATION_GUIDE.md
 spec.md
+test_data/Flock With Us.rpp

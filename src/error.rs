@@ -146,6 +146,18 @@ pub enum SampleError {
 
     #[error("Attribute error: {0}")]
     AttributeError(#[from] AttributeError),
+
+    #[error("Mac OS format detection failed: {0}")]
+    MacFormatDetectionError(String),
+
+    #[error("Mac OS alias decoding failed: {0}")]
+    MacAliasDecodeError(String),
+
+    #[error("Mac OS bookmark decoding failed: {0}")]
+    MacBookmarkDecodeError(String),
+
+    #[error("No path found in Mac OS format data")]
+    NoPathFound,
 }
 
 #[derive(Error, Debug)]

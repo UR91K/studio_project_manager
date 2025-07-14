@@ -198,3 +198,78 @@ fn test_sample_v9() {
 
     assert_clean_state(&scanner);
 }
+
+#[test]
+fn test_sample_v10_macos_alias() {
+    let mut scanner = create_test_scanner_with_version(10);
+    setup_valid_scanner(&mut scanner);
+
+    let mut reader = Reader::from_str(
+        r#"
+        <SampleRef>
+            <FileRef>
+                <HasRelativePath Value="true" />
+                <RelativePathType Value="3" />
+                <RelativePath>
+                    <RelativePathElement Id="12" Dir="Samples" />
+                    <RelativePathElement Id="13" Dir="Recorded" />
+                </RelativePath>
+                <Name Value="6-Audio 0002 [2020-03-09 225038].aif" />
+                <Type Value="2" />
+                <Data>
+                    0000000002380002000003434F41000000000000000000000000000000000000000000000000D4CB
+                    7352482B00000003899B1F362D417564696F2030303032205B323032302D30332333383942352E61
+                    69660000000000000000000000000000000000000000000000000000000000000000000389B5DA8C
+                    78BE4149464600000000FFFFFFFF00000900000000000000000000000000000000085265636F7264
+                    6564001000080000D4CB57320000001100080000DA8C5C9E00000001001C0003899B00037E180003
+                    7E1000039078000331B50003272100032ED800020076434F413A432E4F2E412E3A00574950203A00
+                    536F6E67733A004D69782026204D61737465723A0044616E636520566964656F202050726F6A6563
+                    742031333562706D3A0053616D706C65733A005265636F726465643A00362D417564696F20303030
+                    32205B323032302D30332333383942352E616966000E004A00240036002D0041007500640069006F
+                    002000300030003000320020005B0032003000320030002D00300033002D00300039002000320032
+                    0035003000330038005D002E006100690066000F000800030043004F0041001200712F432E4F2E41
+                    2E2F574950202F536F6E67732F4D69782026204D61737465722F44616E636520566964656F202050
+                    726F6A6563742031333562706D2F53616D706C65732F5265636F726465642F362D417564696F2030
+                    303032205B323032302D30332D3039203232353033385D2E616966000013000C2F566F6C756D6573
+                    2F434F41FFFF0000
+                </Data>
+                <RefersToFolder Value="false" />
+                <SearchHint>
+                    <PathHint>
+                        <RelativePathElement Id="27" Dir="Volumes" />
+                        <RelativePathElement Id="28" Dir="COA" />
+                        <RelativePathElement Id="29" Dir="C.O.A." />
+                        <RelativePathElement Id="30" Dir="WIP " />
+                        <RelativePathElement Id="31" Dir="Songs" />
+                        <RelativePathElement Id="32" Dir="Arranged" />
+                        <RelativePathElement Id="33" Dir="Dance Video  Project 135bpm" />
+                        <RelativePathElement Id="34" Dir="Samples" />
+                        <RelativePathElement Id="35" Dir="Recorded" />
+                    </PathHint>
+                    <FileSize Value="18711606" />
+                    <Crc Value="54302" />
+                    <MaxCrcSize Value="16384" />
+                    <HasExtendedInfo Value="true" />
+                </SearchHint>
+                <LivePackName Value="" />
+                <LivePackId Value="" />
+            </FileRef>
+            <LastModDate Value="1583787288" />
+            <SourceContext />
+            <SampleUsageHint Value="0" />
+            <DefaultDuration Value="6237184" />
+            <DefaultSampleRate Value="48000" />
+        </SampleRef>
+        "#,
+    );
+    process_xml(&mut scanner, &mut reader);
+
+    let result = scanner.finalize_result(ParseResult::default()).unwrap();
+
+    assert_eq!(result.samples.len(), 1, "Should have collected one sample");
+    let sample = result.samples.iter().next().unwrap();
+    assert_eq!(sample.name, "6-Audio 0002 [2020-03-09 225038].aif");
+    assert_eq!(sample.path.to_str().unwrap(), "/C.O.A./WIP /Songs/Mix & Master/Dance Video  Project 135bpm/Samples/Recorded/6-Audio 0002 [2020-03-09 225038].aif");
+
+    assert_clean_state(&scanner);
+}
