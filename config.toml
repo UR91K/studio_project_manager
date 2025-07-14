@@ -3,8 +3,7 @@
 # if you change this file while the program is running, you need to restart the program for changes to take effect.
 
 paths = [
-    'C:\Users\judee\Documents\Projects',
-    'E:\Music Creation'
+    'C:\Users\judee\Documents\Projects\90s',
 ]
 
 # use {USER_HOME} as a shortcut to your user folder

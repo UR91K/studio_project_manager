@@ -14,6 +14,10 @@ service StudioProjectManager {
   rpc GetProjectsByDeletionStatus(GetProjectsByDeletionStatusRequest) returns (GetProjectsByDeletionStatusResponse);
   rpc PermanentlyDeleteProject(PermanentlyDeleteProjectRequest) returns (PermanentlyDeleteProjectResponse);
   
+  // Batch Project Management
+  rpc BatchMarkProjectsAsArchived(BatchMarkProjectsAsArchivedRequest) returns (BatchMarkProjectsAsArchivedResponse);
+  rpc BatchDeleteProjects(BatchDeleteProjectsRequest) returns (BatchDeleteProjectsResponse);
+  
   // Search
   rpc Search(SearchRequest) returns (SearchResponse);
   
@@ -31,6 +35,11 @@ service StudioProjectManager {
   rpc RemoveProjectFromCollection(RemoveProjectFromCollectionRequest) returns (RemoveProjectFromCollectionResponse);
   rpc GetCollectionTasks(GetCollectionTasksRequest) returns (GetCollectionTasksResponse);
   
+  // Batch Collections
+  rpc BatchAddToCollection(BatchAddToCollectionRequest) returns (BatchAddToCollectionResponse);
+  rpc BatchRemoveFromCollection(BatchRemoveFromCollectionRequest) returns (BatchRemoveFromCollectionResponse);
+  rpc BatchCreateCollectionFrom(BatchCreateCollectionFromRequest) returns (BatchCreateCollectionFromResponse);
+  
   // Tags
   rpc GetTags(GetTagsRequest) returns (GetTagsResponse);
   rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
@@ -39,11 +48,19 @@ service StudioProjectManager {
   rpc TagProject(TagProjectRequest) returns (TagProjectResponse);
   rpc UntagProject(UntagProjectRequest) returns (UntagProjectResponse);
   
+  // Batch Tagging
+  rpc BatchTagProjects(BatchTagProjectsRequest) returns (BatchTagProjectsResponse);
+  rpc BatchUntagProjects(BatchUntagProjectsRequest) returns (BatchUntagProjectsResponse);
+  
   // Tasks
   rpc GetProjectTasks(GetProjectTasksRequest) returns (GetProjectTasksResponse);
   rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
   rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
   rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse);
+  
+  // Batch Tasks
+  rpc BatchUpdateTaskStatus(BatchUpdateTaskStatusRequest) returns (BatchUpdateTaskStatusResponse);
+  rpc BatchDeleteTasks(BatchDeleteTasksRequest) returns (BatchDeleteTasksResponse);
   
   // File Watching
   rpc StartWatcher(StartWatcherRequest) returns (StartWatcherResponse);
@@ -987,4 +1004,117 @@ message GetProjectsByPluginRequest {
 message GetProjectsByPluginResponse {
   repeated Project projects = 1;
   int32 total_count = 2;
-} 
+}
+
+// Batch Operation Messages
+
+// Common batch operation result
+message BatchOperationResult {
+  string id = 1;
+  bool success = 2;
+  optional string error_message = 3;
+}
+
+// Batch Project Management
+message BatchMarkProjectsAsArchivedRequest {
+  repeated string project_ids = 1;
+  bool archived = 2;
+}
+
+message BatchMarkProjectsAsArchivedResponse {
+  repeated BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+message BatchDeleteProjectsRequest {
+  repeated string project_ids = 1;
+}
+
+message BatchDeleteProjectsResponse {
+  repeated BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+// Batch Tagging
+message BatchTagProjectsRequest {
+  repeated string project_ids = 1;
+  repeated string tag_ids = 2;
+}
+
+message BatchTagProjectsResponse {
+  repeated BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+message BatchUntagProjectsRequest {
+  repeated string project_ids = 1;
+  repeated string tag_ids = 2;
+}
+
+message BatchUntagProjectsResponse {
+  repeated BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+// Batch Collections
+message BatchAddToCollectionRequest {
+  repeated string project_ids = 1;
+  string collection_id = 2;
+}
+
+message BatchAddToCollectionResponse {
+  repeated BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+message BatchRemoveFromCollectionRequest {
+  repeated string project_ids = 1;
+  string collection_id = 2;
+}
+
+message BatchRemoveFromCollectionResponse {
+  repeated BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+message BatchCreateCollectionFromRequest {
+  string collection_name = 1;
+  repeated string project_ids = 2;
+  optional string description = 3;
+  optional string notes = 4;
+}
+
+message BatchCreateCollectionFromResponse {
+  Collection collection = 1;
+  repeated BatchOperationResult results = 2;
+  int32 successful_count = 3;
+  int32 failed_count = 4;
+}
+
+// Batch Tasks
+message BatchUpdateTaskStatusRequest {
+  repeated string task_ids = 1;
+  bool completed = 2;
+}
+
+message BatchUpdateTaskStatusResponse {
+  repeated BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+message BatchDeleteTasksRequest {
+  repeated string task_ids = 1;
+}
+
+message BatchDeleteTasksResponse {
+  repeated BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
