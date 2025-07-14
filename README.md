@@ -35,6 +35,7 @@ The application is now feature-complete. It runs as a system tray application by
 - **Tags** - tag projects for categorization (e.g., artists, genres)
 - **Collections** - for making tracklists; collects to-do lists of contained projects, support for cover art
 - **Tasks/To-do lists** per project for mix notes, reminders, and project management
+- **Batch operations** - perform bulk actions on multiple projects, tags, collections, and tasks for efficient project management
 - **Media management** - upload/download cover art and audio files with storage statistics and cleanup
 - **Advanced analytics** - collection-level statistics, task completion trends, and historical analytics
 - **Data export** - CSV export of statistics and analytics data
@@ -49,6 +50,18 @@ The application is now feature-complete. It runs as a system tray application by
 - `GetProject` - Get detailed information about a specific project
 - `UpdateProjectNotes` - Add or update project notes
 - `UpdateProjectName` - Update a project's name
+
+**Batch Operations**
+
+- `BatchArchiveProjects` - Mark multiple projects as archived
+- `BatchDeleteProjects` - Delete multiple projects permanently
+- `BatchTagProjects` - Add tags to multiple projects
+- `BatchUntagProjects` - Remove tags from multiple projects
+- `BatchAddProjectsToCollection` - Add multiple projects to a collection
+- `BatchRemoveProjectsFromCollection` - Remove multiple projects from a collection
+- `BatchCreateCollectionFromProjects` - Create a new collection from multiple projects
+- `BatchUpdateTaskStatus` - Update status of multiple tasks
+- `BatchDeleteTasks` - Delete multiple tasks
 
 **Search**
 
@@ -252,6 +265,22 @@ grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"collection_id
 
 # Export statistics to CSV
 grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"format": "EXPORT_CSV"}' localhost:50051 studio_project_manager.StudioProjectManager/ExportStatistics
+
+# Batch operations examples
+# Archive multiple projects
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"project_ids": [1, 2, 3]}' localhost:50051 studio_project_manager.StudioProjectManager/BatchArchiveProjects
+
+# Tag multiple projects
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"project_ids": [1, 2, 3], "tag_ids": [1, 2]}' localhost:50051 studio_project_manager.StudioProjectManager/BatchTagProjects
+
+# Add multiple projects to a collection
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"project_ids": [1, 2, 3], "collection_id": 1}' localhost:50051 studio_project_manager.StudioProjectManager/BatchAddProjectsToCollection
+
+# Create collection from projects
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"project_ids": [1, 2, 3], "name": "My New Collection", "description": "Collection created from batch operation"}' localhost:50051 studio_project_manager.StudioProjectManager/BatchCreateCollectionFromProjects
+
+# Update multiple task statuses
+grpcurl -plaintext -proto proto/studio_project_manager.proto -d '{"task_ids": [1, 2, 3], "status": "COMPLETED"}' localhost:50051 studio_project_manager.StudioProjectManager/BatchUpdateTaskStatus
 ```
 
 ### Client Integration
