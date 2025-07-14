@@ -493,4 +493,189 @@ impl LiveSetDatabase {
             Err(e) => Err(DatabaseError::from(e))
         }
     }
+
+    // Batch Collection Operations
+    pub fn batch_add_projects_to_collection(&mut self, project_ids: &[String], collection_id: &str) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!("Batch adding {} projects to collection {}", project_ids.len(), collection_id);
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        let now = Local::now();
+        
+        // Get the highest position in the collection
+        let max_position: i32 = tx.query_row(
+            "SELECT COALESCE(MAX(position), -1) FROM collection_projects WHERE collection_id = ?",
+            [collection_id],
+            |row| row.get(0),
+        )?;
+        
+        let mut next_position = max_position + 1;
+        
+        for project_id in project_ids {
+            // Verify project exists
+            let project_exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?)",
+                [project_id],
+                |row| row.get(0),
+            )?;
+            
+            if !project_exists {
+                debug!("Project {} does not exist", project_id);
+                results.push((project_id.clone(), Err(DatabaseError::NotFound(
+                    format!("Project {} not found", project_id)
+                ))));
+                continue;
+            }
+            
+            let result = tx.execute(
+                "INSERT OR IGNORE INTO collection_projects (collection_id, project_id, position, added_at) VALUES (?, ?, ?, ?)",
+                params![collection_id, project_id, next_position, SqlDateTime::from(now)],
+            );
+            
+            match result {
+                Ok(_) => {
+                    debug!("Successfully added project {} to collection at position {}", project_id, next_position);
+                    results.push((project_id.clone(), Ok(())));
+                    next_position += 1;
+                }
+                Err(e) => {
+                    debug!("Failed to add project {} to collection: {}", project_id, e);
+                    results.push((project_id.clone(), Err(DatabaseError::from(e))));
+                }
+            }
+        }
+        
+        // Update collection's modified timestamp
+        tx.execute(
+            "UPDATE collections SET modified_at = ? WHERE id = ?",
+            params![SqlDateTime::from(now), collection_id],
+        )?;
+        
+        tx.commit()?;
+        debug!("Batch add to collection operation completed with {} results", results.len());
+        Ok(results)
+    }
+
+    pub fn batch_remove_projects_from_collection(&mut self, project_ids: &[String], collection_id: &str) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!("Batch removing {} projects from collection {}", project_ids.len(), collection_id);
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        let now = Local::now();
+        
+        for project_id in project_ids {
+            // Get the position of the project being removed
+            let position_result = tx.query_row(
+                "SELECT position FROM collection_projects WHERE collection_id = ? AND project_id = ?",
+                params![collection_id, project_id],
+                |row| row.get::<_, i32>(0),
+            );
+            
+            match position_result {
+                Ok(position) => {
+                    // Remove the project
+                    let remove_result = tx.execute(
+                        "DELETE FROM collection_projects WHERE collection_id = ? AND project_id = ?",
+                        params![collection_id, project_id],
+                    );
+                    
+                    match remove_result {
+                        Ok(_) => {
+                            // Update positions of remaining projects
+                            tx.execute(
+                                "UPDATE collection_projects SET position = position - 1 
+                                 WHERE collection_id = ? AND position > ?",
+                                params![collection_id, position],
+                            )?;
+                            
+                            debug!("Successfully removed project {} from collection", project_id);
+                            results.push((project_id.clone(), Ok(())));
+                        }
+                        Err(e) => {
+                            debug!("Failed to remove project {} from collection: {}", project_id, e);
+                            results.push((project_id.clone(), Err(DatabaseError::from(e))));
+                        }
+                    }
+                }
+                Err(_) => {
+                    debug!("Project {} not found in collection {}", project_id, collection_id);
+                    results.push((project_id.clone(), Err(DatabaseError::NotFound(
+                        format!("Project {} not found in collection {}", project_id, collection_id)
+                    ))));
+                }
+            }
+        }
+        
+        // Update collection's modified timestamp
+        tx.execute(
+            "UPDATE collections SET modified_at = ? WHERE id = ?",
+            params![SqlDateTime::from(now), collection_id],
+        )?;
+        
+        tx.commit()?;
+        debug!("Batch remove from collection operation completed with {} results", results.len());
+        Ok(results)
+    }
+
+    pub fn batch_create_collection_from_projects(&mut self, name: &str, project_ids: &[String], description: Option<&str>, notes: Option<&str>) -> Result<(String, Vec<(String, Result<(), DatabaseError>)>), DatabaseError> {
+        debug!("Batch creating collection '{}' from {} projects", name, project_ids.len());
+        let tx = self.conn.transaction()?;
+        let now = Local::now();
+        
+        // Create the collection
+        let collection_id = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO collections (id, name, description, notes, created_at, modified_at) VALUES (?, ?, ?, ?, ?, ?)",
+            params![
+                collection_id,
+                name,
+                description,
+                notes,
+                SqlDateTime::from(now),
+                SqlDateTime::from(now)
+            ],
+        )?;
+        
+        debug!("Created collection {} with ID {}", name, collection_id);
+        
+        // Add projects to the collection
+        let mut results = Vec::new();
+        let mut position = 0;
+        
+        for project_id in project_ids {
+            // Verify project exists
+            let project_exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?)",
+                [project_id],
+                |row| row.get(0),
+            )?;
+            
+            if !project_exists {
+                debug!("Project {} does not exist", project_id);
+                results.push((project_id.clone(), Err(DatabaseError::NotFound(
+                    format!("Project {} not found", project_id)
+                ))));
+                continue;
+            }
+            
+            let result = tx.execute(
+                "INSERT INTO collection_projects (collection_id, project_id, position, added_at) VALUES (?, ?, ?, ?)",
+                params![collection_id, project_id, position, SqlDateTime::from(now)],
+            );
+            
+            match result {
+                Ok(_) => {
+                    debug!("Successfully added project {} to new collection at position {}", project_id, position);
+                    results.push((project_id.clone(), Ok(())));
+                    position += 1;
+                }
+                Err(e) => {
+                    debug!("Failed to add project {} to new collection: {}", project_id, e);
+                    results.push((project_id.clone(), Err(DatabaseError::from(e))));
+                }
+            }
+        }
+        
+        tx.commit()?;
+        debug!("Batch create collection operation completed with {} results", results.len());
+        Ok((collection_id, results))
+    }
 }

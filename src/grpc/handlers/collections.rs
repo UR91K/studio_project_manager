@@ -315,4 +315,106 @@ impl CollectionsHandler {
             }
         }
     }
+
+    // Batch Collection Operations
+    pub async fn batch_add_to_collection(
+        &self,
+        request: Request<BatchAddToCollectionRequest>,
+    ) -> Result<Response<BatchAddToCollectionResponse>, Status> {
+        debug!("BatchAddToCollection request: {:?}", request);
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        match db.batch_add_projects_to_collection(&req.project_ids, &req.collection_id) {
+            Ok(results) => {
+                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
+                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
+                });
+                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
+                    id,
+                    success: result.is_ok(),
+                    error_message: result.err().map(|e| e.to_string()),
+                }).collect();
+                Ok(Response::new(BatchAddToCollectionResponse {
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(format!("Database error: {}", e))),
+        }
+    }
+
+    pub async fn batch_remove_from_collection(
+        &self,
+        request: Request<BatchRemoveFromCollectionRequest>,
+    ) -> Result<Response<BatchRemoveFromCollectionResponse>, Status> {
+        debug!("BatchRemoveFromCollection request: {:?}", request);
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        match db.batch_remove_projects_from_collection(&req.project_ids, &req.collection_id) {
+            Ok(results) => {
+                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
+                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
+                });
+                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
+                    id,
+                    success: result.is_ok(),
+                    error_message: result.err().map(|e| e.to_string()),
+                }).collect();
+                Ok(Response::new(BatchRemoveFromCollectionResponse {
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(format!("Database error: {}", e))),
+        }
+    }
+
+    pub async fn batch_create_collection_from(
+        &self,
+        request: Request<BatchCreateCollectionFromRequest>,
+    ) -> Result<Response<BatchCreateCollectionFromResponse>, Status> {
+        debug!("BatchCreateCollectionFrom request: {:?}", request);
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        match db.batch_create_collection_from_projects(&req.collection_name, &req.project_ids, req.description.as_deref(), req.notes.as_deref()) {
+            Ok((collection_id, results)) => {
+                // Get the created collection details to return in response
+                let collection = match db.get_collection_by_id(&collection_id) {
+                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                        let (total_duration_seconds, project_count) = db.get_collection_statistics(&id).unwrap_or((None, 0));
+                        Some(Collection {
+                            id,
+                            name,
+                            description,
+                            notes,
+                            created_at,
+                            modified_at,
+                            project_ids,
+                            cover_art_id,
+                            total_duration_seconds,
+                            project_count,
+                        })
+                    }
+                    _ => None,
+                };
+                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
+                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
+                });
+                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
+                    id,
+                    success: result.is_ok(),
+                    error_message: result.err().map(|e| e.to_string()),
+                }).collect();
+                Ok(Response::new(BatchCreateCollectionFromResponse {
+                    collection,
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(format!("Database error: {}", e))),
+        }
+    }
 } 

@@ -156,4 +156,75 @@ impl LiveSetDatabase {
         debug!("Successfully retrieved task completion trends");
         Ok(trends)
     }
+
+    // Batch Task Operations
+    pub fn batch_update_task_status(&mut self, task_ids: &[String], completed: bool) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!("Batch updating {} tasks completion status to {}", task_ids.len(), completed);
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        
+        for task_id in task_ids {
+            let result = tx.execute(
+                "UPDATE project_tasks SET completed = ? WHERE id = ?",
+                params![completed, task_id],
+            );
+            
+            match result {
+                Ok(rows_affected) => {
+                    if rows_affected > 0 {
+                        debug!("Successfully updated task {} completion status to {}", task_id, completed);
+                        results.push((task_id.clone(), Ok(())));
+                    } else {
+                        debug!("Task {} not found", task_id);
+                        results.push((task_id.clone(), Err(DatabaseError::NotFound(
+                            format!("Task {} not found", task_id)
+                        ))));
+                    }
+                }
+                Err(e) => {
+                    debug!("Failed to update task {} completion status: {}", task_id, e);
+                    results.push((task_id.clone(), Err(DatabaseError::from(e))));
+                }
+            }
+        }
+        
+        tx.commit()?;
+        debug!("Batch update task status operation completed with {} results", results.len());
+        Ok(results)
+    }
+
+    pub fn batch_delete_tasks(&mut self, task_ids: &[String]) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!("Batch deleting {} tasks", task_ids.len());
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        
+        for task_id in task_ids {
+            let result = tx.execute(
+                "DELETE FROM project_tasks WHERE id = ?",
+                params![task_id],
+            );
+            
+            match result {
+                Ok(rows_affected) => {
+                    if rows_affected > 0 {
+                        debug!("Successfully deleted task {}", task_id);
+                        results.push((task_id.clone(), Ok(())));
+                    } else {
+                        debug!("Task {} not found", task_id);
+                        results.push((task_id.clone(), Err(DatabaseError::NotFound(
+                            format!("Task {} not found", task_id)
+                        ))));
+                    }
+                }
+                Err(e) => {
+                    debug!("Failed to delete task {}: {}", task_id, e);
+                    results.push((task_id.clone(), Err(DatabaseError::from(e))));
+                }
+            }
+        }
+        
+        tx.commit()?;
+        debug!("Batch delete tasks operation completed with {} results", results.len());
+        Ok(results)
+    }
 }

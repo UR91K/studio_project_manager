@@ -163,6 +163,20 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         self.projects_handler.permanently_delete_project(request).await
     }
 
+    async fn batch_mark_projects_as_archived(
+        &self,
+        request: Request<BatchMarkProjectsAsArchivedRequest>,
+    ) -> Result<Response<BatchMarkProjectsAsArchivedResponse>, Status> {
+        self.projects_handler.batch_mark_projects_as_archived(request).await
+    }
+
+    async fn batch_delete_projects(
+        &self,
+        request: Request<BatchDeleteProjectsRequest>,
+    ) -> Result<Response<BatchDeleteProjectsResponse>, Status> {
+        self.projects_handler.batch_delete_projects(request).await
+    }
+
     // SEARCH METHODS - delegate to search_handler
     async fn search(
         &self,
@@ -221,6 +235,27 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         self.collections_handler.get_collection_tasks(request).await
     }
 
+    async fn batch_add_to_collection(
+        &self,
+        request: Request<BatchAddToCollectionRequest>,
+    ) -> Result<Response<BatchAddToCollectionResponse>, Status> {
+        self.collections_handler.batch_add_to_collection(request).await
+    }
+
+    async fn batch_remove_from_collection(
+        &self,
+        request: Request<BatchRemoveFromCollectionRequest>,
+    ) -> Result<Response<BatchRemoveFromCollectionResponse>, Status> {
+        self.collections_handler.batch_remove_from_collection(request).await
+    }
+
+    async fn batch_create_collection_from(
+        &self,
+        request: Request<BatchCreateCollectionFromRequest>,
+    ) -> Result<Response<BatchCreateCollectionFromResponse>, Status> {
+        self.collections_handler.batch_create_collection_from(request).await
+    }
+
     // TAG METHODS - delegate to tags_handler
     async fn get_tags(
         &self,
@@ -264,6 +299,20 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         self.tags_handler.untag_project(request).await
     }
 
+    async fn batch_tag_projects(
+        &self,
+        request: Request<BatchTagProjectsRequest>,
+    ) -> Result<Response<BatchTagProjectsResponse>, Status> {
+        self.tags_handler.batch_tag_projects(request).await
+    }
+
+    async fn batch_untag_projects(
+        &self,
+        request: Request<BatchUntagProjectsRequest>,
+    ) -> Result<Response<BatchUntagProjectsResponse>, Status> {
+        self.tags_handler.batch_untag_projects(request).await
+    }
+
     // TASK METHODS - delegate to tasks_handler
     async fn get_project_tasks(
         &self,
@@ -291,6 +340,20 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         request: Request<DeleteTaskRequest>,
     ) -> Result<Response<DeleteTaskResponse>, Status> {
         self.tasks_handler.delete_task(request).await
+    }
+
+    async fn batch_update_task_status(
+        &self,
+        request: Request<BatchUpdateTaskStatusRequest>,
+    ) -> Result<Response<BatchUpdateTaskStatusResponse>, Status> {
+        self.tasks_handler.batch_update_task_status(request).await
+    }
+
+    async fn batch_delete_tasks(
+        &self,
+        request: Request<BatchDeleteTasksRequest>,
+    ) -> Result<Response<BatchDeleteTasksResponse>, Status> {
+        self.tasks_handler.batch_delete_tasks(request).await
     }
 
     // MEDIA METHODS - delegate to media_handler

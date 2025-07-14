@@ -191,4 +191,59 @@ impl TasksHandler {
             }
         }
     }
+
+    // Batch Task Operations
+    pub async fn batch_update_task_status(
+        &self,
+        request: Request<BatchUpdateTaskStatusRequest>,
+    ) -> Result<Response<BatchUpdateTaskStatusResponse>, Status> {
+        debug!("BatchUpdateTaskStatus request: {:?}", request);
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        match db.batch_update_task_status(&req.task_ids, req.completed) {
+            Ok(results) => {
+                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
+                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
+                });
+                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
+                    id,
+                    success: result.is_ok(),
+                    error_message: result.err().map(|e| e.to_string()),
+                }).collect();
+                Ok(Response::new(BatchUpdateTaskStatusResponse {
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(format!("Database error: {}", e))),
+        }
+    }
+
+    pub async fn batch_delete_tasks(
+        &self,
+        request: Request<BatchDeleteTasksRequest>,
+    ) -> Result<Response<BatchDeleteTasksResponse>, Status> {
+        debug!("BatchDeleteTasks request: {:?}", request);
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        match db.batch_delete_tasks(&req.task_ids) {
+            Ok(results) => {
+                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
+                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
+                });
+                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
+                    id,
+                    success: result.is_ok(),
+                    error_message: result.err().map(|e| e.to_string()),
+                }).collect();
+                Ok(Response::new(BatchDeleteTasksResponse {
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(format!("Database error: {}", e))),
+        }
+    }
 } 

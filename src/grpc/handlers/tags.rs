@@ -227,4 +227,59 @@ impl TagsHandler {
             }
         }
     }
+
+    // Batch Tag Operations
+    pub async fn batch_tag_projects(
+        &self,
+        request: Request<BatchTagProjectsRequest>,
+    ) -> Result<Response<BatchTagProjectsResponse>, Status> {
+        debug!("BatchTagProjects request: {:?}", request);
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        match db.batch_tag_projects(&req.project_ids, &req.tag_ids) {
+            Ok(results) => {
+                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
+                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
+                });
+                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
+                    id,
+                    success: result.is_ok(),
+                    error_message: result.err().map(|e| e.to_string()),
+                }).collect();
+                Ok(Response::new(BatchTagProjectsResponse {
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(format!("Database error: {}", e))),
+        }
+    }
+
+    pub async fn batch_untag_projects(
+        &self,
+        request: Request<BatchUntagProjectsRequest>,
+    ) -> Result<Response<BatchUntagProjectsResponse>, Status> {
+        debug!("BatchUntagProjects request: {:?}", request);
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        match db.batch_untag_projects(&req.project_ids, &req.tag_ids) {
+            Ok(results) => {
+                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
+                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
+                });
+                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
+                    id,
+                    success: result.is_ok(),
+                    error_message: result.err().map(|e| e.to_string()),
+                }).collect();
+                Ok(Response::new(BatchUntagProjectsResponse {
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                }))
+            }
+            Err(e) => Err(Status::internal(format!("Database error: {}", e))),
+        }
+    }
 } 

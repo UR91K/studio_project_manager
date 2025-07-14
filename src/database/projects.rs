@@ -824,6 +824,71 @@ impl LiveSetDatabase {
         Ok(())
     }
 
+    // Batch Project Operations
+    pub fn batch_mark_projects_archived(&mut self, project_ids: &[String], archived: bool) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!("Batch marking {} projects as archived: {}", project_ids.len(), archived);
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        
+        for project_id in project_ids {
+            let result = tx.execute(
+                "UPDATE projects SET is_active = ? WHERE id = ?",
+                params![!archived, project_id], // archived = true means is_active = false
+            );
+            
+            match result {
+                Ok(_) => {
+                    debug!("Successfully marked project {} as archived: {}", project_id, archived);
+                    results.push((project_id.clone(), Ok(())));
+                }
+                Err(e) => {
+                    debug!("Failed to mark project {} as archived: {}", project_id, e);
+                    results.push((project_id.clone(), Err(DatabaseError::from(e))));
+                }
+            }
+        }
+        
+        tx.commit()?;
+        debug!("Batch archive operation completed with {} results", results.len());
+        Ok(results)
+    }
+
+    pub fn batch_delete_projects(&mut self, project_ids: &[String]) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!("Batch deleting {} projects", project_ids.len());
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        
+        for project_id in project_ids {
+            // Only allow deletion of inactive projects
+            let result = tx.execute(
+                "DELETE FROM projects WHERE id = ? AND is_active = false",
+                params![project_id],
+            );
+            
+            match result {
+                Ok(rows_affected) => {
+                    if rows_affected > 0 {
+                        debug!("Successfully deleted project {}", project_id);
+                        results.push((project_id.clone(), Ok(())));
+                    } else {
+                        debug!("Cannot delete active project {}", project_id);
+                        results.push((project_id.clone(), Err(DatabaseError::InvalidOperation(
+                            "Cannot permanently delete an active project".to_string()
+                        ))));
+                    }
+                }
+                Err(e) => {
+                    debug!("Failed to delete project {}: {}", project_id, e);
+                    results.push((project_id.clone(), Err(DatabaseError::from(e))));
+                }
+            }
+        }
+        
+        tx.commit()?;
+        debug!("Batch delete operation completed with {} results", results.len());
+        Ok(results)
+    }
+
     /// Get projects that use a specific sample
     pub fn get_projects_by_sample_id(
         &self,

@@ -413,4 +413,66 @@ impl LiveSetDatabase {
         debug!("Retrieved tag by ID");
         Ok(tag)
     }
+
+    // Batch Tag Operations
+    pub fn batch_tag_projects(&mut self, project_ids: &[String], tag_ids: &[String]) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!("Batch tagging {} projects with {} tags", project_ids.len(), tag_ids.len());
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        let now = Local::now();
+        
+        for project_id in project_ids {
+            for tag_id in tag_ids {
+                let result = tx.execute(
+                    "INSERT OR IGNORE INTO project_tags (project_id, tag_id, created_at) VALUES (?, ?, ?)",
+                    params![project_id, tag_id, SqlDateTime::from(now)],
+                );
+                
+                match result {
+                    Ok(_) => {
+                        debug!("Successfully tagged project {} with tag {}", project_id, tag_id);
+                        results.push((format!("{}:{}", project_id, tag_id), Ok(())));
+                    }
+                    Err(e) => {
+                        debug!("Failed to tag project {} with tag {}: {}", project_id, tag_id, e);
+                        results.push((format!("{}:{}", project_id, tag_id), Err(DatabaseError::from(e))));
+                    }
+                }
+            }
+        }
+        
+        tx.commit()?;
+        debug!("Batch tag operation completed with {} results", results.len());
+        Ok(results)
+    }
+
+    pub fn batch_untag_projects(&mut self, project_ids: &[String], tag_ids: &[String]) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!("Batch untagging {} projects from {} tags", project_ids.len(), tag_ids.len());
+        let tx = self.conn.transaction()?;
+        let mut results = Vec::new();
+        
+        for project_id in project_ids {
+            for tag_id in tag_ids {
+                let result = tx.execute(
+                    "DELETE FROM project_tags WHERE project_id = ? AND tag_id = ?",
+                    params![project_id, tag_id],
+                );
+                
+                match result {
+                    Ok(_) => {
+                        debug!("Successfully untagged project {} from tag {}", project_id, tag_id);
+                        results.push((format!("{}:{}", project_id, tag_id), Ok(())));
+                    }
+                    Err(e) => {
+                        debug!("Failed to untag project {} from tag {}: {}", project_id, tag_id, e);
+                        results.push((format!("{}:{}", project_id, tag_id), Err(DatabaseError::from(e))));
+                    }
+                }
+            }
+        }
+        
+        tx.commit()?;
+        debug!("Batch untag operation completed with {} results", results.len());
+        Ok(results)
+    }
 }

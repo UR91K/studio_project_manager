@@ -318,4 +318,91 @@ impl ProjectsHandler {
             }
         }
     }
+
+    // Batch Project Operations
+    pub async fn batch_mark_projects_as_archived(
+        &self,
+        request: Request<BatchMarkProjectsAsArchivedRequest>,
+    ) -> Result<Response<BatchMarkProjectsAsArchivedResponse>, Status> {
+        debug!("BatchMarkProjectsAsArchived request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.batch_mark_projects_archived(&req.project_ids, req.archived) {
+            Ok(results) => {
+                let (successful_count, failed_count) = results.iter()
+                    .fold((0, 0), |(success, fail), (_, result)| {
+                        match result {
+                            Ok(_) => (success + 1, fail),
+                            Err(_) => (success, fail + 1),
+                        }
+                    });
+                
+                let batch_results = results.into_iter()
+                    .map(|(id, result)| BatchOperationResult {
+                        id,
+                        success: result.is_ok(),
+                        error_message: result.err().map(|e| e.to_string()),
+                    })
+                    .collect();
+                
+                let response = BatchMarkProjectsAsArchivedResponse {
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                };
+                
+                debug!("Batch archive operation completed: {} successful, {} failed", successful_count, failed_count);
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to batch mark projects as archived: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    pub async fn batch_delete_projects(
+        &self,
+        request: Request<BatchDeleteProjectsRequest>,
+    ) -> Result<Response<BatchDeleteProjectsResponse>, Status> {
+        debug!("BatchDeleteProjects request: {:?}", request);
+        
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+        
+        match db.batch_delete_projects(&req.project_ids) {
+            Ok(results) => {
+                let (successful_count, failed_count) = results.iter()
+                    .fold((0, 0), |(success, fail), (_, result)| {
+                        match result {
+                            Ok(_) => (success + 1, fail),
+                            Err(_) => (success, fail + 1),
+                        }
+                    });
+                
+                let batch_results = results.into_iter()
+                    .map(|(id, result)| BatchOperationResult {
+                        id,
+                        success: result.is_ok(),
+                        error_message: result.err().map(|e| e.to_string()),
+                    })
+                    .collect();
+                
+                let response = BatchDeleteProjectsResponse {
+                    results: batch_results,
+                    successful_count,
+                    failed_count,
+                };
+                
+                debug!("Batch delete operation completed: {} successful, {} failed", successful_count, failed_count);
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to batch delete projects: {:?}", e);
+                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+            }
+        }
+    }
 } 
