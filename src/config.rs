@@ -87,13 +87,21 @@ fn find_config_file() -> Result<PathBuf, ConfigError> {
     let mut dir = std::env::current_exe().map_err(|e| ConfigError::ReadError(e))?;
 
     // Navigate up the directory tree until we find the config file or reach the root
-    while dir.pop() {
+    let limit = 5;
+    for _ in 0..limit {
         let config_path = dir.join("config.toml");
         if config_path.exists() {
             return Ok(config_path);
         }
+        
+        // Try to go up one directory level
+        if !dir.pop() {
+            // Reached the root directory, break out of the loop
+            break;
+        }
     }
-
+    
+    //TODO: make the config file at the current directory using default values.
     Err(ConfigError::ReadError(std::io::Error::new(
         std::io::ErrorKind::NotFound,
         "Could not find config.toml",
