@@ -843,95 +843,20 @@ impl Parser {
                     let db_plugin = ableton_db
                         .get_plugin_by_dev_identifier(dev_identifier)
                         .map_err(LiveSetError::DatabaseError)?;
-    
-                    let plugin = match db_plugin {
-                        Some(db_plugin) => {
-                            trace_fn!(
-                                "finalize_result",
-                                "Found plugin {} {} on system, flagging as installed",
-                                db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
-                                db_plugin.name.green()
-                            );
-                            Plugin {
-                                id: Uuid::new_v4(),
-                                plugin_id: Some(db_plugin.plugin_id),
-                                module_id: db_plugin.module_id,
-                                dev_identifier: db_plugin.dev_identifier.clone(),
-                                name: db_plugin.name.clone(),
-                                vendor: db_plugin.vendor.clone(),
-                                version: db_plugin.version.clone(),
-                                sdk_version: db_plugin.sdk_version.clone(),
-                                flags: db_plugin.flags,
-                                scanstate: db_plugin.parsestate,
-                                enabled: db_plugin.enabled,
-                                plugin_format: info.plugin_format,
-                                installed: true,
-                            }
-                        }
-                        None => {
-                            trace_fn!(
-                                "finalize_result",
-                                "Plugin not found in database: {:?}",
-                                info
-                            );
-                            Plugin {
-                                id: Uuid::new_v4(),
-                                plugin_id: None,
-                                module_id: None,
-                                dev_identifier: dev_identifier.clone(),
-                                name: info.name.clone(),
-                                vendor: None,
-                                version: None,
-                                sdk_version: None,
-                                flags: None,
-                                scanstate: None,
-                                enabled: None,
-                                plugin_format: info.plugin_format,
-                                installed: false,
-                            }
-                        }
-                    };
+                    let plugin = Self::make_plugin(dev_identifier, info, db_plugin.as_ref());
                     result.plugins.insert(plugin);
                 }
             } else {
                 warn_fn!("finalize_result", "Failed to open Ableton database, using unverified plugins");
                 for (dev_identifier, info) in &self.plugin_info_tags {
-                    let plugin = Plugin {
-                        id: Uuid::new_v4(),
-                        plugin_id: None,
-                        module_id: None,
-                        dev_identifier: dev_identifier.clone(),
-                        name: info.name.clone(),
-                        vendor: None,
-                        version: None,
-                        sdk_version: None,
-                        flags: None,
-                        scanstate: None,
-                        enabled: None,
-                        plugin_format: info.plugin_format,
-                        installed: false,
-                    };
+                    let plugin = Self::make_plugin(dev_identifier, info, None);
                     result.plugins.insert(plugin);
                 }
             }
         } else {
             warn_fn!("finalize_result", "Ableton database file not found, using unverified plugins");
             for (dev_identifier, info) in &self.plugin_info_tags {
-                let plugin = Plugin {
-                    id: Uuid::new_v4(),
-                    plugin_id: None,
-                    module_id: None,
-                    dev_identifier: dev_identifier.clone(),
-                    name: info.name.clone(),
-                    vendor: None,
-                    version: None,
-                    sdk_version: None,
-                    flags: None,
-                    scanstate: None,
-                    enabled: None,
-                    plugin_format: info.plugin_format,
-                    installed: false,
-                };
+                let plugin = Self::make_plugin(dev_identifier, info, None);
                 result.plugins.insert(plugin);
             }
         }
@@ -965,7 +890,55 @@ impl Parser {
         Ok(result)
     }
     
-
+    fn make_plugin(dev_identifier: &str, info: &PluginInfo, db_plugin: Option<&crate::ableton_db::DbPlugin>) -> Plugin {
+        match db_plugin {
+            Some(db_plugin) => {
+                trace_fn!(
+                    "finalize_result",
+                    "Found plugin {} {} on system, flagging as installed",
+                    db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
+                    db_plugin.name.green()
+                );
+                Plugin {
+                    id: Uuid::new_v4(),
+                    plugin_id: Some(db_plugin.plugin_id),
+                    module_id: db_plugin.module_id,
+                    dev_identifier: db_plugin.dev_identifier.clone(),
+                    name: db_plugin.name.clone(),
+                    vendor: db_plugin.vendor.clone(),
+                    version: db_plugin.version.clone(),
+                    sdk_version: db_plugin.sdk_version.clone(),
+                    flags: db_plugin.flags,
+                    scanstate: db_plugin.parsestate,
+                    enabled: db_plugin.enabled,
+                    plugin_format: info.plugin_format,
+                    installed: true,
+                }
+            }
+            None => {
+                trace_fn!(
+                    "finalize_result",
+                    "Plugin not found in database: {:?}",
+                    info
+                );
+                Plugin {
+                    id: Uuid::new_v4(),
+                    plugin_id: None,
+                    module_id: None,
+                    dev_identifier: dev_identifier.to_string(),
+                    name: info.name.clone(),
+                    vendor: None,
+                    version: None,
+                    sdk_version: None,
+                    flags: None,
+                    scanstate: None,
+                    enabled: None,
+                    plugin_format: info.plugin_format,
+                    installed: false,
+                }
+            }
+        }
+    }
 
     /// Handles XML start/empty element events with context-aware processing.
     ///
