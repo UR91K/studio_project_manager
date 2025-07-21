@@ -9,10 +9,11 @@ fn test_config_validation() {
             // Verify basic validation
             assert!(!config.paths.is_empty(), "At least one path should be configured");
             assert!(config.grpc_port > 0, "gRPC port should be greater than 0");
-            assert!(config.max_cover_art_size_mb > 0, "Max cover art size should be greater than 0");
-            assert!(config.max_audio_file_size_mb > 0, "Max audio file size should be greater than 0");
-            assert!(!config.allowed_image_formats.is_empty(), "At least one image format should be allowed");
-            assert!(!config.allowed_audio_formats.is_empty(), "At least one audio format should be allowed");
+            // Note: Size limits are now optional and handled by media module
+            // 0 means no limit, None means use media module default
+            // Test that media formats are available (now handled by media module)
+            assert!(!studio_project_manager::media::ALLOWED_IMAGE_FORMATS.is_empty(), "At least one image format should be allowed");
+            assert!(!studio_project_manager::media::ALLOWED_AUDIO_FORMATS.is_empty(), "At least one audio format should be allowed");
             
             // Verify database path is set
             assert!(config.database_path.is_some(), "Database path should be set");
@@ -37,15 +38,17 @@ fn test_config_validation() {
 fn test_config_constants() {
     // Test that constants are properly defined
     assert_eq!(studio_project_manager::config::DEFAULT_GRPC_PORT, 50051);
-    assert_eq!(studio_project_manager::config::DEFAULT_MAX_COVER_ART_SIZE_MB, 10);
-    assert_eq!(studio_project_manager::config::DEFAULT_MAX_AUDIO_FILE_SIZE_MB, 50);
     assert_eq!(studio_project_manager::config::DEFAULT_LOG_LEVEL, "info");
     
-    // Test format arrays
-    assert!(studio_project_manager::config::DEFAULT_IMAGE_FORMATS.contains(&"jpg"));
-    assert!(studio_project_manager::config::DEFAULT_IMAGE_FORMATS.contains(&"png"));
-    assert!(studio_project_manager::config::DEFAULT_AUDIO_FORMATS.contains(&"mp3"));
-    assert!(studio_project_manager::config::DEFAULT_AUDIO_FORMATS.contains(&"wav"));
+    // Test media module constants
+    assert_eq!(studio_project_manager::media::DEFAULT_MAX_COVER_ART_SIZE_MB, 10);
+    assert_eq!(studio_project_manager::media::DEFAULT_MAX_AUDIO_FILE_SIZE_MB, 50);
+    
+    // Test format arrays (now in media module)
+    assert!(studio_project_manager::media::ALLOWED_IMAGE_FORMATS.contains(&"jpg"));
+    assert!(studio_project_manager::media::ALLOWED_IMAGE_FORMATS.contains(&"png"));
+    assert!(studio_project_manager::media::ALLOWED_AUDIO_FORMATS.contains(&"mp3"));
+    assert!(studio_project_manager::media::ALLOWED_AUDIO_FORMATS.contains(&"wav"));
 }
 
 #[test]

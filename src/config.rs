@@ -18,11 +18,7 @@ pub const DEFAULT_MAX_AUDIO_FILE_SIZE_MB: u32 = 50;
 /// Default log level
 pub const DEFAULT_LOG_LEVEL: &str = "info";
 
-/// Default allowed image formats
-pub const DEFAULT_IMAGE_FORMATS: &[&str] = &["jpg", "jpeg", "png", "webp"];
 
-/// Default allowed audio formats
-pub const DEFAULT_AUDIO_FORMATS: &[&str] = &["mp3", "wav", "m4a", "flac"];
 
 /// Configuration for the Studio Project Manager application
 #[derive(Deserialize, Debug, Clone)]
@@ -42,18 +38,12 @@ pub struct Config {
     pub log_level: String,
     /// Directory for storing media files
     pub media_storage_dir: String,
-    /// Maximum cover art file size in MB
+    /// Maximum cover art file size in MB (0 = no limit, None = use media module default)
     #[serde(default = "default_max_cover_art_size")]
-    pub max_cover_art_size_mb: u32,
-    /// Maximum audio file size in MB
+    pub max_cover_art_size_mb: Option<u32>,
+    /// Maximum audio file size in MB (0 = no limit, None = use media module default)
     #[serde(default = "default_max_audio_file_size")]
-    pub max_audio_file_size_mb: u32,
-    /// Allowed image file formats
-    #[serde(default = "default_allowed_image_formats")]
-    pub allowed_image_formats: Vec<String>,
-    /// Allowed audio file formats
-    #[serde(default = "default_allowed_audio_formats")]
-    pub allowed_audio_formats: Vec<String>,
+    pub max_audio_file_size_mb: Option<u32>,
 }
 
 impl Config {
@@ -131,43 +121,14 @@ impl Config {
                 "At least one path must be specified".into(),
             ));
         }
-        if self.max_cover_art_size_mb == 0 {
-            return Err(ConfigError::InvalidValue(
-                "Max cover art size cannot be 0".into(),
-            ));
-        }
-        if self.max_audio_file_size_mb == 0 {
-            return Err(ConfigError::InvalidValue(
-                "Max audio file size cannot be 0".into(),
-            ));
-        }
-        if self.allowed_image_formats.is_empty() {
-            return Err(ConfigError::InvalidValue(
-                "At least one image format must be allowed".into(),
-            ));
-        }
-        if self.allowed_audio_formats.is_empty() {
-            return Err(ConfigError::InvalidValue(
-                "At least one audio format must be allowed".into(),
-            ));
-        }
+        // Note: 0 is now valid (means no limit) and None means use media module default
+        // No validation needed for these fields
         let valid_log_levels = ["error", "warn", "info", "debug", "trace"];
         if !valid_log_levels.contains(&self.log_level.as_str()) {
             return Err(ConfigError::InvalidValue(format!(
                 "Invalid log level '{}'. Must be one of: {:?}",
                 self.log_level, valid_log_levels
             )));
-        }
-        for format in &self.allowed_image_formats {
-            if format.to_lowercase() != *format {
-                eprintln!("Warning: Image format '{}' should be lowercase", format);
-            }
-        }
-
-        for format in &self.allowed_audio_formats {
-            if format.to_lowercase() != *format {
-                eprintln!("Warning: Audio format '{}' should be lowercase", format);
-            }
         }
         Ok(())
     }
@@ -206,6 +167,8 @@ impl Config {
 
         Ok(())
     }
+
+
 }
 
 /// Finds the configuration file using the search strategy:
@@ -260,27 +223,15 @@ fn find_config_file() -> Result<PathBuf, ConfigError> {
     Ok(appdata_config_path)
 }
 
-fn default_max_cover_art_size() -> u32 {
-    DEFAULT_MAX_COVER_ART_SIZE_MB
+fn default_max_cover_art_size() -> Option<u32> {
+    None // Use media module default
 }
 
-fn default_max_audio_file_size() -> u32 {
-    DEFAULT_MAX_AUDIO_FILE_SIZE_MB
+fn default_max_audio_file_size() -> Option<u32> {
+    None // Use media module default
 }
 
-fn default_allowed_image_formats() -> Vec<String> {
-    DEFAULT_IMAGE_FORMATS
-        .iter()
-        .map(|&s| s.to_string())
-        .collect()
-}
 
-fn default_allowed_audio_formats() -> Vec<String> {
-    DEFAULT_AUDIO_FORMATS
-        .iter()
-        .map(|&s| s.to_string())
-        .collect()
-}
 
 fn default_grpc_port() -> u16 {
     DEFAULT_GRPC_PORT
@@ -333,21 +284,15 @@ log_level = "{}"
 # Media storage configuration
 media_storage_dir = '{}'
 
-# Media file size limits (in MB)
-max_cover_art_size_mb = {}
-max_audio_file_size_mb = {}
-
-# Allowed file formats
-allowed_image_formats = ["jpg", "jpeg", "png", "webp"]
-allowed_audio_formats = ["mp3", "wav", "m4a", "flac"]
+# Media file size limits (in MB) - Optional, 0 = no limit, omit to use defaults
+# max_cover_art_size_mb = 10
+# max_audio_file_size_mb = 50
 "#,
         default_projects_path.display(),
         live_database_path.display(),
         DEFAULT_GRPC_PORT,
         DEFAULT_LOG_LEVEL,
-        media_storage_path.display(),
-        DEFAULT_MAX_COVER_ART_SIZE_MB,
-        DEFAULT_MAX_AUDIO_FILE_SIZE_MB
+        media_storage_path.display()
     );
 
     Ok(config_content)

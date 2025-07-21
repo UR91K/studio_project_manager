@@ -13,13 +13,8 @@ pub async fn create_test_server() -> StudioProjectManagerServer {
     let db = LiveSetDatabase::new(PathBuf::from(":memory:"))
         .expect("Failed to create test database");
     
-    // Create a test media config
-    let media_config = MediaConfig {
-        max_cover_art_size_mb: 10,
-        max_audio_file_size_mb: 50,
-        allowed_image_formats: vec!["jpg".to_string(), "jpeg".to_string(), "png".to_string()],
-        allowed_audio_formats: vec!["mp3".to_string(), "wav".to_string()],
-    };
+    // Create a test media config (use defaults)
+    let media_config = MediaConfig::default();
     
     // Create temporary directory for test media storage
     let temp_dir = std::env::temp_dir().join("studio_project_manager_test_media");

@@ -69,12 +69,22 @@ impl MediaFile {
     }
 }
 
+/// Default allowed image formats
+pub const ALLOWED_IMAGE_FORMATS: &[&str] = &["jpg", "jpeg", "png", "webp"];
+
+/// Default allowed audio formats
+pub const ALLOWED_AUDIO_FORMATS: &[&str] = &["mp3", "wav", "m4a", "flac"];
+
+/// Default maximum cover art file size in MB (0 = no limit)
+pub const DEFAULT_MAX_COVER_ART_SIZE_MB: u32 = 10;
+
+/// Default maximum audio file size in MB (0 = no limit)
+pub const DEFAULT_MAX_AUDIO_FILE_SIZE_MB: u32 = 50;
+
 #[derive(Debug, Clone)]
 pub struct MediaConfig {
-    pub max_cover_art_size_mb: u32,
-    pub max_audio_file_size_mb: u32,
-    pub allowed_image_formats: Vec<String>,
-    pub allowed_audio_formats: Vec<String>,
+    pub max_cover_art_size_mb: Option<u32>,
+    pub max_audio_file_size_mb: Option<u32>,
 }
 
 impl From<&Config> for MediaConfig {
@@ -82,8 +92,15 @@ impl From<&Config> for MediaConfig {
         Self {
             max_cover_art_size_mb: config.max_cover_art_size_mb,
             max_audio_file_size_mb: config.max_audio_file_size_mb,
-            allowed_image_formats: config.allowed_image_formats.clone(),
-            allowed_audio_formats: config.allowed_audio_formats.clone(),
+        }
+    }
+}
+
+impl Default for MediaConfig {
+    fn default() -> Self {
+        Self {
+            max_cover_art_size_mb: Some(DEFAULT_MAX_COVER_ART_SIZE_MB),
+            max_audio_file_size_mb: Some(DEFAULT_MAX_AUDIO_FILE_SIZE_MB),
         }
     }
 }
@@ -176,28 +193,31 @@ impl MediaStorageManager {
     fn validate_file(&self, file_data: &[u8], file_extension: &str, media_type: &MediaType) -> Result<(), MediaError> {
         // Check file size
         let file_size_mb = file_data.len() as f64 / (1024.0 * 1024.0);
+        
+        // Get max size limit (0 means no limit)
         let max_size = match media_type {
-            MediaType::CoverArt => self.config.max_cover_art_size_mb as f64,
-            MediaType::AudioFile => self.config.max_audio_file_size_mb as f64,
+            MediaType::CoverArt => self.config.max_cover_art_size_mb.unwrap_or(DEFAULT_MAX_COVER_ART_SIZE_MB),
+            MediaType::AudioFile => self.config.max_audio_file_size_mb.unwrap_or(DEFAULT_MAX_AUDIO_FILE_SIZE_MB),
         };
         
-        if file_size_mb > max_size {
+        // Skip size check if limit is 0 (no limit)
+        if max_size > 0 && file_size_mb > max_size as f64 {
             return Err(MediaError::FileTooLarge {
                 actual_size_mb: file_size_mb,
-                max_size_mb: max_size,
+                max_size_mb: max_size as f64,
             });
         }
         
         // Check file extension
         let allowed_formats = match media_type {
-            MediaType::CoverArt => &self.config.allowed_image_formats,
-            MediaType::AudioFile => &self.config.allowed_audio_formats,
+            MediaType::CoverArt => ALLOWED_IMAGE_FORMATS,
+            MediaType::AudioFile => ALLOWED_AUDIO_FORMATS,
         };
         
-        if !allowed_formats.contains(&file_extension.to_string()) {
+        if !allowed_formats.contains(&file_extension) {
             return Err(MediaError::UnsupportedFormat {
                 format: file_extension.to_string(),
-                allowed_formats: allowed_formats.clone(),
+                allowed_formats: allowed_formats.iter().map(|&s| s.to_string()).collect(),
             });
         }
         
@@ -220,7 +240,7 @@ impl MediaStorageManager {
                 "webp" => Ok("image/webp".to_string()),
                 _ => Err(MediaError::UnsupportedFormat {
                     format: file_extension.to_string(),
-                    allowed_formats: self.config.allowed_image_formats.clone(),
+                    allowed_formats: ALLOWED_IMAGE_FORMATS.iter().map(|&s| s.to_string()).collect(),
                 }),
             },
             MediaType::AudioFile => match file_extension {
@@ -230,7 +250,7 @@ impl MediaStorageManager {
                 "flac" => Ok("audio/flac".to_string()),
                 _ => Err(MediaError::UnsupportedFormat {
                     format: file_extension.to_string(),
-                    allowed_formats: self.config.allowed_audio_formats.clone(),
+                    allowed_formats: ALLOWED_AUDIO_FORMATS.iter().map(|&s| s.to_string()).collect(),
                 }),
             },
         }
