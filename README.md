@@ -223,7 +223,7 @@ Right-click the tray icon to quit the application.
 cargo run --release -- --cli
 ```
 
-Use CLI mode for debugging or when you want to see log output directly.
+Use CLI mode for debugging or when you want to see log output directly. The log level is configurable in `config.toml`
 
 ### Testing with grpcurl
 
@@ -308,7 +308,9 @@ The application will automatically:
 - Create the database if it doesn't exist
 - Start the gRPC server
 - Run in the system tray
-- Begin scanning configured directories
+
+You could then create or use any frontend you would like, or manually interact with the server using grpcurl.
+I am currently working on a first party frontend.
 
 ## Performance
 
