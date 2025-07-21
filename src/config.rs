@@ -171,7 +171,6 @@ impl Config {
     }
 
     /// Validates that configured paths exist and are accessible
-    /// Validates that configured paths exist and are accessible
     /// Returns a list of warnings for non-critical issues
     fn validate_paths(&self) -> Result<Vec<String>, ConfigError> {
         let mut warnings = Vec::new();
