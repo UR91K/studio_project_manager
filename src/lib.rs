@@ -49,6 +49,8 @@ pub mod scan;
 pub mod utils;
 pub mod watcher;
 pub mod tray;
+#[cfg(windows)]
+pub mod windows_paths;
 
 // Re-export commonly used items for easier imports
 

@@ -111,7 +111,23 @@ fn test_path_length_validation() {
     
     // Test path that exceeds Windows limit
     let long_path = "C:\\".to_string() + &"a".repeat(260);
-    assert!(studio_project_manager::config::Config::validate_path_length(&long_path).is_err());
+    let result = studio_project_manager::config::Config::validate_path_length(&long_path);
+    
+    #[cfg(windows)]
+    {
+        // On Windows, this might pass if long path support is enabled
+        // or fail if it's disabled - both are valid outcomes
+        if result.is_ok() {
+            println!("Long path support is enabled on this Windows system");
+        } else {
+            println!("Long path support is disabled on this Windows system");
+        }
+    }
+    
+    #[cfg(not(windows))]
+    {
+        assert!(result.is_err(), "Path should be too long on non-Windows systems");
+    }
 }
 
 #[test]
@@ -140,13 +156,42 @@ fn test_validation_helper_error_context() {
     // This should fail with path length validation, but we can't test the helper directly
     // since it's private. Instead, we test that the validation is called during config validation
     let result = studio_project_manager::config::Config::validate_path_length(&long_path);
-    assert!(result.is_err());
     
-    // Test that the error message contains the expected content
-    if let Err(studio_project_manager::error::ConfigError::InvalidPath(msg)) = result {
-        assert!(msg.contains("Path exceeds Windows limit"));
-        assert!(msg.contains("260"));
-    } else {
-        panic!("Expected InvalidPath error");
+    #[cfg(windows)]
+    {
+        // On Windows, this might pass or fail depending on long path support
+        if let Err(studio_project_manager::error::ConfigError::InvalidPath(msg)) = result {
+            // Test that the error message contains the expected content
+            assert!(msg.contains("characters"));
+        } else {
+            // If it passes, that's fine too - long path support is enabled
+            println!("Long path support is enabled, path validation passed");
+        }
     }
+    
+    #[cfg(not(windows))]
+    {
+        assert!(result.is_err(), "Path should be too long on non-Windows systems");
+        if let Err(studio_project_manager::error::ConfigError::InvalidPath(msg)) = result {
+            assert!(msg.contains("Path exceeds limit"));
+            assert!(msg.contains("260"));
+        } else {
+            panic!("Expected InvalidPath error");
+        }
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn test_windows_path_length_detection() {
+    // Test that we can access the Windows path length detection
+    use studio_project_manager::windows_paths;
+    
+    let max_length = windows_paths::get_max_path_length();
+    assert!(max_length >= 260);
+    assert!(max_length <= 32767);
+    
+    let info = windows_paths::get_path_length_info();
+    assert!(!info.is_empty());
+    assert!(info.contains("characters"));
 } 

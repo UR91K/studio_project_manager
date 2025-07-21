@@ -10,6 +10,7 @@ pub const MAX_DIRECTORY_TRAVERSAL_DEPTH: usize = 5;
 pub const DEFAULT_GRPC_PORT: u16 = 50051;
 
 /// Maximum path length for Windows compatibility (260 characters)
+/// Note: Use windows_paths::get_max_path_length() for dynamic detection
 pub const MAX_PATH_LENGTH: usize = 260;
 
 /// Default maximum cover art size in MB
@@ -266,13 +267,23 @@ impl Config {
 
     /// Validates that a path doesn't exceed Windows path length limits
     pub fn validate_path_length(path: &str) -> Result<(), ConfigError> {
-        if path.len() > MAX_PATH_LENGTH {
-            return Err(ConfigError::InvalidPath(format!(
-                "Path exceeds Windows limit of {} characters: {}",
-                MAX_PATH_LENGTH, path
-            )));
+        #[cfg(windows)]
+        {
+            use crate::windows_paths::validate_path_with_long_path_support;
+            validate_path_with_long_path_support(path)
+                .map_err(|msg| ConfigError::InvalidPath(msg))
         }
-        Ok(())
+        
+        #[cfg(not(windows))]
+        {
+            if path.len() > MAX_PATH_LENGTH {
+                return Err(ConfigError::InvalidPath(format!(
+                    "Path exceeds limit of {} characters: {}",
+                    MAX_PATH_LENGTH, path
+                )));
+            }
+            Ok(())
+        }
     }
 
     /// Tests if a directory is writable by attempting to create and remove a test file

@@ -42,6 +42,7 @@ tray-icon = "0.21"        # System tray functionality
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
+winreg = "0.52"
 
 [build-dependencies]
 tonic-build = "0.10"
