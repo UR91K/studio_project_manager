@@ -228,7 +228,7 @@ fn test_validation_helper_error_context() {
 #[test]
 fn test_windows_path_length_detection() {
     // Test that we can access the Windows path length detection
-    use studio_project_manager::windows_paths;
+    use studio_project_manager::config::windows_paths;
 
     let max_length = windows_paths::get_max_path_length();
     assert!(max_length >= 260);
