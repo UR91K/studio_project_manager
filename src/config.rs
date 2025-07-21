@@ -18,8 +18,6 @@ pub const DEFAULT_MAX_AUDIO_FILE_SIZE_MB: u32 = 50;
 /// Default log level
 pub const DEFAULT_LOG_LEVEL: &str = "info";
 
-
-
 /// Configuration for the Studio Project Manager application
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -167,8 +165,6 @@ impl Config {
 
         Ok(())
     }
-
-
 }
 
 /// Finds the configuration file using the search strategy:
@@ -231,8 +227,6 @@ fn default_max_audio_file_size() -> Option<u32> {
     None // Use media module default
 }
 
-
-
 fn default_grpc_port() -> u16 {
     DEFAULT_GRPC_PORT
 }
@@ -250,10 +244,7 @@ fn generate_default_config() -> Result<String, ConfigError> {
     // Get proper directories using dirs crate
     let data_dir = dirs::data_dir()
         .ok_or_else(|| ConfigError::InvalidPath("Could not get data directory".into()))?;
-    let documents_dir = dirs::document_dir()
-        .ok_or_else(|| ConfigError::InvalidPath("Could not get documents directory".into()))?;
 
-    let default_projects_path = documents_dir.join("Music Projects");
     let live_database_path = data_dir.join("Ableton").join("Live Database");
     let media_storage_path = data_dir.join("StudioProjectManager").join("media");
 
@@ -263,7 +254,7 @@ fn generate_default_config() -> Result<String, ConfigError> {
 # if you change this file while the program is running, you need to restart the program for changes to take effect.
 
 paths = [
-    '{}',
+    # put your project folder paths here
 ]
 
 # use {{USER_HOME}} as a shortcut to your user folder
@@ -288,7 +279,6 @@ media_storage_dir = '{}'
 # max_cover_art_size_mb = 10
 # max_audio_file_size_mb = 50
 "#,
-        default_projects_path.display(),
         live_database_path.display(),
         DEFAULT_GRPC_PORT,
         DEFAULT_LOG_LEVEL,
