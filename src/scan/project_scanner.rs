@@ -1,10 +1,12 @@
-use std::{collections::HashSet, path::{Path, PathBuf}};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use regex::Regex;
 use walkdir::WalkDir;
 
 use crate::error::{LiveSetError, PatternError};
-
 
 /// Scanner for finding Ableton Live project files in directories
 pub struct ProjectPathScanner {
@@ -15,9 +17,9 @@ pub struct ProjectPathScanner {
 impl ProjectPathScanner {
     pub fn new() -> Result<Self, LiveSetError> {
         // This pattern matches Ableton's backup format: [YYYY-MM-DD HHMMSS]
-        let backup_pattern = Regex::new(r"\[\d{4}-\d{2}-\d{2}\s\d{6}]")
-            .map_err(PatternError::InvalidRegex)?;
-            
+        let backup_pattern =
+            Regex::new(r"\[\d{4}-\d{2}-\d{2}\s\d{6}]").map_err(PatternError::InvalidRegex)?;
+
         Ok(Self { backup_pattern })
     }
 
@@ -31,12 +33,12 @@ impl ProjectPathScanner {
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            
+
             // Check if it's an .als file
             if let Some(ext) = path.extension() {
                 if ext == "als" {
                     let path_str = path.to_string_lossy();
-                    
+
                     // Skip if it's a backup file
                     if !self.backup_pattern.is_match(&path_str) {
                         project_paths.insert(path.to_path_buf());

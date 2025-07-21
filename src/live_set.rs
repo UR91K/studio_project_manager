@@ -25,11 +25,11 @@ pub struct LiveSetPreprocessed {
 impl LiveSetPreprocessed {
     pub fn new(file_path: PathBuf) -> Result<Self, LiveSetError> {
         validate_ableton_file(&file_path)?;
-        
+
         let name = load_file_name(&file_path)?;
         let (modified_time, created_time) = load_file_timestamps(&file_path)?;
         let file_hash = load_file_hash(&file_path)?;
-        
+
         Ok(Self {
             path: file_path,
             name,
@@ -145,10 +145,7 @@ impl LiveSet {
     }
 
     pub fn log_info(&self) {
-        println!(
-            "{}",
-            "\n=== Live Set Information ===".bold().blue()
-        );
+        println!("{}", "\n=== Live Set Information ===".bold().blue());
 
         // Basic Information
         println!(
@@ -159,36 +156,40 @@ impl LiveSet {
         );
 
         // File Information
-        println!(
-            "{}",
-            "\nFile Details:".bold().yellow()
-        );
+        println!("{}", "\nFile Details:".bold().yellow());
         println!(
             "Created: {}\nModified: {}\nLast Parsed: {}\nHash: {}",
-            self.created_time.format("%Y-%m-%d %H:%M:%S").to_string().cyan(),
-            self.modified_time.format("%Y-%m-%d %H:%M:%S").to_string().cyan(),
-            self.last_parsed_timestamp.format("%Y-%m-%d %H:%M:%S").to_string().cyan(),
+            self.created_time
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+                .cyan(),
+            self.modified_time
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+                .cyan(),
+            self.last_parsed_timestamp
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+                .cyan(),
             self.file_hash.bright_black()
         );
 
         // Version Information
-        println!(
-            "{}",
-            "\nAbleton Version:".bold().yellow()
-        );
+        println!("{}", "\nAbleton Version:".bold().yellow());
         println!(
             "Version: {}.{}.{} {}",
             self.ableton_version.major.to_string().cyan(),
             self.ableton_version.minor.to_string().cyan(),
             self.ableton_version.patch.to_string().cyan(),
-            if self.ableton_version.beta { "(Beta)".yellow() } else { "".normal() }
+            if self.ableton_version.beta {
+                "(Beta)".yellow()
+            } else {
+                "".normal()
+            }
         );
 
         // Musical Properties
-        println!(
-            "{}",
-            "\nMusical Properties:".bold().yellow()
-        );
+        println!("{}", "\nMusical Properties:".bold().yellow());
         println!(
             "Tempo: {} BPM\nTime Signature: {}/{}\nKey: {}",
             self.tempo.to_string().cyan(),
@@ -213,10 +214,7 @@ impl LiveSet {
         }
 
         // Content Summary
-        println!(
-            "{}",
-            "\nContent Summary:".bold().yellow()
-        );
+        println!("{}", "\nContent Summary:".bold().yellow());
         println!(
             "Plugins: {}\nSamples: {}\nTags: {}",
             self.plugins.len().to_string().green(),
@@ -224,20 +222,27 @@ impl LiveSet {
             if self.tags.is_empty() {
                 "None".bright_black().to_string()
             } else {
-                self.tags.iter().cloned().collect::<Vec<_>>().join(", ").cyan().to_string()
+                self.tags
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+                    .cyan()
+                    .to_string()
             }
         );
 
         // Plugin Details
         if !self.plugins.is_empty() {
-            println!(
-                "{}",
-                "\nPlugins:".bold().yellow()
-            );
+            println!("{}", "\nPlugins:".bold().yellow());
             for plugin in &self.plugins {
                 println!(
                     "{} {} ({})",
-                    if plugin.installed { "✓".green() } else { "✗".red() },
+                    if plugin.installed {
+                        "✓".green()
+                    } else {
+                        "✗".red()
+                    },
                     plugin.name.cyan(),
                     format!("{:?}", plugin.plugin_format).bright_black()
                 );
@@ -246,21 +251,12 @@ impl LiveSet {
 
         // Sample Details
         if !self.samples.is_empty() {
-            println!(
-                "{}",
-                "\nSamples:".bold().yellow()
-            );
+            println!("{}", "\nSamples:".bold().yellow());
             for sample in &self.samples {
-                println!(
-                    "- {}",
-                    sample.name.cyan()
-                );
+                println!("- {}", sample.name.cyan());
             }
         }
 
-        println!(
-            "{}",
-            format!("\n{}\n", "=".repeat(50)).bright_black()
-        );
+        println!("{}", format!("\n{}\n", "=".repeat(50)).bright_black());
     }
 }

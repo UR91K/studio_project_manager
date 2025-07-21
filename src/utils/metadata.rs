@@ -68,7 +68,7 @@ pub fn load_file_name(file_path: &PathBuf) -> Result<String, FileError> {
     if file_path.is_dir() {
         return Err(FileError::NameError("Path is a directory".to_string()));
     }
-    
+
     file_path
         .file_name()
         .ok_or_else(|| FileError::NameError("File name is not present".to_string()))?

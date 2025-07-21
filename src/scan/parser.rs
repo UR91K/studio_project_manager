@@ -455,12 +455,12 @@ impl Parser {
         // Disable features not supported in older versions
         if version.major < 11 {
             options.parse_key = false; // Key detection only available in v11+
-            // warn_fn!(
-            //     "parser",
-            //     "Key detection not supported in version {}",
-            //     version
-            // );
-            // Add other version-specific feature flags here
+                                       // warn_fn!(
+                                       //     "parser",
+                                       //     "Key detection not supported in version {}",
+                                       //     version
+                                       // );
+                                       // Add other version-specific feature flags here
         }
 
         Ok(Self {
@@ -646,14 +646,14 @@ impl Parser {
     /// let xml_data = include_bytes!("project.als");
     /// let options = ParseOptions::default();
     /// let mut parser = Parser::new(xml_data, options)?;
-    /// 
+    ///
     /// let result = parser.parse(xml_data)?;
-    /// println!("Project: {} BPM, {}/{} time signature", 
-    ///          result.tempo, 
+    /// println!("Project: {} BPM, {}/{} time signature",
+    ///          result.tempo,
     ///          result.time_signature.numerator,
     ///          result.time_signature.denominator);
-    /// println!("Found {} plugins and {} samples", 
-    ///          result.plugins.len(), 
+    /// println!("Found {} plugins and {} samples",
+    ///          result.plugins.len(),
     ///          result.samples.len());
     /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
     /// ```
@@ -771,15 +771,12 @@ impl Parser {
     ///
     /// let mut parser = Parser::new(b"<xml>", ParseOptions::default())?;
     /// // ... parsing happens here ...
-    /// 
+    ///
     /// let result = parser.finalize_result(ParseResult::default())?;
     /// println!("Final result: {} BPM", result.tempo);
     /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
     /// ```
-    pub fn finalize_result(
-        &self,
-        mut result: ParseResult,
-    ) -> Result<ParseResult, LiveSetError> {
+    pub fn finalize_result(&self, mut result: ParseResult) -> Result<ParseResult, LiveSetError> {
         // Set the version
         result.version = self.ableton_version;
 
@@ -847,14 +844,20 @@ impl Parser {
                     result.plugins.insert(plugin);
                 }
             } else {
-                warn_fn!("finalize_result", "Failed to open Ableton database, using unverified plugins");
+                warn_fn!(
+                    "finalize_result",
+                    "Failed to open Ableton database, using unverified plugins"
+                );
                 for (dev_identifier, info) in &self.plugin_info_tags {
                     let plugin = Self::make_plugin(dev_identifier, info, None);
                     result.plugins.insert(plugin);
                 }
             }
         } else {
-            warn_fn!("finalize_result", "Ableton database file not found, using unverified plugins");
+            warn_fn!(
+                "finalize_result",
+                "Ableton database file not found, using unverified plugins"
+            );
             for (dev_identifier, info) in &self.plugin_info_tags {
                 let plugin = Self::make_plugin(dev_identifier, info, None);
                 result.plugins.insert(plugin);
@@ -889,8 +892,12 @@ impl Parser {
 
         Ok(result)
     }
-    
-    fn make_plugin(dev_identifier: &str, info: &PluginInfo, db_plugin: Option<&crate::ableton_db::DbPlugin>) -> Plugin {
+
+    fn make_plugin(
+        dev_identifier: &str,
+        info: &PluginInfo,
+        db_plugin: Option<&crate::ableton_db::DbPlugin>,
+    ) -> Plugin {
         match db_plugin {
             Some(db_plugin) => {
                 trace_fn!(
@@ -1816,7 +1823,7 @@ impl Parser {
     ///   48006500780020004400610074006100200032003000310038002D00...
     /// </Data>
     /// ```
-    /// 
+    ///
     /// The hex-encoded text is accumulated and later decoded to a file path.
     pub fn handle_text_event(
         &mut self,

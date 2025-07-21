@@ -1,16 +1,16 @@
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
-use crate::database::LiveSetDatabase;
-use crate::media::{MediaStorageManager, MediaConfig};
 use crate::config::CONFIG;
+use crate::database::LiveSetDatabase;
+use crate::media::{MediaConfig, MediaStorageManager};
 
-use super::proto::*;
 use super::handlers::*;
+use super::proto::*;
 
 pub struct StudioProjectManagerServer {
     pub projects_handler: ProjectsHandler,
@@ -26,20 +26,23 @@ pub struct StudioProjectManagerServer {
 
 impl StudioProjectManagerServer {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let config = CONFIG.as_ref().map_err(|e| {
-            format!("Failed to load config: {}", e)
-        })?;
-        
-        let database_path = config.database_path.as_ref().expect("Database path should be set by config initialization");
+        let config = CONFIG
+            .as_ref()
+            .map_err(|e| format!("Failed to load config: {}", e))?;
+
+        let database_path = config
+            .database_path
+            .as_ref()
+            .expect("Database path should be set by config initialization");
         let db_path = PathBuf::from(database_path);
         let db = LiveSetDatabase::new(db_path)
             .map_err(|e| format!("Failed to initialize database: {}", e))?;
         let db = Arc::new(Mutex::new(db));
-        
+
         let media_config = MediaConfig::from(config);
         let media_storage = Arc::new(MediaStorageManager::new(
             std::path::PathBuf::from(&config.media_storage_dir),
-            media_config
+            media_config,
         )?);
 
         let scan_status = Arc::new(Mutex::new(ScanStatus::ScanUnknown));
@@ -68,10 +71,7 @@ impl StudioProjectManagerServer {
         })
     }
 
-    pub fn new_for_test(
-        db: LiveSetDatabase,
-        media_storage: MediaStorageManager,
-    ) -> Self {
+    pub fn new_for_test(db: LiveSetDatabase, media_storage: MediaStorageManager) -> Self {
         let db = Arc::new(Mutex::new(db));
         let media_storage = Arc::new(media_storage);
         let scan_status = Arc::new(Mutex::new(ScanStatus::ScanUnknown));
@@ -88,7 +88,12 @@ impl StudioProjectManagerServer {
             tasks_handler: TasksHandler::new(Arc::clone(&db)),
             media_handler: MediaHandler::new(Arc::clone(&db), Arc::clone(&media_storage)),
             system_handler: SystemHandler::new(
-                Arc::clone(&db), scan_status, scan_progress, watcher, watcher_events, start_time
+                Arc::clone(&db),
+                scan_status,
+                scan_progress,
+                watcher,
+                watcher_events,
+                start_time,
             ),
             plugins_handler: PluginsHandler::new(Arc::clone(&db)),
             samples_handler: SamplesHandler::new(Arc::clone(&db)),
@@ -153,21 +158,27 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         request: Request<GetProjectsByDeletionStatusRequest>,
     ) -> Result<Response<GetProjectsByDeletionStatusResponse>, Status> {
-        self.projects_handler.get_projects_by_deletion_status(request).await
+        self.projects_handler
+            .get_projects_by_deletion_status(request)
+            .await
     }
 
     async fn permanently_delete_project(
         &self,
         request: Request<PermanentlyDeleteProjectRequest>,
     ) -> Result<Response<PermanentlyDeleteProjectResponse>, Status> {
-        self.projects_handler.permanently_delete_project(request).await
+        self.projects_handler
+            .permanently_delete_project(request)
+            .await
     }
 
     async fn batch_mark_projects_as_archived(
         &self,
         request: Request<BatchMarkProjectsAsArchivedRequest>,
     ) -> Result<Response<BatchMarkProjectsAsArchivedResponse>, Status> {
-        self.projects_handler.batch_mark_projects_as_archived(request).await
+        self.projects_handler
+            .batch_mark_projects_as_archived(request)
+            .await
     }
 
     async fn batch_delete_projects(
@@ -225,14 +236,18 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         request: Request<AddProjectToCollectionRequest>,
     ) -> Result<Response<AddProjectToCollectionResponse>, Status> {
-        self.collections_handler.add_project_to_collection(request).await
+        self.collections_handler
+            .add_project_to_collection(request)
+            .await
     }
 
     async fn remove_project_from_collection(
         &self,
         request: Request<RemoveProjectFromCollectionRequest>,
     ) -> Result<Response<RemoveProjectFromCollectionResponse>, Status> {
-        self.collections_handler.remove_project_from_collection(request).await
+        self.collections_handler
+            .remove_project_from_collection(request)
+            .await
     }
 
     async fn get_collection_tasks(
@@ -246,21 +261,27 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         request: Request<BatchAddToCollectionRequest>,
     ) -> Result<Response<BatchAddToCollectionResponse>, Status> {
-        self.collections_handler.batch_add_to_collection(request).await
+        self.collections_handler
+            .batch_add_to_collection(request)
+            .await
     }
 
     async fn batch_remove_from_collection(
         &self,
         request: Request<BatchRemoveFromCollectionRequest>,
     ) -> Result<Response<BatchRemoveFromCollectionResponse>, Status> {
-        self.collections_handler.batch_remove_from_collection(request).await
+        self.collections_handler
+            .batch_remove_from_collection(request)
+            .await
     }
 
     async fn batch_create_collection_from(
         &self,
         request: Request<BatchCreateCollectionFromRequest>,
     ) -> Result<Response<BatchCreateCollectionFromResponse>, Status> {
-        self.collections_handler.batch_create_collection_from(request).await
+        self.collections_handler
+            .batch_create_collection_from(request)
+            .await
     }
 
     // TAG METHODS - delegate to tags_handler
@@ -370,89 +391,91 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<UploadCoverArtResponse>, Status> {
         self.media_handler.upload_cover_art(request).await
     }
-    
+
     async fn upload_audio_file(
         &self,
         request: Request<tonic::Streaming<UploadAudioFileRequest>>,
     ) -> Result<Response<UploadAudioFileResponse>, Status> {
         self.media_handler.upload_audio_file(request).await
     }
-    
+
     type DownloadMediaStream = ReceiverStream<Result<DownloadMediaResponse, Status>>;
-    
+
     async fn download_media(
         &self,
         request: Request<DownloadMediaRequest>,
     ) -> Result<Response<Self::DownloadMediaStream>, Status> {
         self.media_handler.download_media(request).await
     }
-    
+
     async fn delete_media(
         &self,
         request: Request<DeleteMediaRequest>,
     ) -> Result<Response<DeleteMediaResponse>, Status> {
         self.media_handler.delete_media(request).await
     }
-    
+
     async fn set_collection_cover_art(
         &self,
         request: Request<SetCollectionCoverArtRequest>,
     ) -> Result<Response<SetCollectionCoverArtResponse>, Status> {
         self.media_handler.set_collection_cover_art(request).await
     }
-    
+
     async fn remove_collection_cover_art(
         &self,
         request: Request<RemoveCollectionCoverArtRequest>,
     ) -> Result<Response<RemoveCollectionCoverArtResponse>, Status> {
-        self.media_handler.remove_collection_cover_art(request).await
+        self.media_handler
+            .remove_collection_cover_art(request)
+            .await
     }
-    
+
     async fn set_project_audio_file(
         &self,
         request: Request<SetProjectAudioFileRequest>,
     ) -> Result<Response<SetProjectAudioFileResponse>, Status> {
         self.media_handler.set_project_audio_file(request).await
     }
-    
+
     async fn remove_project_audio_file(
         &self,
         request: Request<RemoveProjectAudioFileRequest>,
     ) -> Result<Response<RemoveProjectAudioFileResponse>, Status> {
         self.media_handler.remove_project_audio_file(request).await
     }
-    
+
     async fn list_media_files(
-        &self, 
-        request: Request<ListMediaFilesRequest>
+        &self,
+        request: Request<ListMediaFilesRequest>,
     ) -> Result<Response<ListMediaFilesResponse>, Status> {
         self.media_handler.list_media_files(request).await
     }
-    
+
     async fn get_media_files_by_type(
-        &self, 
-        request: Request<GetMediaFilesByTypeRequest>
+        &self,
+        request: Request<GetMediaFilesByTypeRequest>,
     ) -> Result<Response<GetMediaFilesByTypeResponse>, Status> {
         self.media_handler.get_media_files_by_type(request).await
     }
-    
+
     async fn get_orphaned_media_files(
-        &self, 
-        request: Request<GetOrphanedMediaFilesRequest>
+        &self,
+        request: Request<GetOrphanedMediaFilesRequest>,
     ) -> Result<Response<GetOrphanedMediaFilesResponse>, Status> {
         self.media_handler.get_orphaned_media_files(request).await
     }
-    
+
     async fn get_media_statistics(
-        &self, 
-        request: Request<GetMediaStatisticsRequest>
+        &self,
+        request: Request<GetMediaStatisticsRequest>,
     ) -> Result<Response<GetMediaStatisticsResponse>, Status> {
         self.media_handler.get_media_statistics(request).await
     }
-    
+
     async fn cleanup_orphaned_media(
-        &self, 
-        request: Request<CleanupOrphanedMediaRequest>
+        &self,
+        request: Request<CleanupOrphanedMediaRequest>,
     ) -> Result<Response<CleanupOrphanedMediaResponse>, Status> {
         self.media_handler.cleanup_orphaned_media(request).await
     }
@@ -537,7 +560,9 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         request: Request<GetPluginByInstalledStatusRequest>,
     ) -> Result<Response<GetPluginByInstalledStatusResponse>, Status> {
-        self.plugins_handler.get_plugin_by_installed_status(request).await
+        self.plugins_handler
+            .get_plugin_by_installed_status(request)
+            .await
     }
 
     async fn search_plugins(
@@ -558,7 +583,9 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         request: Request<GetAllPluginUsageNumbersRequest>,
     ) -> Result<Response<GetAllPluginUsageNumbersResponse>, Status> {
-        self.plugins_handler.get_all_plugin_usage_numbers(request).await
+        self.plugins_handler
+            .get_all_plugin_usage_numbers(request)
+            .await
     }
 
     // SAMPLE METHODS - delegate to samples_handler
@@ -594,7 +621,9 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         &self,
         request: Request<GetAllSampleUsageNumbersRequest>,
     ) -> Result<Response<GetAllSampleUsageNumbersResponse>, Status> {
-        self.samples_handler.get_all_sample_usage_numbers(request).await
+        self.samples_handler
+            .get_all_sample_usage_numbers(request)
+            .await
     }
 
     async fn get_projects_by_sample(
@@ -610,4 +639,4 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<GetProjectsByPluginResponse>, Status> {
         self.plugins_handler.get_projects_by_plugin(request).await
     }
-} 
+}

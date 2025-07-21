@@ -1,5 +1,7 @@
+use super::helpers::{
+    insert_plugin, insert_sample, link_project_plugin, link_project_sample, row_to_live_set,
+};
 use super::models::SqlDateTime;
-use super::helpers::{insert_plugin, insert_sample, link_project_plugin, link_project_sample, row_to_live_set};
 use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
@@ -14,7 +16,6 @@ use uuid::Uuid;
 use super::LiveSetDatabase;
 
 impl LiveSetDatabase {
-
     pub fn get_project_by_id(&mut self, id: &str) -> Result<Option<LiveSet>, DatabaseError> {
         debug!("Retrieving project by ID: {}", id);
         let tx = self.conn.transaction()?;
@@ -197,7 +198,10 @@ impl LiveSetDatabase {
         Ok(Some(project))
     }
 
-    pub fn get_project_by_id_any_status(&mut self, id: &str) -> Result<Option<LiveSet>, DatabaseError> {
+    pub fn get_project_by_id_any_status(
+        &mut self,
+        id: &str,
+    ) -> Result<Option<LiveSet>, DatabaseError> {
         debug!("Retrieving project by ID (any status): {}", id);
         let tx = self.conn.transaction()?;
 
@@ -692,153 +696,189 @@ impl LiveSetDatabase {
     }
 
     pub fn mark_project_deleted(&mut self, project_id: &Uuid) -> Result<(), DatabaseError> {
-        self.conn.execute(
-            "UPDATE projects SET is_active = false WHERE id = ?",
-            params![project_id.to_string()],
-        ).map_err(DatabaseError::from)?;
+        self.conn
+            .execute(
+                "UPDATE projects SET is_active = false WHERE id = ?",
+                params![project_id.to_string()],
+            )
+            .map_err(DatabaseError::from)?;
         Ok(())
     }
 
     pub fn reactivate_project(
-        &mut self, 
+        &mut self,
         project_id: &Uuid,
         new_path: &Path,
     ) -> Result<(), DatabaseError> {
-        self.conn.execute(
-            "UPDATE projects SET 
+        self.conn
+            .execute(
+                "UPDATE projects SET 
                 is_active = true,
                 path = ?,
                 modified_at = ?
              WHERE id = ?",
-            params![
-                new_path.to_string_lossy().to_string(),
-                Utc::now().timestamp(),
-                project_id.to_string(),
-            ],
-        ).map_err(DatabaseError::from)?;
+                params![
+                    new_path.to_string_lossy().to_string(),
+                    Utc::now().timestamp(),
+                    project_id.to_string(),
+                ],
+            )
+            .map_err(DatabaseError::from)?;
         Ok(())
     }
 
-    pub fn find_deleted_project_by_hash(&mut self, path: &Path) -> Result<Option<LiveSet>, DatabaseError> {
+    pub fn find_deleted_project_by_hash(
+        &mut self,
+        path: &Path,
+    ) -> Result<Option<LiveSet>, DatabaseError> {
         let hash = load_file_hash(&path.to_path_buf())?;
-        
-        self.conn.query_row(
-            "SELECT * FROM projects 
+
+        self.conn
+            .query_row(
+                "SELECT * FROM projects 
              WHERE is_active = false AND hash = ?",
-            params![hash],
-            |row| row_to_live_set(row),
-        ).optional().map_err(DatabaseError::from)
+                params![hash],
+                |row| row_to_live_set(row),
+            )
+            .optional()
+            .map_err(DatabaseError::from)
     }
 
     pub fn get_all_projects_with_status(
         &self,
-        is_active: Option<bool>
+        is_active: Option<bool>,
     ) -> Result<Vec<LiveSet>, DatabaseError> {
         let mut results = Vec::new();
-        
+
         let query = match is_active {
             Some(status) => {
                 format!("SELECT * FROM projects WHERE is_active = {}", status)
             }
-            None => {
-                "SELECT * FROM projects".to_string()
-            }
+            None => "SELECT * FROM projects".to_string(),
         };
-        
+
         let mut stmt = self.conn.prepare(&query).map_err(DatabaseError::from)?;
-        
+
         let mut rows = stmt.query([]).map_err(DatabaseError::from)?;
         while let Some(row) = rows.next().map_err(DatabaseError::from)? {
             let mut live_set = row_to_live_set(row)?;
             let project_id_str = live_set.id.to_string();
-            
+
             // Load plugins for this project
             {
                 let mut plugin_stmt = self.conn.prepare(
                     "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
                 ).map_err(DatabaseError::from)?;
-                live_set.plugins = plugin_stmt.query_map([&project_id_str], |row| {
-                    Ok(Plugin {
-                        id: Uuid::new_v4(),
-                        plugin_id: row.get(1)?,
-                        module_id: row.get(2)?,
-                        dev_identifier: row.get(3)?,
-                        name: row.get(4)?,
-                        plugin_format: row.get::<_, String>(5)?.parse()
-                            .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                        installed: row.get(6)?,
-                        vendor: row.get(7)?,
-                        version: row.get(8)?,
-                        sdk_version: row.get(9)?,
-                        flags: row.get(10)?,
-                        scanstate: row.get(11)?,
-                        enabled: row.get(12)?,
+                live_set.plugins = plugin_stmt
+                    .query_map([&project_id_str], |row| {
+                        Ok(Plugin {
+                            id: Uuid::new_v4(),
+                            plugin_id: row.get(1)?,
+                            module_id: row.get(2)?,
+                            dev_identifier: row.get(3)?,
+                            name: row.get(4)?,
+                            plugin_format: row
+                                .get::<_, String>(5)?
+                                .parse()
+                                .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                            installed: row.get(6)?,
+                            vendor: row.get(7)?,
+                            version: row.get(8)?,
+                            sdk_version: row.get(9)?,
+                            flags: row.get(10)?,
+                            scanstate: row.get(11)?,
+                            enabled: row.get(12)?,
+                        })
                     })
-                }).map_err(DatabaseError::from)?.filter_map(|r| r.ok()).collect();
+                    .map_err(DatabaseError::from)?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             // Load samples for this project
             {
                 let mut sample_stmt = self.conn.prepare(
                     "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
                 ).map_err(DatabaseError::from)?;
-                live_set.samples = sample_stmt.query_map([&project_id_str], |row| {
-                    Ok(Sample {
-                        id: Uuid::new_v4(),
-                        name: row.get(1)?,
-                        path: PathBuf::from(row.get::<_, String>(2)?),
-                        is_present: row.get(3)?,
+                live_set.samples = sample_stmt
+                    .query_map([&project_id_str], |row| {
+                        Ok(Sample {
+                            id: Uuid::new_v4(),
+                            name: row.get(1)?,
+                            path: PathBuf::from(row.get::<_, String>(2)?),
+                            is_present: row.get(3)?,
+                        })
                     })
-                }).map_err(DatabaseError::from)?.filter_map(|r| r.ok()).collect();
+                    .map_err(DatabaseError::from)?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             // Load tags for this project
             {
                 let mut tag_stmt = self.conn.prepare(
                     "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
                 ).map_err(DatabaseError::from)?;
-                live_set.tags = tag_stmt.query_map([&project_id_str], |row| row.get(0))
-                    .map_err(DatabaseError::from)?.filter_map(|r| r.ok()).collect();
+                live_set.tags = tag_stmt
+                    .query_map([&project_id_str], |row| row.get(0))
+                    .map_err(DatabaseError::from)?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             results.push(live_set);
         }
-        
+
         Ok(results)
     }
 
     pub fn permanently_delete_project(&mut self, project_id: &Uuid) -> Result<(), DatabaseError> {
         let tx = self.conn.transaction().map_err(DatabaseError::from)?;
-        
+
         // Only allow deletion of inactive projects
-        let rows_affected = tx.execute(
-            "DELETE FROM projects WHERE id = ? AND is_active = false",
-            params![project_id.to_string()],
-        ).map_err(DatabaseError::from)?;
-        
+        let rows_affected = tx
+            .execute(
+                "DELETE FROM projects WHERE id = ? AND is_active = false",
+                params![project_id.to_string()],
+            )
+            .map_err(DatabaseError::from)?;
+
         if rows_affected == 0 {
-            return Err(DatabaseError::InvalidOperation("Cannot permanently delete an active project".to_string()));
+            return Err(DatabaseError::InvalidOperation(
+                "Cannot permanently delete an active project".to_string(),
+            ));
         }
-        
+
         tx.commit().map_err(DatabaseError::from)?;
         Ok(())
     }
 
     // Batch Project Operations
-    pub fn batch_mark_projects_archived(&mut self, project_ids: &[String], archived: bool) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
-        debug!("Batch marking {} projects as archived: {}", project_ids.len(), archived);
+    pub fn batch_mark_projects_archived(
+        &mut self,
+        project_ids: &[String],
+        archived: bool,
+    ) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!(
+            "Batch marking {} projects as archived: {}",
+            project_ids.len(),
+            archived
+        );
         let tx = self.conn.transaction()?;
         let mut results = Vec::new();
-        
+
         for project_id in project_ids {
             let result = tx.execute(
                 "UPDATE projects SET is_active = ? WHERE id = ?",
                 params![!archived, project_id], // archived = true means is_active = false
             );
-            
+
             match result {
                 Ok(_) => {
-                    debug!("Successfully marked project {} as archived: {}", project_id, archived);
+                    debug!(
+                        "Successfully marked project {} as archived: {}",
+                        project_id, archived
+                    );
                     results.push((project_id.clone(), Ok(())));
                 }
                 Err(e) => {
@@ -847,24 +887,30 @@ impl LiveSetDatabase {
                 }
             }
         }
-        
+
         tx.commit()?;
-        debug!("Batch archive operation completed with {} results", results.len());
+        debug!(
+            "Batch archive operation completed with {} results",
+            results.len()
+        );
         Ok(results)
     }
 
-    pub fn batch_delete_projects(&mut self, project_ids: &[String]) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+    pub fn batch_delete_projects(
+        &mut self,
+        project_ids: &[String],
+    ) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
         debug!("Batch deleting {} projects", project_ids.len());
         let tx = self.conn.transaction()?;
         let mut results = Vec::new();
-        
+
         for project_id in project_ids {
             // Only allow deletion of inactive projects
             let result = tx.execute(
                 "DELETE FROM projects WHERE id = ? AND is_active = false",
                 params![project_id],
             );
-            
+
             match result {
                 Ok(rows_affected) => {
                     if rows_affected > 0 {
@@ -872,9 +918,12 @@ impl LiveSetDatabase {
                         results.push((project_id.clone(), Ok(())));
                     } else {
                         debug!("Cannot delete active project {}", project_id);
-                        results.push((project_id.clone(), Err(DatabaseError::InvalidOperation(
-                            "Cannot permanently delete an active project".to_string()
-                        ))));
+                        results.push((
+                            project_id.clone(),
+                            Err(DatabaseError::InvalidOperation(
+                                "Cannot permanently delete an active project".to_string(),
+                            )),
+                        ));
                     }
                 }
                 Err(e) => {
@@ -883,9 +932,12 @@ impl LiveSetDatabase {
                 }
             }
         }
-        
+
         tx.commit()?;
-        debug!("Batch delete operation completed with {} results", results.len());
+        debug!(
+            "Batch delete operation completed with {} results",
+            results.len()
+        );
         Ok(results)
     }
 
@@ -916,11 +968,7 @@ impl LiveSetDatabase {
 
         let mut stmt = self.conn.prepare(query)?;
         let rows = stmt.query_map(
-            params![
-                sample_id,
-                limit.unwrap_or(1000),
-                offset.unwrap_or(0)
-            ],
+            params![sample_id, limit.unwrap_or(1000), offset.unwrap_or(0)],
             |row| row_to_live_set(row),
         )?;
 
@@ -928,56 +976,66 @@ impl LiveSetDatabase {
         for row_result in rows {
             let mut project = row_result?;
             let project_id_str = project.id.to_string();
-            
+
             // Load plugins for this project
             {
                 let mut plugin_stmt = self.conn.prepare(
                     "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
                 )?;
-                project.plugins = plugin_stmt.query_map([&project_id_str], |row| {
-                    Ok(Plugin {
-                        id: Uuid::new_v4(),
-                        plugin_id: row.get(1)?,
-                        module_id: row.get(2)?,
-                        dev_identifier: row.get(3)?,
-                        name: row.get(4)?,
-                        plugin_format: row.get::<_, String>(5)?.parse()
-                            .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                        installed: row.get(6)?,
-                        vendor: row.get(7)?,
-                        version: row.get(8)?,
-                        sdk_version: row.get(9)?,
-                        flags: row.get(10)?,
-                        scanstate: row.get(11)?,
-                        enabled: row.get(12)?,
-                    })
-                })?.filter_map(|r| r.ok()).collect();
+                project.plugins = plugin_stmt
+                    .query_map([&project_id_str], |row| {
+                        Ok(Plugin {
+                            id: Uuid::new_v4(),
+                            plugin_id: row.get(1)?,
+                            module_id: row.get(2)?,
+                            dev_identifier: row.get(3)?,
+                            name: row.get(4)?,
+                            plugin_format: row
+                                .get::<_, String>(5)?
+                                .parse()
+                                .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                            installed: row.get(6)?,
+                            vendor: row.get(7)?,
+                            version: row.get(8)?,
+                            sdk_version: row.get(9)?,
+                            flags: row.get(10)?,
+                            scanstate: row.get(11)?,
+                            enabled: row.get(12)?,
+                        })
+                    })?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             // Load samples for this project
             {
                 let mut sample_stmt = self.conn.prepare(
                     "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
                 )?;
-                project.samples = sample_stmt.query_map([&project_id_str], |row| {
-                    Ok(Sample {
-                        id: Uuid::new_v4(),
-                        name: row.get(1)?,
-                        path: PathBuf::from(row.get::<_, String>(2)?),
-                        is_present: row.get(3)?,
-                    })
-                })?.filter_map(|r| r.ok()).collect();
+                project.samples = sample_stmt
+                    .query_map([&project_id_str], |row| {
+                        Ok(Sample {
+                            id: Uuid::new_v4(),
+                            name: row.get(1)?,
+                            path: PathBuf::from(row.get::<_, String>(2)?),
+                            is_present: row.get(3)?,
+                        })
+                    })?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             // Load tags for this project
             {
                 let mut tag_stmt = self.conn.prepare(
                     "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
                 )?;
-                project.tags = tag_stmt.query_map([&project_id_str], |row| row.get(0))
-                    ?.filter_map(|r| r.ok()).collect();
+                project.tags = tag_stmt
+                    .query_map([&project_id_str], |row| row.get(0))?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             projects.push(project);
         }
 
@@ -1011,11 +1069,7 @@ impl LiveSetDatabase {
 
         let mut stmt = self.conn.prepare(query)?;
         let rows = stmt.query_map(
-            params![
-                plugin_id,
-                limit.unwrap_or(1000),
-                offset.unwrap_or(0)
-            ],
+            params![plugin_id, limit.unwrap_or(1000), offset.unwrap_or(0)],
             |row| row_to_live_set(row),
         )?;
 
@@ -1023,59 +1077,69 @@ impl LiveSetDatabase {
         for row_result in rows {
             let mut project = row_result?;
             let project_id_str = project.id.to_string();
-            
+
             // Load plugins for this project
             {
                 let mut plugin_stmt = self.conn.prepare(
                     "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
                 )?;
-                project.plugins = plugin_stmt.query_map([&project_id_str], |row| {
-                    Ok(Plugin {
-                        id: Uuid::new_v4(),
-                        plugin_id: row.get(1)?,
-                        module_id: row.get(2)?,
-                        dev_identifier: row.get(3)?,
-                        name: row.get(4)?,
-                        plugin_format: row.get::<_, String>(5)?.parse()
-                            .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                        installed: row.get(6)?,
-                        vendor: row.get(7)?,
-                        version: row.get(8)?,
-                        sdk_version: row.get(9)?,
-                        flags: row.get(10)?,
-                        scanstate: row.get(11)?,
-                        enabled: row.get(12)?,
-                    })
-                })?.filter_map(|r| r.ok()).collect();
+                project.plugins = plugin_stmt
+                    .query_map([&project_id_str], |row| {
+                        Ok(Plugin {
+                            id: Uuid::new_v4(),
+                            plugin_id: row.get(1)?,
+                            module_id: row.get(2)?,
+                            dev_identifier: row.get(3)?,
+                            name: row.get(4)?,
+                            plugin_format: row
+                                .get::<_, String>(5)?
+                                .parse()
+                                .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                            installed: row.get(6)?,
+                            vendor: row.get(7)?,
+                            version: row.get(8)?,
+                            sdk_version: row.get(9)?,
+                            flags: row.get(10)?,
+                            scanstate: row.get(11)?,
+                            enabled: row.get(12)?,
+                        })
+                    })?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             // Load samples for this project
             {
                 let mut sample_stmt = self.conn.prepare(
                     "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
                 )?;
-                project.samples = sample_stmt.query_map([&project_id_str], |row| {
-                    Ok(Sample {
-                        id: Uuid::new_v4(),
-                        name: row.get(1)?,
-                        path: PathBuf::from(row.get::<_, String>(2)?),
-                        is_present: row.get(3)?,
-                    })
-                })?.filter_map(|r| r.ok()).collect();
+                project.samples = sample_stmt
+                    .query_map([&project_id_str], |row| {
+                        Ok(Sample {
+                            id: Uuid::new_v4(),
+                            name: row.get(1)?,
+                            path: PathBuf::from(row.get::<_, String>(2)?),
+                            is_present: row.get(3)?,
+                        })
+                    })?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             // Load tags for this project
             {
                 let mut tag_stmt = self.conn.prepare(
                     "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
                 )?;
-                project.tags = tag_stmt.query_map([&project_id_str], |row| row.get(0))
-                    ?.filter_map(|r| r.ok()).collect();
+                project.tags = tag_stmt
+                    .query_map([&project_id_str], |row| row.get(0))?
+                    .filter_map(|r| r.ok())
+                    .collect();
             }
-            
+
             projects.push(project);
         }
 
         Ok((projects, total_count))
     }
-} 
+}

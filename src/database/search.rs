@@ -1,6 +1,6 @@
 use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
-use crate::{KeySignature, TimeSignature, AbletonVersion, Plugin, Sample};
+use crate::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
 use chrono::{Local, TimeZone};
 use log::debug;
 use rusqlite::{types::ToSql, OptionalExtension};
@@ -18,19 +18,19 @@ pub struct SearchQuery {
     pub name: Option<String>,
     pub date_created: Option<String>,
     pub date_modified: Option<String>,
-    
+
     // Musical properties
     pub version: Option<String>,
     pub key: Option<String>,
     pub bpm: Option<String>,
     pub time_signature: Option<String>,
     pub estimated_duration: Option<String>,
-    
+
     // Content properties
     pub plugin: Option<String>,
     pub sample: Option<String>,
     pub tag: Option<String>,
-    
+
     // Full text search
     pub text: String,
 }
@@ -61,9 +61,10 @@ pub enum MatchReason {
 impl SearchQuery {
     fn strip_quotes(value: &str) -> String {
         let value = value.trim();
-        if (value.starts_with('"') && value.ends_with('"')) || 
-           (value.starts_with('\'') && value.ends_with('\'')) {
-            value[1..value.len()-1].to_string()
+        if (value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\''))
+        {
+            value[1..value.len() - 1].to_string()
         } else {
             value.to_string()
         }
@@ -74,11 +75,11 @@ impl SearchQuery {
         let mut query = SearchQuery::default();
         let mut remaining_text = Vec::new();
         let mut current_pos = 0;
-        
+
         while current_pos < input.len() {
             let rest = &input[current_pos..];
             let mut term_end = rest.find(' ').unwrap_or(rest.len());
-            
+
             // If we find a colon, check if this is a date operator
             if let Some(colon_pos) = rest[..term_end].find(':') {
                 let operator = &rest[..colon_pos];
@@ -96,7 +97,7 @@ impl SearchQuery {
                             value_end += 1;
                         }
                         term_end = value_end;
-                        
+
                         let value = &rest[value_start..value_end];
                         debug!("Found date operator '{}' with value '{}'", operator, value);
                         let cleaned_value = Self::strip_quotes(value);
@@ -130,17 +131,20 @@ impl SearchQuery {
                     }
                 }
             } else {
-                debug!("No operator found, adding to remaining text: '{}'", &rest[..term_end]);
+                debug!(
+                    "No operator found, adding to remaining text: '{}'",
+                    &rest[..term_end]
+                );
                 remaining_text.push(&rest[..term_end]);
             }
-            
+
             // Move past this term and any following whitespace
             current_pos += term_end;
             while current_pos < input.len() && input.as_bytes()[current_pos] == b' ' {
                 current_pos += 1;
             }
         }
-        
+
         query.text = remaining_text.join(" ");
         debug!("Final query state: {:?}", query);
         query
@@ -444,7 +448,7 @@ impl LiveSetDatabase {
         // First collect all matching paths in a transaction
         let matching_paths = {
             let tx = self.conn.transaction()?;
-            
+
             debug!("FTS5 query: {}", sql_query);
             debug!("Query params: {:?}", params);
 
@@ -459,22 +463,22 @@ impl LiveSetDatabase {
                     let plugins: String = row.get::<_, Option<String>>(4)?.unwrap_or_default();
                     debug!("Checking row with plugins: {:?}", plugins);
                     results.push((
-                        row.get::<_, String>(0)?, // project_id
-                        row.get::<_, f64>(1)?,    // rank
-                        row.get::<_, String>(2)?, // name
-                        row.get::<_, String>(3)?, // path
-                        plugins,                  // plugins
+                        row.get::<_, String>(0)?,                             // project_id
+                        row.get::<_, f64>(1)?,                                // rank
+                        row.get::<_, String>(2)?,                             // name
+                        row.get::<_, String>(3)?,                             // path
+                        plugins,                                              // plugins
                         row.get::<_, Option<String>>(5)?.unwrap_or_default(), // samples
                     ));
                 }
                 debug!("Found {} potential matches", results.len());
                 results
             };
-            
+
             tx.commit()?;
             results
         };
-        
+
         // Now get full project details and build search results
         let mut search_results = Vec::new();
         #[allow(unused)]
@@ -482,12 +486,15 @@ impl LiveSetDatabase {
             debug!("Processing match: {} ({})", name, path);
             if let Ok(Some(project)) = self.get_project_by_path(&path) {
                 let mut match_reason = Vec::new();
-                
+
                 // Add match reasons based on what matched
                 if let Some(plugin_query) = &query.plugin {
                     let plugin_query = plugin_query.to_lowercase();
                     let plugins_lower = plugins.to_lowercase();
-                    debug!("  Checking if '{}' exists in '{}'", plugin_query, plugins_lower);
+                    debug!(
+                        "  Checking if '{}' exists in '{}'",
+                        plugin_query, plugins_lower
+                    );
                     if plugins_lower.contains(&plugin_query) {
                         debug!("  Found plugin match!");
                         match_reason.push(MatchReason::Plugin(plugin_query.clone()));

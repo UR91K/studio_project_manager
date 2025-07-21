@@ -14,11 +14,11 @@ use quick_xml::name::QName;
 
 use crate::error::{FileError, XmlParseError};
 
+pub mod macos_formats;
 pub mod metadata;
 pub mod plugins;
 pub mod samples;
 pub mod time_signature;
-pub mod macos_formats;
 
 #[macro_export]
 macro_rules! trace_fn {
@@ -234,7 +234,8 @@ pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
     let decompressed_size = decompressed_data.len();
     trace!(
         "Successfully decompressed {} bytes from: {:?}",
-        decompressed_size, file_path
+        decompressed_size,
+        file_path
     );
     trace!("Decompressed data size: {} bytes", decompressed_size);
 

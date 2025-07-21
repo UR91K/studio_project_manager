@@ -1,7 +1,7 @@
 //! Plugin parsing tests
 
 use super::*;
-use crate::{scan::parser::basic::{create_test_scanner, process_xml, setup_valid_scanner}};
+use crate::scan::parser::basic::{create_test_scanner, process_xml, setup_valid_scanner};
 
 #[test]
 fn test_vst3_audio_fx() {

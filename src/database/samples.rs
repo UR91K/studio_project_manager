@@ -22,14 +22,16 @@ impl LiveSetDatabase {
             _ => "name", // default sort
         };
 
-        let sort_order = if sort_desc.unwrap_or(false) { "DESC" } else { "ASC" };
+        let sort_order = if sort_desc.unwrap_or(false) {
+            "DESC"
+        } else {
+            "ASC"
+        };
 
         // Get total count
-        let total_count: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM samples",
-            [],
-            |row| row.get(0),
-        )?;
+        let total_count: i32 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM samples", [], |row| row.get(0))?;
 
         // Build query with pagination
         let query = format!(
@@ -38,20 +40,14 @@ impl LiveSetDatabase {
         );
 
         let mut stmt = self.conn.prepare(&query)?;
-        let rows = stmt.query_map(
-            params![
-                limit.unwrap_or(1000),
-                offset.unwrap_or(0)
-            ],
-            |row| {
-                Ok(Sample {
-                    id: Uuid::new_v4(),
-                    name: row.get("name")?,
-                    path: PathBuf::from(row.get::<_, String>("path")?),
-                    is_present: row.get("is_present")?,
-                })
-            },
-        )?;
+        let rows = stmt.query_map(params![limit.unwrap_or(1000), offset.unwrap_or(0)], |row| {
+            Ok(Sample {
+                id: Uuid::new_v4(),
+                name: row.get("name")?,
+                path: PathBuf::from(row.get::<_, String>("path")?),
+                is_present: row.get("is_present")?,
+            })
+        })?;
 
         let samples: Result<Vec<Sample>, _> = rows.collect();
         Ok((samples?, total_count))
@@ -73,7 +69,11 @@ impl LiveSetDatabase {
             _ => "name", // default sort
         };
 
-        let sort_order = if sort_desc.unwrap_or(false) { "DESC" } else { "ASC" };
+        let sort_order = if sort_desc.unwrap_or(false) {
+            "DESC"
+        } else {
+            "ASC"
+        };
 
         // Get total count
         let total_count: i32 = self.conn.query_row(
@@ -90,11 +90,7 @@ impl LiveSetDatabase {
 
         let mut stmt = self.conn.prepare(&query)?;
         let rows = stmt.query_map(
-            params![
-                is_present,
-                limit.unwrap_or(1000),
-                offset.unwrap_or(0)
-            ],
+            params![is_present, limit.unwrap_or(1000), offset.unwrap_or(0)],
             |row| {
                 Ok(Sample {
                     id: Uuid::new_v4(),
@@ -168,11 +164,9 @@ impl LiveSetDatabase {
 
     /// Get sample statistics for status bar
     pub fn get_sample_stats(&self) -> Result<SampleStats, DatabaseError> {
-        let total_samples: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM samples",
-            [],
-            |row| row.get(0),
-        )?;
+        let total_samples: i32 =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM samples", [], |row| row.get(0))?;
 
         let present_samples: i32 = self.conn.query_row(
             "SELECT COUNT(*) FROM samples WHERE is_present = true",
@@ -182,11 +176,11 @@ impl LiveSetDatabase {
 
         let missing_samples = total_samples - present_samples;
 
-        let unique_paths: i32 = self.conn.query_row(
-            "SELECT COUNT(DISTINCT path) FROM samples",
-            [],
-            |row| row.get(0),
-        )?;
+        let unique_paths: i32 =
+            self.conn
+                .query_row("SELECT COUNT(DISTINCT path) FROM samples", [], |row| {
+                    row.get(0)
+                })?;
 
         // Get samples by extension
         let mut samples_by_extension = std::collections::HashMap::new();
@@ -205,7 +199,7 @@ impl LiveSetDatabase {
                 COUNT(*) as count
             FROM samples 
             GROUP BY extension
-            "#
+            "#,
         )?;
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
@@ -293,4 +287,4 @@ pub struct SampleUsageInfo {
     pub path: String,
     pub usage_count: i32,
     pub project_count: i32,
-} 
+}

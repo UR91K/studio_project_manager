@@ -62,4 +62,3 @@ fn test_tags() {
     assert_eq!(tags.len(), 1);
     assert!(tags.iter().any(|(_, name, _)| name == "work-in-progress"));
 }
-

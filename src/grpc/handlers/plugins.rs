@@ -1,11 +1,11 @@
+use log::{debug, error};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Status, Code};
-use log::{debug, error};
+use tonic::{Code, Request, Response, Status};
 
-use crate::database::LiveSetDatabase;
 use super::super::proto::*;
 use super::utils::convert_live_set_to_proto;
+use crate::database::LiveSetDatabase;
 
 pub struct PluginsHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
@@ -21,14 +21,15 @@ impl PluginsHandler {
         request: Request<GetAllPluginsRequest>,
     ) -> Result<Response<GetAllPluginsResponse>, Status> {
         debug!("GetAllPlugins request: {:?}", request);
-        
+
         let req = request.into_inner();
         let db = self.db.lock().await;
-        
+
         match db.get_all_plugins(req.limit, req.offset, req.sort_by, req.sort_desc) {
             Ok((plugins, total_count)) => {
-                let proto_plugins = plugins.into_iter().map(|plugin| {
-                    Plugin {
+                let proto_plugins = plugins
+                    .into_iter()
+                    .map(|plugin| Plugin {
                         id: plugin.id.to_string(),
                         ableton_plugin_id: plugin.plugin_id,
                         ableton_module_id: plugin.module_id,
@@ -42,8 +43,8 @@ impl PluginsHandler {
                         flags: plugin.flags,
                         scanstate: plugin.scanstate,
                         enabled: plugin.enabled,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 let response = GetAllPluginsResponse {
                     plugins: proto_plugins,
@@ -53,7 +54,10 @@ impl PluginsHandler {
             }
             Err(e) => {
                 error!("Failed to get all plugins: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -63,10 +67,10 @@ impl PluginsHandler {
         request: Request<GetPluginByInstalledStatusRequest>,
     ) -> Result<Response<GetPluginByInstalledStatusResponse>, Status> {
         debug!("GetPluginByInstalledStatus request: {:?}", request);
-        
+
         let req = request.into_inner();
         let db = self.db.lock().await;
-        
+
         match db.get_plugins_by_installed_status(
             req.installed,
             req.limit,
@@ -75,8 +79,9 @@ impl PluginsHandler {
             req.sort_desc,
         ) {
             Ok((plugins, total_count)) => {
-                let proto_plugins = plugins.into_iter().map(|plugin| {
-                    Plugin {
+                let proto_plugins = plugins
+                    .into_iter()
+                    .map(|plugin| Plugin {
                         id: plugin.id.to_string(),
                         ableton_plugin_id: plugin.plugin_id,
                         ableton_module_id: plugin.module_id,
@@ -90,8 +95,8 @@ impl PluginsHandler {
                         flags: plugin.flags,
                         scanstate: plugin.scanstate,
                         enabled: plugin.enabled,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 let response = GetPluginByInstalledStatusResponse {
                     plugins: proto_plugins,
@@ -101,7 +106,10 @@ impl PluginsHandler {
             }
             Err(e) => {
                 error!("Failed to get plugins by installed status: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -111,10 +119,10 @@ impl PluginsHandler {
         request: Request<SearchPluginsRequest>,
     ) -> Result<Response<SearchPluginsResponse>, Status> {
         debug!("SearchPlugins request: {:?}", request);
-        
+
         let req = request.into_inner();
         let db = self.db.lock().await;
-        
+
         match db.search_plugins(
             &req.query,
             req.limit,
@@ -124,8 +132,9 @@ impl PluginsHandler {
             req.format_filter,
         ) {
             Ok((plugins, total_count)) => {
-                let proto_plugins = plugins.into_iter().map(|plugin| {
-                    Plugin {
+                let proto_plugins = plugins
+                    .into_iter()
+                    .map(|plugin| Plugin {
                         id: plugin.id.to_string(),
                         ableton_plugin_id: plugin.plugin_id,
                         ableton_module_id: plugin.module_id,
@@ -139,8 +148,8 @@ impl PluginsHandler {
                         flags: plugin.flags,
                         scanstate: plugin.scanstate,
                         enabled: plugin.enabled,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 let response = SearchPluginsResponse {
                     plugins: proto_plugins,
@@ -150,7 +159,10 @@ impl PluginsHandler {
             }
             Err(e) => {
                 error!("Failed to search plugins: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -160,9 +172,9 @@ impl PluginsHandler {
         _request: Request<GetPluginStatsRequest>,
     ) -> Result<Response<GetPluginStatsResponse>, Status> {
         debug!("GetPluginStats request");
-        
+
         let db = self.db.lock().await;
-        
+
         match db.get_plugin_stats() {
             Ok(stats) => {
                 let response = GetPluginStatsResponse {
@@ -177,7 +189,10 @@ impl PluginsHandler {
             }
             Err(e) => {
                 error!("Failed to get plugin stats: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -187,29 +202,33 @@ impl PluginsHandler {
         _request: Request<GetAllPluginUsageNumbersRequest>,
     ) -> Result<Response<GetAllPluginUsageNumbersResponse>, Status> {
         debug!("GetAllPluginUsageNumbers request");
-        
+
         let db = self.db.lock().await;
-        
+
         match db.get_all_plugin_usage_numbers() {
             Ok(usage_info) => {
-                let plugin_usages = usage_info.into_iter().map(|info| {
-                    PluginUsage {
-                        plugin_id: info.plugin_id,
-                        name: info.name,
-                        vendor: info.vendor.unwrap_or_default(), // TODO: plugin should not ever be in incorrect state.
-                        usage_count: info.usage_count,
-                        project_count: info.project_count,
-                    }
-                }).collect();
+                let plugin_usages = usage_info
+                    .into_iter()
+                    .map(|info| {
+                        PluginUsage {
+                            plugin_id: info.plugin_id,
+                            name: info.name,
+                            vendor: info.vendor.unwrap_or_default(), // TODO: plugin should not ever be in incorrect state.
+                            usage_count: info.usage_count,
+                            project_count: info.project_count,
+                        }
+                    })
+                    .collect();
 
-                let response = GetAllPluginUsageNumbersResponse {
-                    plugin_usages,
-                };
+                let response = GetAllPluginUsageNumbersResponse { plugin_usages };
                 Ok(Response::new(response))
             }
             Err(e) => {
                 error!("Failed to get plugin usage numbers: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -219,14 +238,14 @@ impl PluginsHandler {
         request: Request<GetProjectsByPluginRequest>,
     ) -> Result<Response<GetProjectsByPluginResponse>, Status> {
         debug!("GetProjectsByPlugin request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.get_projects_by_plugin_id(&req.plugin_id, req.limit, req.offset) {
             Ok((projects, total_count)) => {
                 let mut proto_projects = Vec::new();
-                
+
                 for project in projects {
                     match convert_live_set_to_proto(project, &mut *db) {
                         Ok(proto_project) => proto_projects.push(proto_project),
@@ -245,8 +264,11 @@ impl PluginsHandler {
             }
             Err(e) => {
                 error!("Failed to get projects by plugin: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
-} 
+}

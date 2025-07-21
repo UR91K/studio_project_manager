@@ -4,7 +4,7 @@ pub const HEX_DATA: &str = "0000000002380002000003434F41000000000000000000000000
 fn test_integration_with_decode_sample_path() {
     let hex_data = HEX_DATA;
     let result = studio_project_manager::utils::samples::decode_sample_path(hex_data);
-    
+
     println!("Decoded path result: {:?}", result);
     assert!(result.is_ok() || result.unwrap_err().to_string().contains("Mac OS"));
 }

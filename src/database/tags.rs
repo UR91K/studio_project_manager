@@ -40,11 +40,14 @@ impl LiveSetDatabase {
             "UPDATE tags SET name = ? WHERE id = ?",
             params![name, tag_id],
         )?;
-        
+
         if rows_affected == 0 {
-            return Err(DatabaseError::NotFound(format!("Tag with id {} not found", tag_id)));
+            return Err(DatabaseError::NotFound(format!(
+                "Tag with id {} not found",
+                tag_id
+            )));
         }
-        
+
         debug!("Successfully updated tag: {}", tag_id);
         Ok(())
     }
@@ -122,7 +125,10 @@ impl LiveSetDatabase {
     }
 
     /// Get tag data with creation timestamps for a project (for gRPC responses)
-    pub fn get_project_tag_data(&mut self, project_id: &str) -> Result<Vec<(String, String, i64)>, DatabaseError> {
+    pub fn get_project_tag_data(
+        &mut self,
+        project_id: &str,
+    ) -> Result<Vec<(String, String, i64)>, DatabaseError> {
         debug!("Getting tag data for project: {}", project_id);
         let mut stmt = self.conn.prepare(
             r#"
@@ -139,7 +145,10 @@ impl LiveSetDatabase {
                 let tag_id: String = row.get(0)?;
                 let tag_name: String = row.get(1)?;
                 let created_at: i64 = row.get(2)?;
-                debug!("Found tag: {} ({}) created at {}", tag_name, tag_id, created_at);
+                debug!(
+                    "Found tag: {} ({}) created at {}",
+                    tag_name, tag_id, created_at
+                );
                 Ok((tag_id, tag_name, created_at))
             })?
             .filter_map(|r| r.ok())
@@ -223,8 +232,8 @@ impl LiveSetDatabase {
                             .timestamp_opt(scanned_timestamp, 0)
                             .single()
                             .ok_or_else(|| {
-                                rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
-                            })?,
+                            rusqlite::Error::InvalidParameterName("Invalid timestamp".into())
+                        })?,
 
                         tempo: row.get(7)?,
                         time_signature: TimeSignature {
@@ -394,7 +403,10 @@ impl LiveSetDatabase {
         Ok(tags)
     }
 
-    pub fn get_tag_by_id(&mut self, tag_id: &str) -> Result<Option<(String, String, i64)>, DatabaseError> {
+    pub fn get_tag_by_id(
+        &mut self,
+        tag_id: &str,
+    ) -> Result<Option<(String, String, i64)>, DatabaseError> {
         debug!("Getting tag by ID: {}", tag_id);
         let mut stmt = self
             .conn
@@ -415,64 +427,104 @@ impl LiveSetDatabase {
     }
 
     // Batch Tag Operations
-    pub fn batch_tag_projects(&mut self, project_ids: &[String], tag_ids: &[String]) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
-        debug!("Batch tagging {} projects with {} tags", project_ids.len(), tag_ids.len());
+    pub fn batch_tag_projects(
+        &mut self,
+        project_ids: &[String],
+        tag_ids: &[String],
+    ) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!(
+            "Batch tagging {} projects with {} tags",
+            project_ids.len(),
+            tag_ids.len()
+        );
         let tx = self.conn.transaction()?;
         let mut results = Vec::new();
         let now = Local::now();
-        
+
         for project_id in project_ids {
             for tag_id in tag_ids {
                 let result = tx.execute(
                     "INSERT OR IGNORE INTO project_tags (project_id, tag_id, created_at) VALUES (?, ?, ?)",
                     params![project_id, tag_id, SqlDateTime::from(now)],
                 );
-                
+
                 match result {
                     Ok(_) => {
-                        debug!("Successfully tagged project {} with tag {}", project_id, tag_id);
+                        debug!(
+                            "Successfully tagged project {} with tag {}",
+                            project_id, tag_id
+                        );
                         results.push((format!("{}:{}", project_id, tag_id), Ok(())));
                     }
                     Err(e) => {
-                        debug!("Failed to tag project {} with tag {}: {}", project_id, tag_id, e);
-                        results.push((format!("{}:{}", project_id, tag_id), Err(DatabaseError::from(e))));
+                        debug!(
+                            "Failed to tag project {} with tag {}: {}",
+                            project_id, tag_id, e
+                        );
+                        results.push((
+                            format!("{}:{}", project_id, tag_id),
+                            Err(DatabaseError::from(e)),
+                        ));
                     }
                 }
             }
         }
-        
+
         tx.commit()?;
-        debug!("Batch tag operation completed with {} results", results.len());
+        debug!(
+            "Batch tag operation completed with {} results",
+            results.len()
+        );
         Ok(results)
     }
 
-    pub fn batch_untag_projects(&mut self, project_ids: &[String], tag_ids: &[String]) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
-        debug!("Batch untagging {} projects from {} tags", project_ids.len(), tag_ids.len());
+    pub fn batch_untag_projects(
+        &mut self,
+        project_ids: &[String],
+        tag_ids: &[String],
+    ) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!(
+            "Batch untagging {} projects from {} tags",
+            project_ids.len(),
+            tag_ids.len()
+        );
         let tx = self.conn.transaction()?;
         let mut results = Vec::new();
-        
+
         for project_id in project_ids {
             for tag_id in tag_ids {
                 let result = tx.execute(
                     "DELETE FROM project_tags WHERE project_id = ? AND tag_id = ?",
                     params![project_id, tag_id],
                 );
-                
+
                 match result {
                     Ok(_) => {
-                        debug!("Successfully untagged project {} from tag {}", project_id, tag_id);
+                        debug!(
+                            "Successfully untagged project {} from tag {}",
+                            project_id, tag_id
+                        );
                         results.push((format!("{}:{}", project_id, tag_id), Ok(())));
                     }
                     Err(e) => {
-                        debug!("Failed to untag project {} from tag {}: {}", project_id, tag_id, e);
-                        results.push((format!("{}:{}", project_id, tag_id), Err(DatabaseError::from(e))));
+                        debug!(
+                            "Failed to untag project {} from tag {}: {}",
+                            project_id, tag_id, e
+                        );
+                        results.push((
+                            format!("{}:{}", project_id, tag_id),
+                            Err(DatabaseError::from(e)),
+                        ));
                     }
                 }
             }
         }
-        
+
         tx.commit()?;
-        debug!("Batch untag operation completed with {} results", results.len());
+        debug!(
+            "Batch untag operation completed with {} results",
+            results.len()
+        );
         Ok(results)
     }
 }

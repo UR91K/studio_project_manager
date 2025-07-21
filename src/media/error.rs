@@ -26,16 +26,37 @@ impl fmt::Display for MediaError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MediaError::IoError(msg) => write!(f, "IO error: {}", msg),
-            MediaError::InvalidMediaType(media_type) => write!(f, "Invalid media type: {}", media_type),
-            MediaError::FileTooLarge { actual_size_mb, max_size_mb } => {
-                write!(f, "File too large: {:.2}MB exceeds maximum of {:.2}MB", actual_size_mb, max_size_mb)
+            MediaError::InvalidMediaType(media_type) => {
+                write!(f, "Invalid media type: {}", media_type)
             }
-            MediaError::UnsupportedFormat { format, allowed_formats } => {
-                write!(f, "Unsupported format '{}'. Allowed formats: {}", format, allowed_formats.join(", "))
+            MediaError::FileTooLarge {
+                actual_size_mb,
+                max_size_mb,
+            } => {
+                write!(
+                    f,
+                    "File too large: {:.2}MB exceeds maximum of {:.2}MB",
+                    actual_size_mb, max_size_mb
+                )
+            }
+            MediaError::UnsupportedFormat {
+                format,
+                allowed_formats,
+            } => {
+                write!(
+                    f,
+                    "Unsupported format '{}'. Allowed formats: {}",
+                    format,
+                    allowed_formats.join(", ")
+                )
             }
             MediaError::FileNotFound(file_id) => write!(f, "File not found: {}", file_id),
             MediaError::ChecksumMismatch { expected, actual } => {
-                write!(f, "Checksum mismatch: expected {}, got {}", expected, actual)
+                write!(
+                    f,
+                    "Checksum mismatch: expected {}, got {}",
+                    expected, actual
+                )
             }
             MediaError::InvalidFileId(file_id) => write!(f, "Invalid file ID: {}", file_id),
             MediaError::DatabaseError(msg) => write!(f, "Database error: {}", msg),
@@ -62,4 +83,4 @@ impl From<crate::error::ConfigError> for MediaError {
     fn from(error: crate::error::ConfigError) -> Self {
         MediaError::ConfigurationError(error.to_string())
     }
-} 
+}

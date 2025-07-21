@@ -1,7 +1,10 @@
 //! Sample parsing tests
 
 use super::*;
-use crate::{scan::parser::basic::{assert_clean_state, create_test_scanner, create_test_scanner_with_version, process_xml, setup_valid_scanner}};
+use crate::scan::parser::basic::{
+    assert_clean_state, create_test_scanner, create_test_scanner_with_version, process_xml,
+    setup_valid_scanner,
+};
 
 #[test]
 fn test_sample_v12() {

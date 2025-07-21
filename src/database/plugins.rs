@@ -22,14 +22,16 @@ impl LiveSetDatabase {
             _ => "name", // default sort
         };
 
-        let sort_order = if sort_desc.unwrap_or(false) { "DESC" } else { "ASC" };
+        let sort_order = if sort_desc.unwrap_or(false) {
+            "DESC"
+        } else {
+            "ASC"
+        };
 
         // Get total count
-        let total_count: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM plugins",
-            [],
-            |row| row.get(0),
-        )?;
+        let total_count: i32 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM plugins", [], |row| row.get(0))?;
 
         // Build query with pagination
         let query = format!(
@@ -38,30 +40,26 @@ impl LiveSetDatabase {
         );
 
         let mut stmt = self.conn.prepare(&query)?;
-        let rows = stmt.query_map(
-            params![
-                limit.unwrap_or(1000),
-                offset.unwrap_or(0)
-            ],
-            |row| {
-                Ok(Plugin {
-                    id: Uuid::new_v4(),
-                    plugin_id: row.get("ableton_plugin_id")?,
-                    module_id: row.get("ableton_module_id")?,
-                    dev_identifier: row.get("dev_identifier")?,
-                    name: row.get("name")?,
-                    plugin_format: row.get::<_, String>("format")?.parse()
-                        .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                    installed: row.get("installed")?,
-                    vendor: row.get("vendor")?,
-                    version: row.get("version")?,
-                    sdk_version: row.get("sdk_version")?,
-                    flags: row.get("flags")?,
-                    scanstate: row.get("scanstate")?,
-                    enabled: row.get("enabled")?,
-                })
-            },
-        )?;
+        let rows = stmt.query_map(params![limit.unwrap_or(1000), offset.unwrap_or(0)], |row| {
+            Ok(Plugin {
+                id: Uuid::new_v4(),
+                plugin_id: row.get("ableton_plugin_id")?,
+                module_id: row.get("ableton_module_id")?,
+                dev_identifier: row.get("dev_identifier")?,
+                name: row.get("name")?,
+                plugin_format: row
+                    .get::<_, String>("format")?
+                    .parse()
+                    .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                installed: row.get("installed")?,
+                vendor: row.get("vendor")?,
+                version: row.get("version")?,
+                sdk_version: row.get("sdk_version")?,
+                flags: row.get("flags")?,
+                scanstate: row.get("scanstate")?,
+                enabled: row.get("enabled")?,
+            })
+        })?;
 
         let plugins: Result<Vec<Plugin>, _> = rows.collect();
         Ok((plugins?, total_count))
@@ -84,7 +82,11 @@ impl LiveSetDatabase {
             _ => "name", // default sort
         };
 
-        let sort_order = if sort_desc.unwrap_or(false) { "DESC" } else { "ASC" };
+        let sort_order = if sort_desc.unwrap_or(false) {
+            "DESC"
+        } else {
+            "ASC"
+        };
 
         // Get total count
         let total_count: i32 = self.conn.query_row(
@@ -101,11 +103,7 @@ impl LiveSetDatabase {
 
         let mut stmt = self.conn.prepare(&query)?;
         let rows = stmt.query_map(
-            params![
-                installed,
-                limit.unwrap_or(1000),
-                offset.unwrap_or(0)
-            ],
+            params![installed, limit.unwrap_or(1000), offset.unwrap_or(0)],
             |row| {
                 Ok(Plugin {
                     id: Uuid::new_v4(),
@@ -113,7 +111,9 @@ impl LiveSetDatabase {
                     module_id: row.get("ableton_module_id")?,
                     dev_identifier: row.get("dev_identifier")?,
                     name: row.get("name")?,
-                    plugin_format: row.get::<_, String>("format")?.parse()
+                    plugin_format: row
+                        .get::<_, String>("format")?
+                        .parse()
                         .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
                     installed: row.get("installed")?,
                     vendor: row.get("vendor")?,
@@ -188,7 +188,9 @@ impl LiveSetDatabase {
                 module_id: row.get("ableton_module_id")?,
                 dev_identifier: row.get("dev_identifier")?,
                 name: row.get("name")?,
-                plugin_format: row.get::<_, String>("format")?.parse()
+                plugin_format: row
+                    .get::<_, String>("format")?
+                    .parse()
                     .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
                 installed: row.get("installed")?,
                 vendor: row.get("vendor")?,
@@ -206,11 +208,9 @@ impl LiveSetDatabase {
 
     /// Get plugin statistics for status bar
     pub fn get_plugin_stats(&self) -> Result<PluginStats, DatabaseError> {
-        let total_plugins: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM plugins",
-            [],
-            |row| row.get(0),
-        )?;
+        let total_plugins: i32 =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM plugins", [], |row| row.get(0))?;
 
         let installed_plugins: i32 = self.conn.query_row(
             "SELECT COUNT(*) FROM plugins WHERE installed = true",
@@ -228,7 +228,9 @@ impl LiveSetDatabase {
 
         // Get plugins by format
         let mut plugins_by_format = std::collections::HashMap::new();
-        let mut stmt = self.conn.prepare("SELECT format, COUNT(*) FROM plugins GROUP BY format")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT format, COUNT(*) FROM plugins GROUP BY format")?;
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
         })?;
@@ -309,4 +311,4 @@ pub struct PluginUsageInfo {
     pub vendor: Option<String>,
     pub usage_count: i32,
     pub project_count: i32,
-} 
+}

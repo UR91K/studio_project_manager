@@ -2,9 +2,9 @@
 
 use super::*;
 use crate::common::{generate_test_live_sets_arc, setup};
+use std::collections::HashSet;
 use studio_project_manager::database::batch::BatchInsertManager;
 use tempfile::tempdir;
-use std::collections::HashSet;
 
 #[test]
 fn test_batch_insert() {
@@ -12,23 +12,24 @@ fn test_batch_insert() {
     // Create a temporary database
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let db_path = temp_dir.path().join("test.db");
-    
+
     // Initialize database with schema from LiveSetDatabase
-    let mut live_set_db = LiveSetDatabase::new(db_path.clone())
-        .expect("Failed to create database");
-    
+    let mut live_set_db = LiveSetDatabase::new(db_path.clone()).expect("Failed to create database");
+
     // Get connection for batch insert
     let mut conn = &mut live_set_db.conn;
 
     // Generate test data
     let test_sets = generate_test_live_sets_arc(3);
     let expected_projects = test_sets.len();
-    let expected_plugins: usize = test_sets.iter()
+    let expected_plugins: usize = test_sets
+        .iter()
         .flat_map(|ls| &ls.plugins)
         .map(|p| &p.dev_identifier)
         .collect::<HashSet<_>>()
         .len();
-    let expected_samples: usize = test_sets.iter()
+    let expected_samples: usize = test_sets
+        .iter()
         .flat_map(|ls| &ls.samples)
         .map(|s| s.path.to_string_lossy().to_string())
         .collect::<HashSet<_>>()
@@ -39,9 +40,18 @@ fn test_batch_insert() {
     let stats = batch_manager.execute().expect("Batch insert failed");
 
     // Verify stats
-    assert_eq!(stats.projects_inserted, expected_projects, "Should insert all projects");
-    assert_eq!(stats.plugins_inserted, expected_plugins, "Should insert unique plugins");
-    assert_eq!(stats.samples_inserted, expected_samples, "Should insert unique samples");
+    assert_eq!(
+        stats.projects_inserted, expected_projects,
+        "Should insert all projects"
+    );
+    assert_eq!(
+        stats.plugins_inserted, expected_plugins,
+        "Should insert unique plugins"
+    );
+    assert_eq!(
+        stats.samples_inserted, expected_samples,
+        "Should insert unique samples"
+    );
 
     // Verify database contents
     let project_count: i64 = conn
@@ -62,7 +72,7 @@ fn test_batch_insert() {
     // Verify relationships
     for live_set in test_sets.iter() {
         let project_id = live_set.id.to_string();
-        
+
         // Check plugins
         let plugin_links: i64 = conn
             .query_row(

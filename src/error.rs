@@ -247,10 +247,14 @@ impl std::fmt::Display for ConfigError {
             ConfigError::HomeDirError => write!(f, "Failed to get home directory"),
             ConfigError::PathNotFound(path) => write!(f, "Path not found: {}", path),
             ConfigError::InvalidDirectory(path) => write!(f, "Invalid directory: {}", path),
-            ConfigError::PermissionDenied(path) => write!(f, "Permission denied for path: {}", path),
+            ConfigError::PermissionDenied(path) => {
+                write!(f, "Permission denied for path: {}", path)
+            }
             ConfigError::InvalidPath(s) => write!(f, "Invalid path in config: {}", s),
             ConfigError::InvalidValue(s) => write!(f, "Invalid configuration value: {}", s),
-            ConfigError::PortOutOfRange(port) => write!(f, "Port {} is out of valid range (1-65535)", port),
+            ConfigError::PortOutOfRange(port) => {
+                write!(f, "Port {} is out of valid range (1-65535)", port)
+            }
             ConfigError::ConfigFileNotFound => write!(f, "Configuration file not found"),
         }
     }
@@ -305,7 +309,7 @@ pub enum TempoError {
 pub enum PatternError {
     #[error("Invalid regex pattern: {0}")]
     InvalidRegex(#[from] regex::Error),
-    
+
     #[error("Pattern matching failed: {0}")]
     MatchError(String),
 }

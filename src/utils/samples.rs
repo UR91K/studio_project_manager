@@ -5,7 +5,7 @@ use log::{debug, error, trace, warn};
 
 #[allow(unused_imports)]
 use crate::error::{AttributeError, SampleError, XmlParseError};
-use crate::utils::macos_formats::{detect_mac_format, decode_mac_path, MacFormat};
+use crate::utils::macos_formats::{decode_mac_path, detect_mac_format, MacFormat};
 
 /// Check if the byte data looks like UTF-16LE encoded path data
 /// UTF-16LE paths have null bytes every other position (e.g., 45003A005C00...)
@@ -13,7 +13,7 @@ pub fn looks_like_utf16le_path(data: &[u8]) -> bool {
     if data.len() < 16 {
         return false; // Too short to be a meaningful path
     }
-    
+
     // Check the first 16 bytes for the UTF-16LE pattern
     // Every odd-indexed byte should be 0x00
     for i in (1..16).step_by(2) {
@@ -21,7 +21,7 @@ pub fn looks_like_utf16le_path(data: &[u8]) -> bool {
             return false;
         }
     }
-    
+
     // Also check that we have some non-null bytes in even positions
     let mut has_non_null = false;
     for i in (0..16).step_by(2) {
@@ -30,7 +30,7 @@ pub fn looks_like_utf16le_path(data: &[u8]) -> bool {
             break;
         }
     }
-    
+
     has_non_null
 }
 
@@ -81,9 +81,12 @@ pub fn decode_posix_path_bytes(bytes: &[u8]) -> Result<String, SampleError> {
         }
         return Ok(cow.to_string());
     }
-    
+
     // Check if this looks like UTF-16BE (every even byte is 0)
-    if bytes.len() >= 2 && bytes.len() % 2 == 0 && bytes[..bytes.len()-1].iter().step_by(2).all(|&b| b == 0) {
+    if bytes.len() >= 2
+        && bytes.len() % 2 == 0
+        && bytes[..bytes.len() - 1].iter().step_by(2).all(|&b| b == 0)
+    {
         // Looks like UTF-16BE
         let (cow, _, had_errors) = encoding_rs::UTF_16BE.decode(bytes);
         if had_errors {
@@ -91,13 +94,15 @@ pub fn decode_posix_path_bytes(bytes: &[u8]) -> Result<String, SampleError> {
         }
         return Ok(cow.to_string());
     }
-    
+
     // Try UTF-8
     match String::from_utf8(bytes.to_vec()) {
         Ok(s) => Ok(s),
         Err(e) => {
             warn!("Failed to decode POSIX path as UTF-8: {:?}", e);
-            Err(SampleError::PathProcessingError("Failed to decode POSIX path encoding".to_string()))
+            Err(SampleError::PathProcessingError(
+                "Failed to decode POSIX path encoding".to_string(),
+            ))
         }
     }
 }
@@ -135,11 +140,15 @@ pub fn decode_sample_path(abs_hash_path: &str) -> Result<PathBuf, SampleError> {
         Ok(MacFormat::Bookmark(_)) => {
             // TODO: Implement Mac OS Bookmark decoding if needed.
             trace!("Detected Mac OS Bookmark format - not yet implemented");
-            Err(SampleError::PathProcessingError("Mac OS Bookmark decoding not yet implemented".to_string()))
+            Err(SampleError::PathProcessingError(
+                "Mac OS Bookmark decoding not yet implemented".to_string(),
+            ))
         }
         Ok(MacFormat::Unknown) => {
             trace!("Data does not match UTF-16LE pattern or Mac OS formats");
-            Err(SampleError::PathProcessingError("Data does not match any known path format".to_string()))
+            Err(SampleError::PathProcessingError(
+                "Data does not match any known path format".to_string(),
+            ))
         }
         Err(e) => {
             warn!("Mac OS format detection failed: {:?}", e);

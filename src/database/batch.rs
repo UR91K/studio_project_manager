@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use log::{debug, info};
 use rusqlite::{params, Connection, Transaction};
-use uuid::Uuid;
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+use uuid::Uuid;
 
 use super::models::SqlDateTime;
 use crate::error::DatabaseError;
@@ -12,10 +12,10 @@ use crate::models::{Plugin, Sample};
 
 struct BatchTransaction<'a> {
     tx: Transaction<'a>,
-    unique_plugins: HashMap<String, Plugin>,  // dev_identifier -> Plugin
-    unique_samples: HashMap<String, Sample>,  // path -> Sample
-    plugin_id_map: HashMap<String, String>,   // old_uuid -> canonical_uuid
-    sample_id_map: HashMap<String, String>,   // old_uuid -> canonical_uuid
+    unique_plugins: HashMap<String, Plugin>, // dev_identifier -> Plugin
+    unique_samples: HashMap<String, Sample>, // path -> Sample
+    plugin_id_map: HashMap<String, String>,  // old_uuid -> canonical_uuid
+    sample_id_map: HashMap<String, String>,  // old_uuid -> canonical_uuid
     stats: BatchStats,
 }
 
@@ -36,7 +36,7 @@ impl<'a> BatchTransaction<'a> {
         let mut stmt = self.tx.prepare(
             "SELECT id, ableton_plugin_id, ableton_module_id, dev_identifier, name, format,
                     installed, vendor, version, sdk_version, flags, scanstate, enabled
-             FROM plugins"
+             FROM plugins",
         )?;
 
         let existing_plugins = stmt.query_map([], |row| {
@@ -59,7 +59,8 @@ impl<'a> BatchTransaction<'a> {
 
         for plugin in existing_plugins {
             let plugin = plugin?;
-            self.unique_plugins.insert(plugin.dev_identifier.clone(), plugin);
+            self.unique_plugins
+                .insert(plugin.dev_identifier.clone(), plugin);
         }
         debug!("Loaded {} existing plugins", self.unique_plugins.len());
         Ok(())
@@ -67,9 +68,9 @@ impl<'a> BatchTransaction<'a> {
 
     fn load_existing_samples(&mut self) -> Result<(), DatabaseError> {
         debug!("Loading existing samples from database");
-        let mut stmt = self.tx.prepare(
-            "SELECT id, name, path, is_present FROM samples"
-        )?;
+        let mut stmt = self
+            .tx
+            .prepare("SELECT id, name, path, is_present FROM samples")?;
 
         let existing_samples = stmt.query_map([], |row| {
             Ok(Sample {
@@ -82,7 +83,8 @@ impl<'a> BatchTransaction<'a> {
 
         for sample in existing_samples {
             let sample = sample?;
-            self.unique_samples.insert(sample.path.to_string_lossy().to_string(), sample);
+            self.unique_samples
+                .insert(sample.path.to_string_lossy().to_string(), sample);
         }
         debug!("Loaded {} existing samples", self.unique_samples.len());
         Ok(())
@@ -129,22 +131,24 @@ impl<'a> BatchTransaction<'a> {
             // Collect and merge plugins
             for plugin in &live_set.plugins {
                 let old_id = plugin.id.to_string();
-                let entry = self.unique_plugins
+                let entry = self
+                    .unique_plugins
                     .entry(plugin.dev_identifier.clone())
                     .and_modify(|existing| Self::merge_plugin_metadata(existing, plugin))
                     .or_insert_with(|| plugin.clone());
-                
+
                 // Map the old UUID to the canonical UUID
                 self.plugin_id_map.insert(old_id, entry.id.to_string());
             }
-            
+
             // Collect and merge samples
             for sample in &live_set.samples {
                 let old_id = sample.id.to_string();
                 let path_str = sample.path.to_string_lossy().to_string();
-                
+
                 // Only update is_present status for existing samples
-                let entry = self.unique_samples
+                let entry = self
+                    .unique_samples
                     .entry(path_str)
                     .and_modify(|existing| {
                         if sample.is_present {
@@ -152,12 +156,12 @@ impl<'a> BatchTransaction<'a> {
                         }
                     })
                     .or_insert_with(|| sample.clone());
-                
+
                 // Map the old UUID to the canonical UUID
                 self.sample_id_map.insert(old_id, entry.id.to_string());
             }
         }
-        
+
         debug!(
             "Found {} unique plugins and {} unique samples",
             self.unique_plugins.len(),
@@ -168,7 +172,7 @@ impl<'a> BatchTransaction<'a> {
 
     fn insert_plugins(&mut self) -> Result<(), DatabaseError> {
         debug!("Upserting {} plugins", self.unique_plugins.len());
-        
+
         for plugin in self.unique_plugins.values() {
             let plugin_id = plugin.id.to_string();
             self.tx.execute(
@@ -213,7 +217,7 @@ impl<'a> BatchTransaction<'a> {
 
     fn insert_samples(&mut self) -> Result<(), DatabaseError> {
         debug!("Upserting {} samples", self.unique_samples.len());
-        
+
         for sample in self.unique_samples.values() {
             let sample_id = sample.id.to_string();
             self.tx.execute(
@@ -239,7 +243,7 @@ impl<'a> BatchTransaction<'a> {
     fn insert_projects(&mut self, live_sets: &[LiveSet]) -> Result<(), DatabaseError> {
         for live_set in live_sets {
             let project_id = live_set.id.to_string();
-            
+
             // Insert project
             self.tx.execute(
                 "INSERT OR REPLACE INTO projects (
@@ -273,7 +277,7 @@ impl<'a> BatchTransaction<'a> {
                     None::<String>,
                 ],
             )?;
-            
+
             // Link plugins using the mapped IDs
             for plugin in &live_set.plugins {
                 let old_id = plugin.id.to_string();
@@ -284,7 +288,7 @@ impl<'a> BatchTransaction<'a> {
                     params![project_id, canonical_id],
                 )?;
             }
-            
+
             // Link samples using the mapped IDs
             for sample in &live_set.samples {
                 let old_id = sample.id.to_string();
@@ -295,7 +299,7 @@ impl<'a> BatchTransaction<'a> {
                     params![project_id, canonical_id],
                 )?;
             }
-            
+
             self.stats.projects_inserted += 1;
         }
         Ok(())
@@ -303,10 +307,10 @@ impl<'a> BatchTransaction<'a> {
 
     fn update_search_indexes(&self, live_sets: &[LiveSet]) -> Result<(), DatabaseError> {
         debug!("Updating search indexes for {} projects", live_sets.len());
-        
+
         for live_set in live_sets {
             let project_id = live_set.id.to_string();
-            
+
             self.tx.execute(
                 "UPDATE project_search SET
                     plugins = (
@@ -348,42 +352,37 @@ pub struct BatchInsertManager<'a> {
 
 impl<'a> BatchInsertManager<'a> {
     pub fn new(conn: &'a mut Connection, live_sets: Arc<Vec<LiveSet>>) -> Self {
-        Self {
-            conn,
-            live_sets,
-        }
+        Self { conn, live_sets }
     }
 
     /// Execute the batch insert operation
     pub fn execute(&mut self) -> Result<BatchStats, DatabaseError> {
         debug!("Starting batch insert of {} projects", self.live_sets.len());
-        
+
         // Create transaction and execute all operations
         let mut batch = BatchTransaction::new(self.conn)?;
-        
+
         // Collect all unique items
         batch.collect_items(&self.live_sets)?;
-        
+
         // First insert all plugins and samples
         batch.insert_plugins()?;
         batch.insert_samples()?;
-        
+
         // Then insert projects and their relationships
         batch.insert_projects(&self.live_sets)?;
-        
+
         // Finally update search indexes
         batch.update_search_indexes(&self.live_sets)?;
-        
+
         // Commit and get stats
         let stats = batch.commit()?;
-        
+
         info!(
             "Batch insert complete: {} projects, {} plugins, {} samples",
-            stats.projects_inserted,
-            stats.plugins_inserted,
-            stats.samples_inserted
+            stats.projects_inserted, stats.plugins_inserted, stats.samples_inserted
         );
-        
+
         Ok(stats)
     }
 }

@@ -14,7 +14,8 @@ pub(crate) fn parse_encoded_time_signature(value: &str) -> Result<i32, TimeSigna
         .map(|parsed_value| {
             trace!(
                 "Successfully parsed encoded value '{}' to {}",
-                value, parsed_value
+                value,
+                parsed_value
             );
             parsed_value
         })

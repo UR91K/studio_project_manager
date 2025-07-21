@@ -272,26 +272,31 @@ impl LiveSetDatabase {
         )?;
 
         debug!("Database schema initialized successfully");
-        
+
         // Rebuild FTS5 table to fix any NULL values in existing data
         self.rebuild_fts5_table()?;
-        
+
         Ok(())
     }
 
-    pub fn get_last_scanned_time(&self, path: &Path) -> Result<Option<DateTime<Local>>, DatabaseError> {
+    pub fn get_last_scanned_time(
+        &self,
+        path: &Path,
+    ) -> Result<Option<DateTime<Local>>, DatabaseError> {
         let path_str = path.to_string_lossy().to_string();
-        
-        let last_parsed: Option<i64> = self.conn
+
+        let last_parsed: Option<i64> = self
+            .conn
             .query_row(
                 "SELECT last_parsed_at FROM projects WHERE path = ? AND is_active = true",
                 params![path_str],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .optional()?;
-            
+
         Ok(last_parsed.map(|timestamp| {
-            Local.timestamp_opt(timestamp, 0)
+            Local
+                .timestamp_opt(timestamp, 0)
                 .single()
                 .expect("Invalid timestamp in database")
         }))
@@ -299,10 +304,10 @@ impl LiveSetDatabase {
 
     pub fn rebuild_fts5_table(&mut self) -> Result<(), DatabaseError> {
         debug!("Rebuilding FTS5 table to fix NULL values");
-        
+
         // Clear and rebuild the FTS5 table
         self.conn.execute("DELETE FROM project_search", [])?;
-        
+
         // Repopulate with corrected data
         self.conn.execute(
             r#"
@@ -342,7 +347,7 @@ impl LiveSetDatabase {
             "#,
             [],
         )?;
-        
+
         debug!("FTS5 table rebuilt successfully");
         Ok(())
     }

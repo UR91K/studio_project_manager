@@ -4,8 +4,8 @@ use crate::live_set::LiveSet;
 use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
 use chrono::{Local, TimeZone};
 use log::debug;
-use rusqlite::{params, OptionalExtension};
 use rusqlite::types::ToSql;
+use rusqlite::{params, OptionalExtension};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -13,9 +13,13 @@ use uuid::Uuid;
 use super::LiveSetDatabase;
 
 impl LiveSetDatabase {
-    
     // Collection methods
-    pub fn create_collection(&mut self, name: &str, description: Option<&str>, notes: Option<&str>) -> Result<String, DatabaseError> {
+    pub fn create_collection(
+        &mut self,
+        name: &str,
+        description: Option<&str>,
+        notes: Option<&str>,
+    ) -> Result<String, DatabaseError> {
         debug!("Creating collection: {}", name);
         let collection_id = Uuid::new_v4().to_string();
         let now = Local::now();
@@ -32,13 +36,31 @@ impl LiveSetDatabase {
             ],
         )?;
 
-        debug!("Successfully created collection: {} ({})", name, collection_id);
+        debug!(
+            "Successfully created collection: {} ({})",
+            name, collection_id
+        );
         Ok(collection_id)
     }
 
-    pub fn get_collection_by_id(&mut self, collection_id: &str) -> Result<Option<(String, String, Option<String>, Option<String>, i64, i64, Vec<String>, Option<String>)>, DatabaseError> {
+    pub fn get_collection_by_id(
+        &mut self,
+        collection_id: &str,
+    ) -> Result<
+        Option<(
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            i64,
+            i64,
+            Vec<String>,
+            Option<String>,
+        )>,
+        DatabaseError,
+    > {
         debug!("Getting collection by ID: {}", collection_id);
-        
+
         let collection_data: Option<(String, String, Option<String>, Option<String>, i64, i64, Option<String>)> = self.conn.query_row(
             "SELECT id, name, description, notes, created_at, modified_at, cover_art_id FROM collections WHERE id = ?",
             [collection_id],
@@ -55,24 +77,46 @@ impl LiveSetDatabase {
             },
         ).optional()?;
 
-        if let Some((id, name, description, notes, created_at, modified_at, cover_art_id)) = collection_data {
+        if let Some((id, name, description, notes, created_at, modified_at, cover_art_id)) =
+            collection_data
+        {
             // Get project IDs for this collection
             let mut stmt = self.conn.prepare(
                 "SELECT project_id FROM collection_projects WHERE collection_id = ? ORDER BY position"
             )?;
-            let project_ids: Vec<String> = stmt.query_map([collection_id], |row| {
-                row.get(0)
-            })?.filter_map(|r| r.ok()).collect();
+            let project_ids: Vec<String> = stmt
+                .query_map([collection_id], |row| row.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
 
-            debug!("Found collection: {} with {} projects", name, project_ids.len());
-            Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id)))
+            debug!(
+                "Found collection: {} with {} projects",
+                name,
+                project_ids.len()
+            );
+            Ok(Some((
+                id,
+                name,
+                description,
+                notes,
+                created_at,
+                modified_at,
+                project_ids,
+                cover_art_id,
+            )))
         } else {
             debug!("Collection not found: {}", collection_id);
             Ok(None)
         }
     }
 
-    pub fn update_collection(&mut self, collection_id: &str, name: Option<&str>, description: Option<&str>, notes: Option<&str>) -> Result<(), DatabaseError> {
+    pub fn update_collection(
+        &mut self,
+        collection_id: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+        notes: Option<&str>,
+    ) -> Result<(), DatabaseError> {
         debug!("Updating collection: {}", collection_id);
         let now = Local::now();
 
@@ -107,7 +151,8 @@ impl LiveSetDatabase {
 
     pub fn delete_collection(&mut self, collection_id: &str) -> Result<(), DatabaseError> {
         debug!("Deleting collection: {}", collection_id);
-        self.conn.execute("DELETE FROM collections WHERE id = ?", [collection_id])?;
+        self.conn
+            .execute("DELETE FROM collections WHERE id = ?", [collection_id])?;
         debug!("Successfully deleted collection");
         Ok(())
     }
@@ -133,13 +178,11 @@ impl LiveSetDatabase {
         let now = Local::now();
 
         // Get the highest position in the collection
-        let max_position: i32 = self
-            .conn
-            .query_row(
-                "SELECT COALESCE(MAX(position), -1) FROM collection_projects WHERE collection_id = ?",
-                [collection_id],
-                |row| row.get(0),
-            )?;
+        let max_position: i32 = self.conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) FROM collection_projects WHERE collection_id = ?",
+            [collection_id],
+            |row| row.get(0),
+        )?;
 
         let next_position = max_position + 1;
 
@@ -159,7 +202,7 @@ impl LiveSetDatabase {
             params![collection_id, project_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).optional()?;
-        
+
         if let Some((pid, pos)) = inserted_project {
             debug!("Verified project {} inserted at position {}", pid, pos);
         }
@@ -170,7 +213,10 @@ impl LiveSetDatabase {
             params![SqlDateTime::from(now), collection_id],
         )?;
 
-        debug!("Successfully added project to collection at position {}", next_position);
+        debug!(
+            "Successfully added project to collection at position {}",
+            next_position
+        );
         Ok(())
     }
 
@@ -186,7 +232,7 @@ impl LiveSetDatabase {
         let now = Local::now();
 
         let tx = self.conn.transaction()?;
-        
+
         // Get the position of the project being removed
         let removed_position: i32 = tx.query_row(
             "SELECT position FROM collection_projects WHERE collection_id = ? AND project_id = ?",
@@ -291,7 +337,7 @@ impl LiveSetDatabase {
         debug!("Getting projects in collection: {}", collection_id);
         let tx = self.conn.transaction()?;
         let mut results = Vec::new();
-        
+
         {
             let mut stmt = tx.prepare(
                 r#"
@@ -347,10 +393,17 @@ impl LiveSetDatabase {
                         numerator: row.get(9)?,
                         denominator: row.get(10)?,
                     },
-                    key_signature: match (row.get::<_, Option<String>>(11)?, row.get::<_, Option<String>>(12)?) {
+                    key_signature: match (
+                        row.get::<_, Option<String>>(11)?,
+                        row.get::<_, Option<String>>(12)?,
+                    ) {
                         (Some(tonic), Some(scale)) => Some(KeySignature {
-                            tonic: tonic.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                            scale: scale.parse().map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                            tonic: tonic
+                                .parse()
+                                .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                            scale: scale
+                                .parse()
+                                .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
                         }),
                         _ => None,
                     },
@@ -372,45 +425,56 @@ impl LiveSetDatabase {
                     let mut stmt = tx.prepare(
                         "SELECT p.* FROM plugins p JOIN project_plugins pp ON pp.plugin_id = p.id WHERE pp.project_id = ?"
                     )?;
-                    live_set.plugins = stmt.query_map([&project_id], |row| {
-                        Ok(Plugin {
-                            id: Uuid::new_v4(),
-                            plugin_id: row.get(1)?,
-                            module_id: row.get(2)?,
-                            dev_identifier: row.get(3)?,
-                            name: row.get(4)?,
-                            plugin_format: row.get::<_, String>(5)?.parse()
-                                .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
-                            installed: row.get(6)?,
-                            vendor: row.get(7)?,
-                            version: row.get(8)?,
-                            sdk_version: row.get(9)?,
-                            flags: row.get(10)?,
-                            scanstate: row.get(11)?,
-                            enabled: row.get(12)?,
-                        })
-                    })?.filter_map(|r| r.ok()).collect();
+                    live_set.plugins = stmt
+                        .query_map([&project_id], |row| {
+                            Ok(Plugin {
+                                id: Uuid::new_v4(),
+                                plugin_id: row.get(1)?,
+                                module_id: row.get(2)?,
+                                dev_identifier: row.get(3)?,
+                                name: row.get(4)?,
+                                plugin_format: row
+                                    .get::<_, String>(5)?
+                                    .parse()
+                                    .map_err(|e| rusqlite::Error::InvalidParameterName(e))?,
+                                installed: row.get(6)?,
+                                vendor: row.get(7)?,
+                                version: row.get(8)?,
+                                sdk_version: row.get(9)?,
+                                flags: row.get(10)?,
+                                scanstate: row.get(11)?,
+                                enabled: row.get(12)?,
+                            })
+                        })?
+                        .filter_map(|r| r.ok())
+                        .collect();
                 }
 
                 {
                     let mut stmt = tx.prepare(
                         "SELECT s.* FROM samples s JOIN project_samples ps ON ps.sample_id = s.id WHERE ps.project_id = ?"
                     )?;
-                    live_set.samples = stmt.query_map([&project_id], |row| {
-                        Ok(Sample {
-                            id: Uuid::new_v4(),
-                            name: row.get(1)?,
-                            path: PathBuf::from(row.get::<_, String>(2)?),
-                            is_present: row.get(3)?,
-                        })
-                    })?.filter_map(|r| r.ok()).collect();
+                    live_set.samples = stmt
+                        .query_map([&project_id], |row| {
+                            Ok(Sample {
+                                id: Uuid::new_v4(),
+                                name: row.get(1)?,
+                                path: PathBuf::from(row.get::<_, String>(2)?),
+                                is_present: row.get(3)?,
+                            })
+                        })?
+                        .filter_map(|r| r.ok())
+                        .collect();
                 }
 
                 {
                     let mut stmt = tx.prepare(
                         "SELECT t.name FROM tags t JOIN project_tags pt ON pt.tag_id = t.id WHERE pt.project_id = ?"
                     )?;
-                    live_set.tags = stmt.query_map([&project_id], |row| row.get(0))?.filter_map(|r| r.ok()).collect();
+                    live_set.tags = stmt
+                        .query_map([&project_id], |row| row.get(0))?
+                        .filter_map(|r| r.ok())
+                        .collect();
                 }
 
                 debug!("Adding project to results: {}", live_set.name);
@@ -423,11 +487,13 @@ impl LiveSetDatabase {
         Ok(results)
     }
 
-    pub fn list_collections(&mut self) -> Result<Vec<(String, String, Option<String>)>, DatabaseError> {
+    pub fn list_collections(
+        &mut self,
+    ) -> Result<Vec<(String, String, Option<String>)>, DatabaseError> {
         debug!("Listing all collections");
-        let mut stmt = self.conn.prepare(
-            "SELECT id, name, description FROM collections ORDER BY name"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, name, description FROM collections ORDER BY name")?;
 
         let collections = stmt
             .query_map([], |row| {
@@ -445,11 +511,14 @@ impl LiveSetDatabase {
     }
 
     /// Get all collection IDs that contain a specific project
-    pub fn get_collections_for_project(&mut self, project_id: &str) -> Result<Vec<String>, DatabaseError> {
+    pub fn get_collections_for_project(
+        &mut self,
+        project_id: &str,
+    ) -> Result<Vec<String>, DatabaseError> {
         debug!("Getting collections for project: {}", project_id);
-        let mut stmt = self.conn.prepare(
-            "SELECT collection_id FROM collection_projects WHERE project_id = ?"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT collection_id FROM collection_projects WHERE project_id = ?")?;
 
         let collection_ids: Vec<String> = stmt
             .query_map([project_id], |row| {
@@ -465,9 +534,12 @@ impl LiveSetDatabase {
     }
 
     /// Get statistics for a specific collection (total duration and project count)
-    pub fn get_collection_statistics(&mut self, collection_id: &str) -> Result<(Option<f64>, i32), DatabaseError> {
+    pub fn get_collection_statistics(
+        &mut self,
+        collection_id: &str,
+    ) -> Result<(Option<f64>, i32), DatabaseError> {
         debug!("Getting statistics for collection {}", collection_id);
-        
+
         let mut stmt = self.conn.prepare(
             r#"
             SELECT 
@@ -476,7 +548,7 @@ impl LiveSetDatabase {
             FROM collection_projects cp
             LEFT JOIN projects p ON p.id = cp.project_id
             WHERE cp.collection_id = ?
-            "#
+            "#,
         )?;
 
         let result = stmt.query_row([collection_id], |row| {
@@ -487,29 +559,40 @@ impl LiveSetDatabase {
 
         match result {
             Ok((duration, count)) => {
-                debug!("Collection statistics: {} projects, {:?} total duration", count, duration);
+                debug!(
+                    "Collection statistics: {} projects, {:?} total duration",
+                    count, duration
+                );
                 Ok((duration, count))
             }
-            Err(e) => Err(DatabaseError::from(e))
+            Err(e) => Err(DatabaseError::from(e)),
         }
     }
 
     // Batch Collection Operations
-    pub fn batch_add_projects_to_collection(&mut self, project_ids: &[String], collection_id: &str) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
-        debug!("Batch adding {} projects to collection {}", project_ids.len(), collection_id);
+    pub fn batch_add_projects_to_collection(
+        &mut self,
+        project_ids: &[String],
+        collection_id: &str,
+    ) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!(
+            "Batch adding {} projects to collection {}",
+            project_ids.len(),
+            collection_id
+        );
         let tx = self.conn.transaction()?;
         let mut results = Vec::new();
         let now = Local::now();
-        
+
         // Get the highest position in the collection
         let max_position: i32 = tx.query_row(
             "SELECT COALESCE(MAX(position), -1) FROM collection_projects WHERE collection_id = ?",
             [collection_id],
             |row| row.get(0),
         )?;
-        
+
         let mut next_position = max_position + 1;
-        
+
         for project_id in project_ids {
             // Verify project exists
             let project_exists: bool = tx.query_row(
@@ -517,23 +600,30 @@ impl LiveSetDatabase {
                 [project_id],
                 |row| row.get(0),
             )?;
-            
+
             if !project_exists {
                 debug!("Project {} does not exist", project_id);
-                results.push((project_id.clone(), Err(DatabaseError::NotFound(
-                    format!("Project {} not found", project_id)
-                ))));
+                results.push((
+                    project_id.clone(),
+                    Err(DatabaseError::NotFound(format!(
+                        "Project {} not found",
+                        project_id
+                    ))),
+                ));
                 continue;
             }
-            
+
             let result = tx.execute(
                 "INSERT OR IGNORE INTO collection_projects (collection_id, project_id, position, added_at) VALUES (?, ?, ?, ?)",
                 params![collection_id, project_id, next_position, SqlDateTime::from(now)],
             );
-            
+
             match result {
                 Ok(_) => {
-                    debug!("Successfully added project {} to collection at position {}", project_id, next_position);
+                    debug!(
+                        "Successfully added project {} to collection at position {}",
+                        project_id, next_position
+                    );
                     results.push((project_id.clone(), Ok(())));
                     next_position += 1;
                 }
@@ -543,24 +633,35 @@ impl LiveSetDatabase {
                 }
             }
         }
-        
+
         // Update collection's modified timestamp
         tx.execute(
             "UPDATE collections SET modified_at = ? WHERE id = ?",
             params![SqlDateTime::from(now), collection_id],
         )?;
-        
+
         tx.commit()?;
-        debug!("Batch add to collection operation completed with {} results", results.len());
+        debug!(
+            "Batch add to collection operation completed with {} results",
+            results.len()
+        );
         Ok(results)
     }
 
-    pub fn batch_remove_projects_from_collection(&mut self, project_ids: &[String], collection_id: &str) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
-        debug!("Batch removing {} projects from collection {}", project_ids.len(), collection_id);
+    pub fn batch_remove_projects_from_collection(
+        &mut self,
+        project_ids: &[String],
+        collection_id: &str,
+    ) -> Result<Vec<(String, Result<(), DatabaseError>)>, DatabaseError> {
+        debug!(
+            "Batch removing {} projects from collection {}",
+            project_ids.len(),
+            collection_id
+        );
         let tx = self.conn.transaction()?;
         let mut results = Vec::new();
         let now = Local::now();
-        
+
         for project_id in project_ids {
             // Get the position of the project being removed
             let position_result = tx.query_row(
@@ -568,7 +669,7 @@ impl LiveSetDatabase {
                 params![collection_id, project_id],
                 |row| row.get::<_, i32>(0),
             );
-            
+
             match position_result {
                 Ok(position) => {
                     // Remove the project
@@ -576,7 +677,7 @@ impl LiveSetDatabase {
                         "DELETE FROM collection_projects WHERE collection_id = ? AND project_id = ?",
                         params![collection_id, project_id],
                     );
-                    
+
                     match remove_result {
                         Ok(_) => {
                             // Update positions of remaining projects
@@ -585,41 +686,67 @@ impl LiveSetDatabase {
                                  WHERE collection_id = ? AND position > ?",
                                 params![collection_id, position],
                             )?;
-                            
-                            debug!("Successfully removed project {} from collection", project_id);
+
+                            debug!(
+                                "Successfully removed project {} from collection",
+                                project_id
+                            );
                             results.push((project_id.clone(), Ok(())));
                         }
                         Err(e) => {
-                            debug!("Failed to remove project {} from collection: {}", project_id, e);
+                            debug!(
+                                "Failed to remove project {} from collection: {}",
+                                project_id, e
+                            );
                             results.push((project_id.clone(), Err(DatabaseError::from(e))));
                         }
                     }
                 }
                 Err(_) => {
-                    debug!("Project {} not found in collection {}", project_id, collection_id);
-                    results.push((project_id.clone(), Err(DatabaseError::NotFound(
-                        format!("Project {} not found in collection {}", project_id, collection_id)
-                    ))));
+                    debug!(
+                        "Project {} not found in collection {}",
+                        project_id, collection_id
+                    );
+                    results.push((
+                        project_id.clone(),
+                        Err(DatabaseError::NotFound(format!(
+                            "Project {} not found in collection {}",
+                            project_id, collection_id
+                        ))),
+                    ));
                 }
             }
         }
-        
+
         // Update collection's modified timestamp
         tx.execute(
             "UPDATE collections SET modified_at = ? WHERE id = ?",
             params![SqlDateTime::from(now), collection_id],
         )?;
-        
+
         tx.commit()?;
-        debug!("Batch remove from collection operation completed with {} results", results.len());
+        debug!(
+            "Batch remove from collection operation completed with {} results",
+            results.len()
+        );
         Ok(results)
     }
 
-    pub fn batch_create_collection_from_projects(&mut self, name: &str, project_ids: &[String], description: Option<&str>, notes: Option<&str>) -> Result<(String, Vec<(String, Result<(), DatabaseError>)>), DatabaseError> {
-        debug!("Batch creating collection '{}' from {} projects", name, project_ids.len());
+    pub fn batch_create_collection_from_projects(
+        &mut self,
+        name: &str,
+        project_ids: &[String],
+        description: Option<&str>,
+        notes: Option<&str>,
+    ) -> Result<(String, Vec<(String, Result<(), DatabaseError>)>), DatabaseError> {
+        debug!(
+            "Batch creating collection '{}' from {} projects",
+            name,
+            project_ids.len()
+        );
         let tx = self.conn.transaction()?;
         let now = Local::now();
-        
+
         // Create the collection
         let collection_id = Uuid::new_v4().to_string();
         tx.execute(
@@ -633,13 +760,13 @@ impl LiveSetDatabase {
                 SqlDateTime::from(now)
             ],
         )?;
-        
+
         debug!("Created collection {} with ID {}", name, collection_id);
-        
+
         // Add projects to the collection
         let mut results = Vec::new();
         let mut position = 0;
-        
+
         for project_id in project_ids {
             // Verify project exists
             let project_exists: bool = tx.query_row(
@@ -647,35 +774,48 @@ impl LiveSetDatabase {
                 [project_id],
                 |row| row.get(0),
             )?;
-            
+
             if !project_exists {
                 debug!("Project {} does not exist", project_id);
-                results.push((project_id.clone(), Err(DatabaseError::NotFound(
-                    format!("Project {} not found", project_id)
-                ))));
+                results.push((
+                    project_id.clone(),
+                    Err(DatabaseError::NotFound(format!(
+                        "Project {} not found",
+                        project_id
+                    ))),
+                ));
                 continue;
             }
-            
+
             let result = tx.execute(
                 "INSERT INTO collection_projects (collection_id, project_id, position, added_at) VALUES (?, ?, ?, ?)",
                 params![collection_id, project_id, position, SqlDateTime::from(now)],
             );
-            
+
             match result {
                 Ok(_) => {
-                    debug!("Successfully added project {} to new collection at position {}", project_id, position);
+                    debug!(
+                        "Successfully added project {} to new collection at position {}",
+                        project_id, position
+                    );
                     results.push((project_id.clone(), Ok(())));
                     position += 1;
                 }
                 Err(e) => {
-                    debug!("Failed to add project {} to new collection: {}", project_id, e);
+                    debug!(
+                        "Failed to add project {} to new collection: {}",
+                        project_id, e
+                    );
                     results.push((project_id.clone(), Err(DatabaseError::from(e))));
                 }
             }
         }
-        
+
         tx.commit()?;
-        debug!("Batch create collection operation completed with {} results", results.len());
+        debug!(
+            "Batch create collection operation completed with {} results",
+            results.len()
+        );
         Ok((collection_id, results))
     }
 }

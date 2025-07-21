@@ -1,7 +1,7 @@
+use log::{debug, error};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Status, Code};
-use log::{debug, error};
+use tonic::{Code, Request, Response, Status};
 
 use crate::database::LiveSetDatabase;
 use crate::grpc::proto::*;
@@ -31,14 +31,13 @@ impl TagsHandler {
     pub fn new(db: Arc<Mutex<LiveSetDatabase>>) -> Self {
         Self { db }
     }
-    
 
     pub async fn get_tags(
         &self,
         _request: Request<GetTagsRequest>,
     ) -> Result<Response<GetTagsResponse>, Status> {
         debug!("GetTags request");
-        
+
         let mut db = self.db.lock().await;
         match db.list_tags() {
             Ok(tags_data) => {
@@ -50,7 +49,7 @@ impl TagsHandler {
                         created_at,
                     })
                     .collect();
-                
+
                 let response = GetTagsResponse { tags };
                 debug!("Successfully retrieved {} tags", response.tags.len());
                 Ok(Response::new(response))
@@ -70,10 +69,10 @@ impl TagsHandler {
         request: Request<CreateTagRequest>,
     ) -> Result<Response<CreateTagResponse>, Status> {
         debug!("CreateTag request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.add_tag(&req.name) {
             Ok(tag_id) => {
                 // Get the created tag details to return in response
@@ -84,7 +83,7 @@ impl TagsHandler {
                             name,
                             created_at,
                         };
-                        
+
                         let response = CreateTagResponse { tag: Some(tag) };
                         debug!("Successfully created tag: {}", req.name);
                         Ok(Response::new(response))
@@ -120,10 +119,10 @@ impl TagsHandler {
         request: Request<UpdateTagRequest>,
     ) -> Result<Response<UpdateTagResponse>, Status> {
         debug!("UpdateTag request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.update_tag(&req.tag_id, &req.name) {
             Ok(()) => {
                 // Get the updated tag details to return in response
@@ -134,7 +133,7 @@ impl TagsHandler {
                             name,
                             created_at,
                         };
-                        
+
                         let response = UpdateTagResponse { tag: Some(tag) };
                         debug!("Successfully updated tag: {}", req.tag_id);
                         Ok(Response::new(response))
@@ -145,13 +144,19 @@ impl TagsHandler {
                     }
                     Err(e) => {
                         error!("Failed to retrieve updated tag {}: {:?}", req.tag_id, e);
-                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                        Err(Status::new(
+                            Code::Internal,
+                            format!("Database error: {}", e),
+                        ))
                     }
                 }
             }
             Err(e) => {
                 error!("Failed to update tag '{}': {:?}", req.tag_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -161,10 +166,10 @@ impl TagsHandler {
         request: Request<DeleteTagRequest>,
     ) -> Result<Response<DeleteTagResponse>, Status> {
         debug!("DeleteTag request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.remove_tag(&req.tag_id) {
             Ok(()) => {
                 debug!("Successfully deleted tag: {}", req.tag_id);
@@ -173,7 +178,10 @@ impl TagsHandler {
             }
             Err(e) => {
                 error!("Failed to delete tag '{}': {:?}", req.tag_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -183,13 +191,16 @@ impl TagsHandler {
         request: Request<TagProjectRequest>,
     ) -> Result<Response<TagProjectResponse>, Status> {
         debug!("TagProject request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.tag_project(&req.project_id, &req.tag_id) {
             Ok(()) => {
-                debug!("Successfully tagged project {} with tag {}", req.project_id, req.tag_id);
+                debug!(
+                    "Successfully tagged project {} with tag {}",
+                    req.project_id, req.tag_id
+                );
                 let response = TagProjectResponse { success: true };
                 Ok(Response::new(response))
             }
@@ -208,13 +219,16 @@ impl TagsHandler {
         request: Request<UntagProjectRequest>,
     ) -> Result<Response<UntagProjectResponse>, Status> {
         debug!("UntagProject request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.untag_project(&req.project_id, &req.tag_id) {
             Ok(()) => {
-                debug!("Successfully untagged project {} from tag {}", req.project_id, req.tag_id);
+                debug!(
+                    "Successfully untagged project {} from tag {}",
+                    req.project_id, req.tag_id
+                );
                 let response = UntagProjectResponse { success: true };
                 Ok(Response::new(response))
             }
@@ -238,14 +252,24 @@ impl TagsHandler {
         let mut db = self.db.lock().await;
         match db.batch_tag_projects(&req.project_ids, &req.tag_ids) {
             Ok(results) => {
-                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
-                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
-                });
-                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
-                    id,
-                    success: result.is_ok(),
-                    error_message: result.err().map(|e| e.to_string()),
-                }).collect();
+                let (successful_count, failed_count) = results.iter().fold(
+                    (0, 0),
+                    |(s, f), (_, r)| {
+                        if r.is_ok() {
+                            (s + 1, f)
+                        } else {
+                            (s, f + 1)
+                        }
+                    },
+                );
+                let batch_results = results
+                    .into_iter()
+                    .map(|(id, result)| BatchOperationResult {
+                        id,
+                        success: result.is_ok(),
+                        error_message: result.err().map(|e| e.to_string()),
+                    })
+                    .collect();
                 Ok(Response::new(BatchTagProjectsResponse {
                     results: batch_results,
                     successful_count,
@@ -265,14 +289,24 @@ impl TagsHandler {
         let mut db = self.db.lock().await;
         match db.batch_untag_projects(&req.project_ids, &req.tag_ids) {
             Ok(results) => {
-                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
-                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
-                });
-                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
-                    id,
-                    success: result.is_ok(),
-                    error_message: result.err().map(|e| e.to_string()),
-                }).collect();
+                let (successful_count, failed_count) = results.iter().fold(
+                    (0, 0),
+                    |(s, f), (_, r)| {
+                        if r.is_ok() {
+                            (s + 1, f)
+                        } else {
+                            (s, f + 1)
+                        }
+                    },
+                );
+                let batch_results = results
+                    .into_iter()
+                    .map(|(id, result)| BatchOperationResult {
+                        id,
+                        success: result.is_ok(),
+                        error_message: result.err().map(|e| e.to_string()),
+                    })
+                    .collect();
                 Ok(Response::new(BatchUntagProjectsResponse {
                     results: batch_results,
                     successful_count,
@@ -282,4 +316,4 @@ impl TagsHandler {
             Err(e) => Err(Status::internal(format!("Database error: {}", e))),
         }
     }
-} 
+}

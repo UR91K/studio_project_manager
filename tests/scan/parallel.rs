@@ -1,15 +1,15 @@
 //! Parallel scanning tests
 
+use colored::*;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::time::Duration;
 use studio_project_manager::scan::project_scanner::ProjectPathScanner;
-use studio_project_manager::scan::{ParallelParser};
+use studio_project_manager::scan::ParallelParser;
 use studio_project_manager::{AbletonVersion, LiveSet, CONFIG};
 use tempfile::tempdir;
-use std::collections::{HashMap, HashSet};
-use std::time::Duration;
-use colored::*;
 
 #[derive(Default)]
 struct ProjectStats {
@@ -26,10 +26,13 @@ struct ProjectStats {
 impl ProjectStats {
     fn add_project(&mut self, path: PathBuf, live_set: &LiveSet) {
         self.successful_parses += 1;
-        
+
         // Update version count
-        *self.version_counts.entry(live_set.ableton_version).or_insert(0) += 1;
-        
+        *self
+            .version_counts
+            .entry(live_set.ableton_version)
+            .or_insert(0) += 1;
+
         // Update plugin counts
         self.total_plugin_instances += live_set.plugins.len();
         for plugin in &live_set.plugins {
@@ -39,18 +42,20 @@ impl ProjectStats {
                 plugin.plugin_format.to_string(),
             ));
         }
-        
+
         // Update sample count
         self.total_samples += live_set.samples.len();
-        
+
         // Update project dates
         let created = live_set.created_time;
         match &self.oldest_project {
             None => self.oldest_project = Some((path.clone(), created)),
-            Some((_, oldest)) if created < *oldest => self.oldest_project = Some((path.clone(), created)),
+            Some((_, oldest)) if created < *oldest => {
+                self.oldest_project = Some((path.clone(), created))
+            }
             _ => {}
         }
-        
+
         match &self.newest_project {
             None => self.newest_project = Some((path.clone(), created)),
             Some((_, newest)) if created > *newest => self.newest_project = Some((path, created)),
@@ -95,47 +100,85 @@ impl ProjectStats {
     }
 
     fn print_summary(&self) {
-        println!("\n{}", "=== Project Analysis Summary ===".bright_white().bold());
-        
+        println!(
+            "\n{}",
+            "=== Project Analysis Summary ===".bright_white().bold()
+        );
+
         println!("\n{}:", "Processing Statistics".yellow());
-        println!("  - Successfully Parsed: {}", self.successful_parses.to_string().green());
-        println!("  - Failed to Parse: {}", self.failed_parses.to_string().red());
-        println!("  - Total Projects: {}", (self.successful_parses + self.failed_parses).to_string().cyan());
-        
+        println!(
+            "  - Successfully Parsed: {}",
+            self.successful_parses.to_string().green()
+        );
+        println!(
+            "  - Failed to Parse: {}",
+            self.failed_parses.to_string().red()
+        );
+        println!(
+            "  - Total Projects: {}",
+            (self.successful_parses + self.failed_parses)
+                .to_string()
+                .cyan()
+        );
+
         println!("\n{}:", "Content Statistics".yellow());
-        println!("  - Unique Plugins: {}", self.unique_plugins.len().to_string().cyan());
-        println!("  - Total Plugin Instances: {}", self.total_plugin_instances.to_string().cyan());
-        println!("  - Average Plugin Instances per Project: {:.1}", 
-            (self.total_plugin_instances as f64 / self.successful_parses as f64).to_string().cyan());
-        println!("  - Total Samples Used: {}", self.total_samples.to_string().cyan());
-        println!("  - Average Samples per Project: {:.1}", 
-            (self.total_samples as f64 / self.successful_parses as f64).to_string().cyan());
-        
+        println!(
+            "  - Unique Plugins: {}",
+            self.unique_plugins.len().to_string().cyan()
+        );
+        println!(
+            "  - Total Plugin Instances: {}",
+            self.total_plugin_instances.to_string().cyan()
+        );
+        println!(
+            "  - Average Plugin Instances per Project: {:.1}",
+            (self.total_plugin_instances as f64 / self.successful_parses as f64)
+                .to_string()
+                .cyan()
+        );
+        println!(
+            "  - Total Samples Used: {}",
+            self.total_samples.to_string().cyan()
+        );
+        println!(
+            "  - Average Samples per Project: {:.1}",
+            (self.total_samples as f64 / self.successful_parses as f64)
+                .to_string()
+                .cyan()
+        );
+
         println!("\n{}:", "Plugin List".yellow());
-        let mut plugins: Vec<(String, String, String)> = self.unique_plugins.iter()
+        let mut plugins: Vec<(String, String, String)> = self
+            .unique_plugins
+            .iter()
             .map(|(name, dev_id, format)| (name.clone(), dev_id.clone(), format.clone()))
             .collect();
         plugins.sort_by(|a, b| a.0.cmp(&b.0)); // Sort by plugin name
-        
+
         // Format plugins into columns
         let formatted_plugins = Self::format_plugin_columns(&plugins);
-        
+
         // Calculate number of columns based on terminal width
         if let Some((width, _)) = terminal_size::terminal_size() {
-            let max_line_length = formatted_plugins.iter()
+            let max_line_length = formatted_plugins
+                .iter()
                 .map(|line| line.len())
                 .max()
                 .unwrap_or(0);
-            
+
             let num_columns = (width.0 as usize / max_line_length).max(1);
             let num_rows = (formatted_plugins.len() + num_columns - 1) / num_columns;
-            
+
             // Print in columns
             for row in 0..num_rows {
                 for col in 0..num_columns {
                     let idx = row + (col * num_rows);
                     if idx < formatted_plugins.len() {
-                        print!("{:<width$}", formatted_plugins[idx], width = max_line_length + 2);
+                        print!(
+                            "{:<width$}",
+                            formatted_plugins[idx],
+                            width = max_line_length + 2
+                        );
                     }
                 }
                 println!();
@@ -146,29 +189,40 @@ impl ProjectStats {
                 println!("  {}", line);
             }
         }
-        
+
         println!("\n{}:", "Version Distribution".yellow());
         let mut versions: Vec<_> = self.version_counts.iter().collect();
         versions.sort_by(|a, b| b.1.cmp(a.1)); // Sort by count descending
         for (version, count) in versions {
-            println!("  - Live {}.{}.{}{}: {} projects", 
-                version.major, version.minor, version.patch,
+            println!(
+                "  - Live {}.{}.{}{}: {} projects",
+                version.major,
+                version.minor,
+                version.patch,
                 if version.beta { " beta" } else { "" },
-                count);
+                count
+            );
         }
-        
+
         println!("\n{}:", "Project Timeline".yellow());
         if let Some((path, date)) = &self.oldest_project {
-            println!("  - Oldest: {} ({})", 
+            println!(
+                "  - Oldest: {} ({})",
                 path.file_name().unwrap().to_string_lossy().bright_red(),
-                date.format("%Y-%m-%d %H:%M:%S").to_string().dimmed());
+                date.format("%Y-%m-%d %H:%M:%S").to_string().dimmed()
+            );
         }
         if let Some((path, date)) = &self.newest_project {
-            println!("  - Newest: {} ({})", 
+            println!(
+                "  - Newest: {} ({})",
                 path.file_name().unwrap().to_string_lossy().bright_green(),
-                date.format("%Y-%m-%d %H:%M:%S").to_string().dimmed());
+                date.format("%Y-%m-%d %H:%M:%S").to_string().dimmed()
+            );
         }
-        println!("\n{}", "===============================".bright_white().bold());
+        println!(
+            "\n{}",
+            "===============================".bright_white().bold()
+        );
     }
 }
 
@@ -178,14 +232,14 @@ fn test_parallel_parser() {
     let test_file = dir.path().join("test.als");
     let mut file = File::create(&test_file).unwrap();
     write!(file, "test data").unwrap();
-    
+
     let parser = ParallelParser::new(2);
     parser.submit_paths(vec![test_file.clone()]).unwrap();
-    
+
     // Get first result
     let result = parser.get_results_receiver().recv().unwrap();
     assert!(result.is_err()); // Should be error since not valid .als file
-    
+
     let (path, _) = result.unwrap_err();
     assert_eq!(path, test_file);
 }
@@ -194,11 +248,11 @@ fn test_parallel_parser() {
 fn test_integrated_scanning_and_parsing() {
     // Create a scanner
     let scanner = ProjectPathScanner::new().unwrap();
-    
+
     // Get paths from config
     let config = CONFIG.as_ref().expect("Failed to load config");
     let mut found_projects = HashSet::new();
-    
+
     // Scan all configured directories
     for path in &config.paths {
         let path = PathBuf::from(path);
@@ -207,24 +261,26 @@ fn test_integrated_scanning_and_parsing() {
             found_projects.extend(projects);
         }
     }
-    
+
     // Skip test if no projects found
     if found_projects.is_empty() {
         println!("No Ableton projects found in configured paths, skipping test");
         return;
     }
-    
+
     // Create parallel parser with number of threads based on project count
     let thread_count = (found_projects.len() / 2).max(1).min(4);
     let parser = ParallelParser::new(thread_count);
-    
+
     // Submit all found projects for parsing
-    parser.submit_paths(found_projects.into_iter().collect()).unwrap();
-    
+    parser
+        .submit_paths(found_projects.into_iter().collect())
+        .unwrap();
+
     // Collect results with timeout
     let receiver = parser.get_results_receiver();
     let mut stats = ProjectStats::default();
-    
+
     while let Ok(result) = receiver.recv_timeout(Duration::from_secs(5)) {
         match result {
             Ok((path, live_set)) => {
@@ -236,10 +292,13 @@ fn test_integrated_scanning_and_parsing() {
             }
         }
     }
-    
+
     // Print the summary
     stats.print_summary();
-    
+
     // Assert that we processed at least one file
-    assert!(stats.successful_parses + stats.failed_parses > 0, "No files were processed");
+    assert!(
+        stats.successful_parses + stats.failed_parses > 0,
+        "No files were processed"
+    );
 }

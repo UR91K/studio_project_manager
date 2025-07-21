@@ -1,11 +1,11 @@
+use log::{debug, error};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Status, Code};
-use log::{debug, error};
+use tonic::{Code, Request, Response, Status};
 
-use crate::database::LiveSetDatabase;
 use super::super::proto::*;
 use super::utils::convert_live_set_to_proto;
+use crate::database::LiveSetDatabase;
 
 pub struct SamplesHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
@@ -21,20 +21,21 @@ impl SamplesHandler {
         request: Request<GetAllSamplesRequest>,
     ) -> Result<Response<GetAllSamplesResponse>, Status> {
         debug!("GetAllSamples request: {:?}", request);
-        
+
         let req = request.into_inner();
         let db = self.db.lock().await;
-        
+
         match db.get_all_samples(req.limit, req.offset, req.sort_by, req.sort_desc) {
             Ok((samples, total_count)) => {
-                let proto_samples = samples.into_iter().map(|sample| {
-                    Sample {
+                let proto_samples = samples
+                    .into_iter()
+                    .map(|sample| Sample {
                         id: sample.id.to_string(),
                         name: sample.name,
                         path: sample.path.to_string_lossy().to_string(),
                         is_present: sample.is_present,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 let response = GetAllSamplesResponse {
                     samples: proto_samples,
@@ -44,7 +45,10 @@ impl SamplesHandler {
             }
             Err(e) => {
                 error!("Failed to get all samples: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -54,10 +58,10 @@ impl SamplesHandler {
         request: Request<GetSampleByPresenceRequest>,
     ) -> Result<Response<GetSampleByPresenceResponse>, Status> {
         debug!("GetSampleByPresence request: {:?}", request);
-        
+
         let req = request.into_inner();
         let db = self.db.lock().await;
-        
+
         match db.get_samples_by_presence(
             req.is_present,
             req.limit,
@@ -66,14 +70,15 @@ impl SamplesHandler {
             req.sort_desc,
         ) {
             Ok((samples, total_count)) => {
-                let proto_samples = samples.into_iter().map(|sample| {
-                    Sample {
+                let proto_samples = samples
+                    .into_iter()
+                    .map(|sample| Sample {
                         id: sample.id.to_string(),
                         name: sample.name,
                         path: sample.path.to_string_lossy().to_string(),
                         is_present: sample.is_present,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 let response = GetSampleByPresenceResponse {
                     samples: proto_samples,
@@ -83,7 +88,10 @@ impl SamplesHandler {
             }
             Err(e) => {
                 error!("Failed to get samples by presence: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -93,10 +101,10 @@ impl SamplesHandler {
         request: Request<SearchSamplesRequest>,
     ) -> Result<Response<SearchSamplesResponse>, Status> {
         debug!("SearchSamples request: {:?}", request);
-        
+
         let req = request.into_inner();
         let db = self.db.lock().await;
-        
+
         match db.search_samples(
             &req.query,
             req.limit,
@@ -105,14 +113,15 @@ impl SamplesHandler {
             req.extension_filter,
         ) {
             Ok((samples, total_count)) => {
-                let proto_samples = samples.into_iter().map(|sample| {
-                    Sample {
+                let proto_samples = samples
+                    .into_iter()
+                    .map(|sample| Sample {
                         id: sample.id.to_string(),
                         name: sample.name,
                         path: sample.path.to_string_lossy().to_string(),
                         is_present: sample.is_present,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 let response = SearchSamplesResponse {
                     samples: proto_samples,
@@ -122,7 +131,10 @@ impl SamplesHandler {
             }
             Err(e) => {
                 error!("Failed to search samples: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -132,9 +144,9 @@ impl SamplesHandler {
         _request: Request<GetSampleStatsRequest>,
     ) -> Result<Response<GetSampleStatsResponse>, Status> {
         debug!("GetSampleStats request");
-        
+
         let db = self.db.lock().await;
-        
+
         match db.get_sample_stats() {
             Ok(stats) => {
                 let response = GetSampleStatsResponse {
@@ -149,7 +161,10 @@ impl SamplesHandler {
             }
             Err(e) => {
                 error!("Failed to get sample stats: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -159,29 +174,31 @@ impl SamplesHandler {
         _request: Request<GetAllSampleUsageNumbersRequest>,
     ) -> Result<Response<GetAllSampleUsageNumbersResponse>, Status> {
         debug!("GetAllSampleUsageNumbers request");
-        
+
         let db = self.db.lock().await;
-        
+
         match db.get_all_sample_usage_numbers() {
             Ok(usage_info) => {
-                let sample_usages = usage_info.into_iter().map(|info| {
-                    SampleUsage {
+                let sample_usages = usage_info
+                    .into_iter()
+                    .map(|info| SampleUsage {
                         sample_id: info.sample_id,
                         name: info.name,
                         path: info.path,
                         usage_count: info.usage_count,
                         project_count: info.project_count,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
-                let response = GetAllSampleUsageNumbersResponse {
-                    sample_usages,
-                };
+                let response = GetAllSampleUsageNumbersResponse { sample_usages };
                 Ok(Response::new(response))
             }
             Err(e) => {
                 error!("Failed to get sample usage numbers: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -191,14 +208,14 @@ impl SamplesHandler {
         request: Request<GetProjectsBySampleRequest>,
     ) -> Result<Response<GetProjectsBySampleResponse>, Status> {
         debug!("GetProjectsBySample request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.get_projects_by_sample_id(&req.sample_id, req.limit, req.offset) {
             Ok((projects, total_count)) => {
                 let mut proto_projects = Vec::new();
-                
+
                 for project in projects {
                     match convert_live_set_to_proto(project, &mut *db) {
                         Ok(proto_project) => proto_projects.push(proto_project),
@@ -217,8 +234,11 @@ impl SamplesHandler {
             }
             Err(e) => {
                 error!("Failed to get projects by sample: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
-} 
+}

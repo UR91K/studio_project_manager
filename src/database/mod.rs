@@ -1,19 +1,19 @@
+pub mod batch;
+mod collections;
 mod core;
 mod helpers;
-mod projects;
-mod stats;
-mod tags;
-mod collections;
-mod notes;
-mod tasks;
-mod models;
 mod media;
+mod models;
+mod notes;
 mod plugins;
+mod projects;
 mod samples;
 pub mod search;
-pub mod batch;
+mod stats;
+mod tags;
+mod tasks;
 
-pub use core::LiveSetDatabase;
 pub use batch::BatchInsertManager;
+pub use core::LiveSetDatabase;
 pub use plugins::{PluginStats, PluginUsageInfo};
 pub use samples::{SampleStats, SampleUsageInfo};

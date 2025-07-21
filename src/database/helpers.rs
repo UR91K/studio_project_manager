@@ -84,11 +84,7 @@ pub fn row_to_live_set(row: &Row) -> rusqlite::Result<LiveSet> {
     Ok(LiveSet {
         is_active: row.get("is_active")?,
         id: Uuid::parse_str(&id).map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(
-                0,
-                rusqlite::types::Type::Text,
-                Box::new(e),
-            )
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
         })?,
         file_path: PathBuf::from(row.get::<_, String>("path")?),
         name: row.get("name")?,
@@ -174,4 +170,4 @@ pub fn row_to_live_set(row: &Row) -> rusqlite::Result<LiveSet> {
         samples: HashSet::new(), // These will be loaded separately when needed
         tags: HashSet::new(),    // These will be loaded separately when needed
     })
-} 
+}

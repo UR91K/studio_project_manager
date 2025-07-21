@@ -1,16 +1,18 @@
 //! Common test utilities and shared setup
 
 #![allow(unused)]
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Once};
-use std::env;
-use uuid::Uuid;
 use chrono::{DateTime, Local};
 use rand::{thread_rng, Rng};
+use std::collections::HashSet;
+use std::env;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Once};
+use uuid::Uuid;
 
 use studio_project_manager::live_set::LiveSet;
-use studio_project_manager::models::{AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, TimeSignature};
+use studio_project_manager::models::{
+    AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, TimeSignature,
+};
 use studio_project_manager::scan::parser::ParseResult;
 
 pub mod builders;
@@ -207,11 +209,9 @@ pub fn generate_mock_plugin(index: usize) -> Plugin {
 pub fn generate_mock_live_set(index: usize) -> LiveSet {
     let path = format!("C:/Projects/Test Project {}.als", index);
     let path = Path::new(&path).to_path_buf();
-    
+
     // Create mock plugins
-    let plugins: HashSet<_> = (0..3)
-        .map(|i| generate_mock_plugin(i))
-        .collect();
+    let plugins: HashSet<_> = (0..3).map(|i| generate_mock_plugin(i)).collect();
 
     // Create mock samples
     let samples: HashSet<_> = (0..3)
@@ -302,7 +302,10 @@ mod tests {
 
         // Basic fields
         assert!(!plugin.name.is_empty(), "Plugin should have a name");
-        assert!(!plugin.dev_identifier.is_empty(), "Plugin should have a dev_identifier");
+        assert!(
+            !plugin.dev_identifier.is_empty(),
+            "Plugin should have a dev_identifier"
+        );
         assert!(plugin.installed, "Plugin should be installed by default");
 
         // Dev identifier format
@@ -316,7 +319,10 @@ mod tests {
         // Optional fields
         assert!(plugin.vendor.is_some(), "Plugin should have a vendor");
         assert!(plugin.version.is_some(), "Plugin should have a version");
-        assert!(plugin.sdk_version.is_some(), "Plugin should have an SDK version");
+        assert!(
+            plugin.sdk_version.is_some(),
+            "Plugin should have an SDK version"
+        );
         assert!(plugin.flags.is_some(), "Plugin should have flags");
         assert!(plugin.scanstate.is_some(), "Plugin should have scanstate");
         assert!(plugin.enabled.is_some(), "Plugin should have enabled state");
@@ -328,75 +334,134 @@ mod tests {
 
         // Basic fields
         assert!(!live_set.name.is_empty(), "LiveSet should have a file name");
-        assert!(live_set.file_path.to_string_lossy().ends_with(".als"), "File path should end with .als");
-        assert!(!live_set.file_hash.is_empty(), "LiveSet should have a file hash");
+        assert!(
+            live_set.file_path.to_string_lossy().ends_with(".als"),
+            "File path should end with .als"
+        );
+        assert!(
+            !live_set.file_hash.is_empty(),
+            "LiveSet should have a file hash"
+        );
 
         // Plugins
         assert!(!live_set.plugins.is_empty(), "LiveSet should have plugins");
-        assert_eq!(live_set.plugins.len(), 3, "LiveSet should have exactly 3 plugins");
-        
+        assert_eq!(
+            live_set.plugins.len(),
+            3,
+            "LiveSet should have exactly 3 plugins"
+        );
+
         // Verify plugin uniqueness
         let plugin_ids: HashSet<_> = live_set.plugins.iter().map(|p| p.id).collect();
-        assert_eq!(plugin_ids.len(), live_set.plugins.len(), "All plugins should have unique IDs");
-        
+        assert_eq!(
+            plugin_ids.len(),
+            live_set.plugins.len(),
+            "All plugins should have unique IDs"
+        );
+
         let plugin_names: HashSet<_> = live_set.plugins.iter().map(|p| &p.name).collect();
-        assert_eq!(plugin_names.len(), live_set.plugins.len(), "All plugins should have unique names");
+        assert_eq!(
+            plugin_names.len(),
+            live_set.plugins.len(),
+            "All plugins should have unique names"
+        );
 
         // Samples
         assert!(!live_set.samples.is_empty(), "LiveSet should have samples");
-        assert_eq!(live_set.samples.len(), 3, "LiveSet should have exactly 3 samples");
-        
+        assert_eq!(
+            live_set.samples.len(),
+            3,
+            "LiveSet should have exactly 3 samples"
+        );
+
         // Verify sample uniqueness
         let sample_ids: HashSet<_> = live_set.samples.iter().map(|s| s.id).collect();
-        assert_eq!(sample_ids.len(), live_set.samples.len(), "All samples should have unique IDs");
-        
+        assert_eq!(
+            sample_ids.len(),
+            live_set.samples.len(),
+            "All samples should have unique IDs"
+        );
+
         let sample_paths: HashSet<_> = live_set.samples.iter().map(|s| &s.path).collect();
-        assert_eq!(sample_paths.len(), live_set.samples.len(), "All samples should have unique paths");
+        assert_eq!(
+            sample_paths.len(),
+            live_set.samples.len(),
+            "All samples should have unique paths"
+        );
 
         // Ableton version
-        assert!(live_set.ableton_version.major > 0, "Should have valid major version");
-        assert!(!live_set.ableton_version.beta, "Should not be beta by default");
+        assert!(
+            live_set.ableton_version.major > 0,
+            "Should have valid major version"
+        );
+        assert!(
+            !live_set.ableton_version.beta,
+            "Should not be beta by default"
+        );
 
         // Musical properties
         assert!(live_set.tempo > 0.0, "Should have positive tempo");
-        assert!(live_set.time_signature.numerator > 0, "Should have valid time signature numerator");
-        assert!(live_set.time_signature.denominator > 0, "Should have valid time signature denominator");
+        assert!(
+            live_set.time_signature.numerator > 0,
+            "Should have valid time signature numerator"
+        );
+        assert!(
+            live_set.time_signature.denominator > 0,
+            "Should have valid time signature denominator"
+        );
         assert!(live_set.furthest_bar.is_some(), "Should have furthest bar");
-        assert!(live_set.estimated_duration.is_some(), "Should have estimated duration");
+        assert!(
+            live_set.estimated_duration.is_some(),
+            "Should have estimated duration"
+        );
     }
 
     #[test]
     fn test_generate_test_live_sets_arc() {
         let count = 5;
         let live_sets = generate_test_live_sets_arc(count);
-        
+
         // Basic count
-        assert_eq!(live_sets.len(), count, "Should generate requested number of LiveSets");
-        
+        assert_eq!(
+            live_sets.len(),
+            count,
+            "Should generate requested number of LiveSets"
+        );
+
         // Verify uniqueness across all LiveSets
         let all_project_ids: HashSet<_> = live_sets.iter().map(|ls| ls.id).collect();
-        assert_eq!(all_project_ids.len(), count, "All LiveSets should have unique IDs");
-        
+        assert_eq!(
+            all_project_ids.len(),
+            count,
+            "All LiveSets should have unique IDs"
+        );
+
         let all_file_paths: HashSet<_> = live_sets.iter().map(|ls| &ls.file_path).collect();
-        assert_eq!(all_file_paths.len(), count, "All LiveSets should have unique paths");
-        
+        assert_eq!(
+            all_file_paths.len(),
+            count,
+            "All LiveSets should have unique paths"
+        );
+
         // Verify all plugins and samples across LiveSets
-        let all_plugin_ids: HashSet<_> = live_sets.iter()
+        let all_plugin_ids: HashSet<_> = live_sets
+            .iter()
             .flat_map(|ls| ls.plugins.iter())
             .map(|p| p.id)
             .collect();
         assert_eq!(
-            all_plugin_ids.len(), 
+            all_plugin_ids.len(),
             live_sets.iter().map(|ls| ls.plugins.len()).sum::<usize>(),
             "All plugins across LiveSets should have unique IDs"
         );
-        
-        let all_sample_ids: HashSet<_> = live_sets.iter()
+
+        let all_sample_ids: HashSet<_> = live_sets
+            .iter()
             .flat_map(|ls| ls.samples.iter())
             .map(|s| s.id)
             .collect();
         assert_eq!(
-            all_sample_ids.len(), 
+            all_sample_ids.len(),
             live_sets.iter().map(|ls| ls.samples.len()).sum::<usize>(),
             "All samples across LiveSets should have unique IDs"
         );

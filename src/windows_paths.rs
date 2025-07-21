@@ -47,17 +47,17 @@ fn is_long_path_enabled() -> bool {
 /// Returns a descriptive error message if the path is too long
 pub fn validate_path_with_long_path_support(path: &str) -> Result<(), String> {
     let path_len = path.len();
-    
+
     if path_len <= MAX_PATH_LENGTH_LEGACY {
         // Always OK
         return Ok(());
     }
-    
+
     if path_len <= MAX_PATH_LENGTH_EXTENDED && is_long_path_enabled() {
         // OK if long paths are enabled
         return Ok(());
     }
-    
+
     if is_long_path_enabled() {
         Err(format!(
             "Path exceeds maximum length of {} characters: {} (length: {})",
@@ -74,9 +74,15 @@ pub fn validate_path_with_long_path_support(path: &str) -> Result<(), String> {
 /// Gets a human-readable description of the current path length limits
 pub fn get_path_length_info() -> String {
     if is_long_path_enabled() {
-        format!("Windows long path support enabled (max: {} characters)", MAX_PATH_LENGTH_EXTENDED)
+        format!(
+            "Windows long path support enabled (max: {} characters)",
+            MAX_PATH_LENGTH_EXTENDED
+        )
     } else {
-        format!("Windows legacy path limit (max: {} characters)", MAX_PATH_LENGTH_LEGACY)
+        format!(
+            "Windows legacy path limit (max: {} characters)",
+            MAX_PATH_LENGTH_LEGACY
+        )
     }
 }
 
@@ -100,14 +106,20 @@ mod tests {
     fn test_long_path_validation() {
         // Create a path that exceeds legacy limit but is within extended limit
         let long_path = "C:\\".to_string() + &"a".repeat(300);
-        
+
         // This should either pass (if long paths enabled) or fail with legacy limit
         let result = validate_path_with_long_path_support(&long_path);
-        
+
         if is_long_path_enabled() {
-            assert!(result.is_ok(), "Long path should be valid when long path support is enabled");
+            assert!(
+                result.is_ok(),
+                "Long path should be valid when long path support is enabled"
+            );
         } else {
-            assert!(result.is_err(), "Long path should be invalid when long path support is disabled");
+            assert!(
+                result.is_err(),
+                "Long path should be invalid when long path support is disabled"
+            );
             if let Err(msg) = result {
                 assert!(msg.contains("legacy limit"));
                 assert!(msg.contains("260"));
@@ -119,10 +131,13 @@ mod tests {
     fn test_extremely_long_path_validation() {
         // Create a path that exceeds even the extended limit
         let extremely_long_path = "C:\\".to_string() + &"a".repeat(33000);
-        
+
         let result = validate_path_with_long_path_support(&extremely_long_path);
-        assert!(result.is_err(), "Extremely long path should always be invalid");
-        
+        assert!(
+            result.is_err(),
+            "Extremely long path should always be invalid"
+        );
+
         if let Err(msg) = result {
             if is_long_path_enabled() {
                 assert!(msg.contains("32767"));
@@ -138,4 +153,4 @@ mod tests {
         assert!(!info.is_empty());
         assert!(info.contains("characters"));
     }
-} 
+}

@@ -3,7 +3,10 @@
 use std::collections::HashSet;
 
 use chrono::Local;
-use studio_project_manager::{scan::ParseResult, AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, Scale, TimeSignature, Tonic};
+use studio_project_manager::{
+    scan::ParseResult, AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, Scale,
+    TimeSignature, Tonic,
+};
 use uuid::Uuid;
 
 use super::*;
@@ -278,19 +281,23 @@ pub fn test_multiple_projects() {
 #[allow(unused_variables)]
 fn test_notes_and_tasks() {
     setup("debug");
-    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+    let mut db =
+        LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create a test project
     let project = create_test_live_set();
     let project_id = project.id.to_string();
-    db.insert_project(&project).expect("Failed to insert project");
+    db.insert_project(&project)
+        .expect("Failed to insert project");
 
     // Create a test collection
-    let collection_id = db.create_collection(
-        "Test Collection",
-        Some("A collection for testing notes and tasks"),
-        None
-    ).expect("Failed to create collection");
+    let collection_id = db
+        .create_collection(
+            "Test Collection",
+            Some("A collection for testing notes and tasks"),
+            None,
+        )
+        .expect("Failed to create collection");
 
     // Add project to collection
     db.add_project_to_collection(&collection_id, &project_id)
@@ -299,82 +306,105 @@ fn test_notes_and_tasks() {
     // Test project notes
     db.set_project_notes(&project_id, "Project note: needs mixing")
         .expect("Failed to set project notes");
-    let project_notes = db.get_project_notes(&project_id)
+    let project_notes = db
+        .get_project_notes(&project_id)
         .expect("Failed to get project notes");
-    assert_eq!(project_notes, Some("Project note: needs mixing".to_string()));
+    assert_eq!(
+        project_notes,
+        Some("Project note: needs mixing".to_string())
+    );
 
     // Test collection notes
     db.set_collection_notes(&collection_id, "Collection note: work in progress")
         .expect("Failed to set collection notes");
-    let collection_notes = db.get_collection_notes(&collection_id)
+    let collection_notes = db
+        .get_collection_notes(&collection_id)
         .expect("Failed to get collection notes");
-    assert_eq!(collection_notes, Some("Collection note: work in progress".to_string()));
+    assert_eq!(
+        collection_notes,
+        Some("Collection note: work in progress".to_string())
+    );
 
     // Test adding tasks to project
-    let task1_id = db.add_task(&project_id, "Fix the bass mix")
+    let task1_id = db
+        .add_task(&project_id, "Fix the bass mix")
         .expect("Failed to add task 1");
-    let task2_id = db.add_task(&project_id, "Add more reverb")
+    let task2_id = db
+        .add_task(&project_id, "Add more reverb")
         .expect("Failed to add task 2");
-    let task3_id = db.add_task(&project_id, "Export final version")
+    let task3_id = db
+        .add_task(&project_id, "Export final version")
         .expect("Failed to add task 3");
 
     // Test getting project tasks
-    let project_tasks = db.get_project_tasks(&project_id)
+    let project_tasks = db
+        .get_project_tasks(&project_id)
         .expect("Failed to get project tasks");
     assert_eq!(project_tasks.len(), 3);
-    assert!(project_tasks.iter().any(|(_, desc, _, _)| desc == "Fix the bass mix"));
-    assert!(project_tasks.iter().any(|(_, desc, _, _)| desc == "Add more reverb"));
-    assert!(project_tasks.iter().any(|(_, desc, _, _)| desc == "Export final version"));
+    assert!(project_tasks
+        .iter()
+        .any(|(_, desc, _, _)| desc == "Fix the bass mix"));
+    assert!(project_tasks
+        .iter()
+        .any(|(_, desc, _, _)| desc == "Add more reverb"));
+    assert!(project_tasks
+        .iter()
+        .any(|(_, desc, _, _)| desc == "Export final version"));
 
     // Test completing a task
     db.complete_task(&task1_id, true)
         .expect("Failed to complete task");
-    let project_tasks = db.get_project_tasks(&project_id)
+    let project_tasks = db
+        .get_project_tasks(&project_id)
         .expect("Failed to get project tasks after completion");
-    let completed_task = project_tasks.iter()
+    let completed_task = project_tasks
+        .iter()
         .find(|(id, _, _, _)| id == &task1_id)
         .expect("Couldn't find completed task");
     assert!(completed_task.2); // Check completion status
 
     // Test removing a task
-    db.remove_task(&task2_id)
-        .expect("Failed to remove task");
-    let project_tasks = db.get_project_tasks(&project_id)
+    db.remove_task(&task2_id).expect("Failed to remove task");
+    let project_tasks = db
+        .get_project_tasks(&project_id)
         .expect("Failed to get project tasks after removal");
     assert_eq!(project_tasks.len(), 2);
     assert!(!project_tasks.iter().any(|(id, _, _, _)| id == &task2_id));
 
     // Test getting collection tasks
-    let collection_tasks = db.get_collection_tasks(&collection_id)
+    let collection_tasks = db
+        .get_collection_tasks(&collection_id)
         .expect("Failed to get collection tasks");
     assert_eq!(collection_tasks.len(), 2);
-    
+
     // Verify collection tasks contain project name and correct completion status
-    let completed_collection_task = collection_tasks.iter()
+    let completed_collection_task = collection_tasks
+        .iter()
         .find(|(id, _, desc, _, _)| desc == "Fix the bass mix")
         .expect("Couldn't find completed task in collection");
     assert!(completed_collection_task.3); // Check completion status
     assert_eq!(completed_collection_task.1, "test_project.als"); // Check project name
 
     // Create a second project with tasks
-    let project2 = create_test_live_set_from_parse(
-        "Second Project.als",
-        LiveSetBuilder::new().build()
-    );
+    let project2 =
+        create_test_live_set_from_parse("Second Project.als", LiveSetBuilder::new().build());
     let project2_id = project2.id.to_string();
-    db.insert_project(&project2).expect("Failed to insert second project");
+    db.insert_project(&project2)
+        .expect("Failed to insert second project");
     db.add_project_to_collection(&collection_id, &project2_id)
         .expect("Failed to add second project to collection");
 
     // Add tasks to second project
-    let task4_id = db.add_task(&project2_id, "Record vocals")
+    let task4_id = db
+        .add_task(&project2_id, "Record vocals")
         .expect("Failed to add task to second project");
 
     // Verify collection tasks show tasks from both projects in correct order
-    let collection_tasks = db.get_collection_tasks(&collection_id)
+    let collection_tasks = db
+        .get_collection_tasks(&collection_id)
         .expect("Failed to get collection tasks after adding second project");
     assert_eq!(collection_tasks.len(), 3);
-    
+
     // Tasks should be ordered by project position in collection
     assert_eq!(collection_tasks[0].1, "test_project.als");
     assert_eq!(collection_tasks[2].1, "Second Project.als");
@@ -383,25 +413,30 @@ fn test_notes_and_tasks() {
 #[test]
 fn test_mark_project_deleted() {
     setup("debug");
-    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+    let mut db =
+        LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create and insert a test project
     let live_set = create_test_live_set();
     let project_id = live_set.id;
-    db.insert_project(&live_set).expect("Failed to insert project");
+    db.insert_project(&live_set)
+        .expect("Failed to insert project");
 
     // Mark project as deleted
-    db.mark_project_deleted(&project_id).expect("Failed to mark project as deleted");
+    db.mark_project_deleted(&project_id)
+        .expect("Failed to mark project as deleted");
 
     // Verify project is marked as deleted
-    let deleted_projects = db.get_all_projects_with_status(Some(false))
+    let deleted_projects = db
+        .get_all_projects_with_status(Some(false))
         .expect("Failed to get deleted projects");
     assert_eq!(deleted_projects.len(), 1);
     assert_eq!(deleted_projects[0].id, project_id);
     assert!(!deleted_projects[0].is_active);
 
     // Verify active projects list is empty
-    let active_projects = db.get_all_projects_with_status(Some(true))
+    let active_projects = db
+        .get_all_projects_with_status(Some(true))
         .expect("Failed to get active projects");
     assert!(active_projects.is_empty());
 }
@@ -409,24 +444,29 @@ fn test_mark_project_deleted() {
 #[test]
 fn test_find_deleted_by_hash() {
     setup("debug");
-    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+    let mut db =
+        LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create and insert a test project
     let live_set = create_test_live_set();
     let project_id = live_set.id;
     let file_hash = live_set.file_hash.clone();
-    db.insert_project(&live_set).expect("Failed to insert project");
+    db.insert_project(&live_set)
+        .expect("Failed to insert project");
 
     // Mark project as deleted
-    db.mark_project_deleted(&project_id).expect("Failed to mark project as deleted");
+    db.mark_project_deleted(&project_id)
+        .expect("Failed to mark project as deleted");
 
     // Find deleted project by hash
-    let deleted_projects = db.get_all_projects_with_status(Some(false))
+    let deleted_projects = db
+        .get_all_projects_with_status(Some(false))
         .expect("Failed to get deleted projects");
-    let found_project = deleted_projects.iter()
+    let found_project = deleted_projects
+        .iter()
         .find(|p| p.file_hash == file_hash)
         .expect("Could not find deleted project by hash");
-    
+
     assert_eq!(found_project.id, project_id);
     assert_eq!(found_project.file_hash, file_hash);
     assert!(!found_project.is_active);
@@ -435,15 +475,18 @@ fn test_find_deleted_by_hash() {
 #[test]
 fn test_reactivate_project() {
     setup("debug");
-    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+    let mut db =
+        LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create and insert a test project
     let live_set = create_test_live_set();
     let project_id = live_set.id;
-    db.insert_project(&live_set).expect("Failed to insert project");
+    db.insert_project(&live_set)
+        .expect("Failed to insert project");
 
     // Mark project as deleted
-    db.mark_project_deleted(&project_id).expect("Failed to mark project as deleted");
+    db.mark_project_deleted(&project_id)
+        .expect("Failed to mark project as deleted");
 
     // Reactivate project with new path
     let new_path = PathBuf::from("C:/test/restored_project.als");
@@ -451,7 +494,8 @@ fn test_reactivate_project() {
         .expect("Failed to reactivate project");
 
     // Verify project is reactivated
-    let active_projects = db.get_all_projects_with_status(Some(true))
+    let active_projects = db
+        .get_all_projects_with_status(Some(true))
         .expect("Failed to get active projects");
     assert_eq!(active_projects.len(), 1);
     assert_eq!(active_projects[0].id, project_id);
@@ -459,7 +503,8 @@ fn test_reactivate_project() {
     assert_eq!(active_projects[0].file_path, new_path);
 
     // Verify deleted projects list is empty
-    let deleted_projects = db.get_all_projects_with_status(Some(false))
+    let deleted_projects = db
+        .get_all_projects_with_status(Some(false))
         .expect("Failed to get deleted projects");
     assert!(deleted_projects.is_empty());
 }
@@ -467,32 +512,41 @@ fn test_reactivate_project() {
 #[test]
 fn test_permanent_deletion() {
     setup("debug");
-    let mut db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
+    let mut db =
+        LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Create and insert a test project
     let live_set = create_test_live_set();
     let project_id = live_set.id;
-    db.insert_project(&live_set).expect("Failed to insert project");
+    db.insert_project(&live_set)
+        .expect("Failed to insert project");
 
     // Attempt to permanently delete active project (should fail)
     db.permanently_delete_project(&project_id)
         .expect_err("Should not be able to permanently delete active project");
-    
+
     // Verify project still exists and is active
-    let active_projects = db.get_all_projects_with_status(Some(true))
+    let active_projects = db
+        .get_all_projects_with_status(Some(true))
         .expect("Failed to get active projects");
-    assert_eq!(active_projects.len(), 1, "Active project should still exist");
+    assert_eq!(
+        active_projects.len(),
+        1,
+        "Active project should still exist"
+    );
     assert_eq!(active_projects[0].id, project_id);
 
     // Mark project as deleted
-    db.mark_project_deleted(&project_id).expect("Failed to mark project as deleted");
+    db.mark_project_deleted(&project_id)
+        .expect("Failed to mark project as deleted");
 
     // Now permanent deletion should succeed
     db.permanently_delete_project(&project_id)
         .expect("Failed to permanently delete project");
 
     // Verify project is completely gone
-    let all_projects = db.get_all_projects_with_status(None)
+    let all_projects = db
+        .get_all_projects_with_status(None)
         .expect("Failed to get all projects");
     assert!(all_projects.is_empty());
 }

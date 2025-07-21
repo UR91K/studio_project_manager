@@ -155,7 +155,7 @@ fn test_invalid_tempo() {
     assert_clean_state(&scanner);
 }
 
-//--VERSION TESTS-- 
+//--VERSION TESTS--
 
 #[test]
 fn test_version_parsing() {

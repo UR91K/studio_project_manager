@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use chrono::{DateTime, TimeZone, Utc};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, TimeZone};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 // Mac epoch is January 1, 1904
@@ -189,64 +189,64 @@ pub fn detect_mac_format(data: &[u8]) -> Result<MacFormat, String> {
         }
     }
 
-            // Check for alias format
-        if data.len() >= 8 {
-            let appinfo = &data[0..4];
-            let _recsize = u16::from_be_bytes([data[4], data[5]]);
-            let version = u16::from_be_bytes([data[6], data[7]]);
-            
-            if version == 2 || version == 3 {
-                // Try to parse the alias
-                match parse_mac_alias(data) {
-                    Ok(alias) => return Ok(MacFormat::Alias(alias)),
-                    Err(_) => {
-                        // If parsing fails, still return a basic alias structure
-                        return Ok(MacFormat::Alias(MacAlias {
-                            appinfo: appinfo.to_vec(),
-                            version,
-                            volume: VolumeInfo {
-                                name: String::new(),
-                                creation_date: Utc::now(),
-                                fs_type: Vec::new(),
-                                disk_type: 0,
-                                attribute_flags: 0,
-                                fs_id: Vec::new(),
-                                appleshare_info: None,
-                                driver_name: None,
-                                posix_path: None,
-                                disk_image_alias: None,
-                                dialup_info: None,
-                                network_mount_info: None,
-                            },
-                            target: TargetInfo {
-                                kind: 0,
-                                filename: String::new(),
-                                folder_cnid: 0,
-                                cnid: 0,
-                                creation_date: Utc::now(),
-                                creator_code: None,
-                                type_code: None,
-                                levels_from: -1,
-                                levels_to: -1,
-                                folder_name: None,
-                                cnid_path: None,
-                                carbon_path: None,
-                                posix_path: None,
-                                user_home_prefix_len: None,
-                            },
-                            extra: Vec::new(),
-                        }));
-                    }
+    // Check for alias format
+    if data.len() >= 8 {
+        let appinfo = &data[0..4];
+        let _recsize = u16::from_be_bytes([data[4], data[5]]);
+        let version = u16::from_be_bytes([data[6], data[7]]);
+
+        if version == 2 || version == 3 {
+            // Try to parse the alias
+            match parse_mac_alias(data) {
+                Ok(alias) => return Ok(MacFormat::Alias(alias)),
+                Err(_) => {
+                    // If parsing fails, still return a basic alias structure
+                    return Ok(MacFormat::Alias(MacAlias {
+                        appinfo: appinfo.to_vec(),
+                        version,
+                        volume: VolumeInfo {
+                            name: String::new(),
+                            creation_date: Utc::now(),
+                            fs_type: Vec::new(),
+                            disk_type: 0,
+                            attribute_flags: 0,
+                            fs_id: Vec::new(),
+                            appleshare_info: None,
+                            driver_name: None,
+                            posix_path: None,
+                            disk_image_alias: None,
+                            dialup_info: None,
+                            network_mount_info: None,
+                        },
+                        target: TargetInfo {
+                            kind: 0,
+                            filename: String::new(),
+                            folder_cnid: 0,
+                            cnid: 0,
+                            creation_date: Utc::now(),
+                            creator_code: None,
+                            type_code: None,
+                            levels_from: -1,
+                            levels_to: -1,
+                            folder_name: None,
+                            cnid_path: None,
+                            carbon_path: None,
+                            posix_path: None,
+                            user_home_prefix_len: None,
+                        },
+                        extra: Vec::new(),
+                    }));
                 }
             }
         }
+    }
 
     Ok(MacFormat::Unknown)
 }
 
 pub fn decode_mac_path(data: &[u8]) -> Result<PathBuf, String> {
     let format = detect_mac_format(data)?;
-    
+
     match format {
         MacFormat::Alias(alias) => {
             // Extract path from alias
@@ -257,16 +257,14 @@ pub fn decode_mac_path(data: &[u8]) -> Result<PathBuf, String> {
             if let Some(posix_path) = bookmark.get_posix_path() {
                 return Ok(PathBuf::from(posix_path));
             }
-            
+
             if let Some(path) = bookmark.get_path() {
                 return Ok(PathBuf::from(path));
             }
-            
+
             Err("No path found in bookmark".to_string())
         }
-        MacFormat::Unknown => {
-            Err("Unknown Mac format".to_string())
-        }
+        MacFormat::Unknown => Err("Unknown Mac format".to_string()),
     }
 }
 
@@ -331,11 +329,19 @@ fn parse_alias_v2_data(data: &[u8]) -> Result<(VolumeInfo, TargetInfo), String> 
     offset += 2;
 
     // Volume name (28 bytes, null-terminated)
-    let volname_end = data[offset..offset + 28].iter().position(|&b| b == 0).unwrap_or(28);
+    let volname_end = data[offset..offset + 28]
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(28);
     let volname = String::from_utf8_lossy(&data[offset..offset + volname_end]).to_string();
     offset += 28;
 
-    let voldate = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+    let voldate = u32::from_be_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ]);
     offset += 4;
 
     let fstype = data[offset..offset + 2].to_vec();
@@ -344,18 +350,36 @@ fn parse_alias_v2_data(data: &[u8]) -> Result<(VolumeInfo, TargetInfo), String> 
     let disktype = u16::from_be_bytes([data[offset], data[offset + 1]]);
     offset += 2;
 
-    let folder_cnid = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+    let folder_cnid = u32::from_be_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ]);
     offset += 4;
 
     // Filename (64 bytes, null-terminated)
-    let filename_end = data[offset..offset + 64].iter().position(|&b| b == 0).unwrap_or(64);
+    let filename_end = data[offset..offset + 64]
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(64);
     let filename = String::from_utf8_lossy(&data[offset..offset + filename_end]).to_string();
     offset += 64;
 
-    let cnid = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+    let cnid = u32::from_be_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ]);
     offset += 4;
 
-    let crdate = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+    let crdate = u32::from_be_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ]);
     offset += 4;
 
     let creator_code = data[offset..offset + 4].to_vec();
@@ -370,7 +394,12 @@ fn parse_alias_v2_data(data: &[u8]) -> Result<(VolumeInfo, TargetInfo), String> 
     let levels_to = i16::from_be_bytes([data[offset], data[offset + 1]]);
     offset += 2;
 
-    let volattrs = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+    let volattrs = u32::from_be_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ]);
     offset += 4;
 
     let volfsid = data[offset..offset + 2].to_vec();
@@ -425,37 +454,37 @@ fn parse_alias_v3_data(data: &[u8]) -> Result<(VolumeInfo, TargetInfo), String> 
 fn parse_alias_tags(alias: &mut MacAlias, data: &[u8]) -> Result<(), String> {
     // Start after the main alias structure (8 + 142 = 150 bytes for v2)
     let mut offset = 150;
-    
+
     while offset + 2 <= data.len() {
         // Read tag
         let tag = i16::from_be_bytes([data[offset], data[offset + 1]]);
         offset += 2;
-        
+
         if tag == -1 {
             break; // End of tags
         }
-        
+
         if offset + 2 > data.len() {
             break; // Not enough data for length
         }
-        
+
         // Read length
         let length = i16::from_be_bytes([data[offset], data[offset + 1]]) as usize;
         offset += 2;
-        
+
         if offset + length > data.len() {
             break; // Not enough data for value
         }
-        
+
         // Read value
         let value = data[offset..offset + length].to_vec();
         offset += length;
-        
+
         // Handle padding (odd lengths are padded)
         if length & 1 != 0 && offset < data.len() {
             offset += 1;
         }
-        
+
         // Process tag
         match tag {
             TAG_POSIX_PATH => {
@@ -503,7 +532,7 @@ fn parse_alias_tags(alias: &mut MacAlias, data: &[u8]) -> Result<(), String> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -548,4 +577,4 @@ fn extract_alias_path(alias: &MacAlias) -> Result<PathBuf, String> {
     }
 
     Err("No path information found in alias".to_string())
-} 
+}

@@ -1,11 +1,11 @@
 //! End-to-end integration tests
 
 use crate::common::setup;
-use studio_project_manager::live_set::LiveSet;
-use studio_project_manager::utils::decompress_gzip_file;
 use colored::*;
 use std::path::Path;
 use std::time::Instant;
+use studio_project_manager::live_set::LiveSet;
+use studio_project_manager::utils::decompress_gzip_file;
 
 // TODO: Consider creating comprehensive end-to-end tests here
 // TODO: These would test the complete workflow: scan -> parse -> database -> gRPC
@@ -55,7 +55,7 @@ fn test_load_real_project() {
 #[test]
 fn test_parse_performance() {
     setup("error");
-    
+
     let project_paths = [
         (
             r"C:\Users\judee\Documents\Projects\band with joel\Forkspan Project\Forkspan.als",
@@ -112,10 +112,11 @@ fn test_parse_performance() {
         );
 
         // Get XML size before creating LiveSet
-        let xml_data = decompress_gzip_file(&path.to_path_buf()).expect("Failed to decompress file");
+        let xml_data =
+            decompress_gzip_file(&path.to_path_buf()).expect("Failed to decompress file");
         let xml_size_mb = xml_data.len() as f64 / 1_000_000.0;
         total_size += xml_size_mb;
-        
+
         // Drop xml_data before creating LiveSet
         drop(xml_data);
 
@@ -143,11 +144,7 @@ fn test_parse_performance() {
         );
 
         println!("\n{}", "File Info:".yellow().bold());
-        println!(
-            "  - {}: {}",
-            "Name".bright_black(),
-            live_set.name.cyan()
-        );
+        println!("  - {}: {}", "Name".bright_black(), live_set.name.cyan());
         println!(
             "  - {}: {}",
             "Created".bright_black(),

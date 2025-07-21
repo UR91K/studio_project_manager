@@ -1,10 +1,10 @@
+use log::{debug, error};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Status, Code};
-use log::{debug, error};
+use tonic::{Code, Request, Response, Status};
 
-use crate::database::LiveSetDatabase;
 use super::super::proto::*;
+use crate::database::LiveSetDatabase;
 
 // MOVE FROM server.rs:
 // - get_collections method (lines ~300-342)
@@ -35,26 +35,35 @@ impl CollectionsHandler {
     pub fn new(db: Arc<Mutex<LiveSetDatabase>>) -> Self {
         Self { db }
     }
-    
+
     pub async fn get_collections(
         &self,
         _request: Request<GetCollectionsRequest>,
     ) -> Result<Response<GetCollectionsResponse>, Status> {
         debug!("GetCollections request");
-        
+
         let mut db = self.db.lock().await;
         match db.list_collections() {
             Ok(collections_data) => {
                 let mut collections = Vec::new();
-                
+
                 for (id, name, description) in collections_data {
                     // Get the full collection details including project IDs
                     match db.get_collection_by_id(&id) {
-                        Ok(Some((_, _, _, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                        Ok(Some((
+                            _,
+                            _,
+                            _,
+                            notes,
+                            created_at,
+                            modified_at,
+                            project_ids,
+                            cover_art_id,
+                        ))) => {
                             // Get collection statistics
-                            let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
-                                .unwrap_or((None, 0));
-                            
+                            let (total_duration_seconds, project_count) =
+                                db.get_collection_statistics(&id).unwrap_or((None, 0));
+
                             collections.push(Collection {
                                 id: id.clone(),
                                 name: name.clone(),
@@ -74,17 +83,23 @@ impl CollectionsHandler {
                         }
                         Err(e) => {
                             error!("Failed to get collection details for {}: {:?}", id, e);
-                            return Err(Status::new(Code::Internal, format!("Database error: {}", e)));
+                            return Err(Status::new(
+                                Code::Internal,
+                                format!("Database error: {}", e),
+                            ));
                         }
                     }
                 }
-                
+
                 let response = GetCollectionsResponse { collections };
                 Ok(Response::new(response))
             }
             Err(e) => {
                 error!("Failed to get collections: {:?}", e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -94,16 +109,25 @@ impl CollectionsHandler {
         request: Request<GetCollectionRequest>,
     ) -> Result<Response<GetCollectionResponse>, Status> {
         debug!("GetCollection request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.get_collection_by_id(&req.collection_id) {
-            Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+            Ok(Some((
+                id,
+                name,
+                description,
+                notes,
+                created_at,
+                modified_at,
+                project_ids,
+                cover_art_id,
+            ))) => {
                 // Get collection statistics
-                let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
-                    .unwrap_or((None, 0));
-                    
+                let (total_duration_seconds, project_count) =
+                    db.get_collection_statistics(&id).unwrap_or((None, 0));
+
                 let collection = Collection {
                     id,
                     name,
@@ -116,8 +140,10 @@ impl CollectionsHandler {
                     total_duration_seconds,
                     project_count,
                 };
-                
-                let response = GetCollectionResponse { collection: Some(collection) };
+
+                let response = GetCollectionResponse {
+                    collection: Some(collection),
+                };
                 Ok(Response::new(response))
             }
             Ok(None) => {
@@ -127,7 +153,10 @@ impl CollectionsHandler {
             }
             Err(e) => {
                 error!("Failed to get collection {}: {:?}", req.collection_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -137,19 +166,28 @@ impl CollectionsHandler {
         request: Request<CreateCollectionRequest>,
     ) -> Result<Response<CreateCollectionResponse>, Status> {
         debug!("CreateCollection request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.create_collection(&req.name, req.description.as_deref(), req.notes.as_deref()) {
             Ok(collection_id) => {
                 // Get the created collection details to return in response
                 match db.get_collection_by_id(&collection_id) {
-                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                    Ok(Some((
+                        id,
+                        name,
+                        description,
+                        notes,
+                        created_at,
+                        modified_at,
+                        project_ids,
+                        cover_art_id,
+                    ))) => {
                         // Get collection statistics
-                        let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
-                            .unwrap_or((None, 0));
-                            
+                        let (total_duration_seconds, project_count) =
+                            db.get_collection_statistics(&id).unwrap_or((None, 0));
+
                         let collection = Collection {
                             id,
                             name,
@@ -162,8 +200,10 @@ impl CollectionsHandler {
                             total_duration_seconds,
                             project_count,
                         };
-                        
-                        let response = CreateCollectionResponse { collection: Some(collection) };
+
+                        let response = CreateCollectionResponse {
+                            collection: Some(collection),
+                        };
                         Ok(Response::new(response))
                     }
                     Ok(None) => {
@@ -171,14 +211,23 @@ impl CollectionsHandler {
                         Err(Status::new(Code::Internal, "Collection creation failed"))
                     }
                     Err(e) => {
-                        error!("Failed to retrieve created collection {}: {:?}", collection_id, e);
-                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                        error!(
+                            "Failed to retrieve created collection {}: {:?}",
+                            collection_id, e
+                        );
+                        Err(Status::new(
+                            Code::Internal,
+                            format!("Database error: {}", e),
+                        ))
                     }
                 }
             }
             Err(e) => {
                 error!("Failed to create collection '{}': {:?}", req.name, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -188,10 +237,10 @@ impl CollectionsHandler {
         request: Request<UpdateCollectionRequest>,
     ) -> Result<Response<UpdateCollectionResponse>, Status> {
         debug!("UpdateCollection request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.update_collection(
             &req.collection_id,
             req.name.as_deref(),
@@ -201,11 +250,20 @@ impl CollectionsHandler {
             Ok(()) => {
                 // Get the updated collection details to return in response
                 match db.get_collection_by_id(&req.collection_id) {
-                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
+                    Ok(Some((
+                        id,
+                        name,
+                        description,
+                        notes,
+                        created_at,
+                        modified_at,
+                        project_ids,
+                        cover_art_id,
+                    ))) => {
                         // Get collection statistics
-                        let (total_duration_seconds, project_count) = db.get_collection_statistics(&id)
-                            .unwrap_or((None, 0));
-                            
+                        let (total_duration_seconds, project_count) =
+                            db.get_collection_statistics(&id).unwrap_or((None, 0));
+
                         let collection = Collection {
                             id,
                             name,
@@ -218,8 +276,10 @@ impl CollectionsHandler {
                             total_duration_seconds,
                             project_count,
                         };
-                        
-                        let response = UpdateCollectionResponse { collection: Some(collection) };
+
+                        let response = UpdateCollectionResponse {
+                            collection: Some(collection),
+                        };
                         Ok(Response::new(response))
                     }
                     Ok(None) => {
@@ -227,14 +287,26 @@ impl CollectionsHandler {
                         Err(Status::new(Code::NotFound, "Collection not found"))
                     }
                     Err(e) => {
-                        error!("Failed to retrieve updated collection {}: {:?}", req.collection_id, e);
-                        Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                        error!(
+                            "Failed to retrieve updated collection {}: {:?}",
+                            req.collection_id, e
+                        );
+                        Err(Status::new(
+                            Code::Internal,
+                            format!("Database error: {}", e),
+                        ))
                     }
                 }
             }
             Err(e) => {
-                error!("Failed to update collection '{}': {:?}", req.collection_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                error!(
+                    "Failed to update collection '{}': {:?}",
+                    req.collection_id, e
+                );
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -244,10 +316,10 @@ impl CollectionsHandler {
         request: Request<DeleteCollectionRequest>,
     ) -> Result<Response<DeleteCollectionResponse>, Status> {
         debug!("DeleteCollection request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.delete_collection(&req.collection_id) {
             Ok(()) => {
                 debug!("Successfully deleted collection: {}", req.collection_id);
@@ -255,8 +327,14 @@ impl CollectionsHandler {
                 Ok(Response::new(response))
             }
             Err(e) => {
-                error!("Failed to delete collection '{}': {:?}", req.collection_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                error!(
+                    "Failed to delete collection '{}': {:?}",
+                    req.collection_id, e
+                );
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -266,19 +344,28 @@ impl CollectionsHandler {
         request: Request<AddProjectToCollectionRequest>,
     ) -> Result<Response<AddProjectToCollectionResponse>, Status> {
         debug!("AddProjectToCollection request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.add_project_to_collection(&req.collection_id, &req.project_id) {
             Ok(()) => {
-                debug!("Successfully added project {} to collection {}", req.project_id, req.collection_id);
+                debug!(
+                    "Successfully added project {} to collection {}",
+                    req.project_id, req.collection_id
+                );
                 let response = AddProjectToCollectionResponse { success: true };
                 Ok(Response::new(response))
             }
             Err(e) => {
-                error!("Failed to add project {} to collection {}: {:?}", req.project_id, req.collection_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                error!(
+                    "Failed to add project {} to collection {}: {:?}",
+                    req.project_id, req.collection_id, e
+                );
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -288,19 +375,28 @@ impl CollectionsHandler {
         request: Request<RemoveProjectFromCollectionRequest>,
     ) -> Result<Response<RemoveProjectFromCollectionResponse>, Status> {
         debug!("RemoveProjectFromCollection request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.remove_project_from_collection(&req.collection_id, &req.project_id) {
             Ok(()) => {
-                debug!("Successfully removed project {} from collection {}", req.project_id, req.collection_id);
+                debug!(
+                    "Successfully removed project {} from collection {}",
+                    req.project_id, req.collection_id
+                );
                 let response = RemoveProjectFromCollectionResponse { success: true };
                 Ok(Response::new(response))
             }
             Err(e) => {
-                error!("Failed to remove project {} from collection {}: {:?}", req.project_id, req.collection_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                error!(
+                    "Failed to remove project {} from collection {}: {:?}",
+                    req.project_id, req.collection_id, e
+                );
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -310,20 +406,20 @@ impl CollectionsHandler {
         request: Request<GetCollectionTasksRequest>,
     ) -> Result<Response<GetCollectionTasksResponse>, Status> {
         debug!("GetCollectionTasks request: {:?}", request);
-        
+
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        
+
         match db.get_collection_tasks(&req.collection_id) {
             Ok(tasks_data) => {
                 let mut tasks = Vec::new();
                 let mut completed_count = 0;
-                
+
                 for (id, project_name, description, completed, created_at) in tasks_data {
                     if completed {
                         completed_count += 1;
                     }
-                    
+
                     tasks.push(Task {
                         id,
                         project_id: project_name, // Using project_name in project_id field to show which project the task belongs to
@@ -332,7 +428,7 @@ impl CollectionsHandler {
                         created_at,
                     });
                 }
-                
+
                 let total_tasks = tasks.len() as i32;
                 let pending_tasks = total_tasks - completed_count;
                 let completion_rate = if total_tasks > 0 {
@@ -340,7 +436,7 @@ impl CollectionsHandler {
                 } else {
                     0.0
                 };
-                
+
                 let response = GetCollectionTasksResponse {
                     tasks,
                     total_tasks,
@@ -348,13 +444,22 @@ impl CollectionsHandler {
                     pending_tasks,
                     completion_rate,
                 };
-                
-                debug!("Successfully retrieved {} tasks for collection {}", total_tasks, req.collection_id);
+
+                debug!(
+                    "Successfully retrieved {} tasks for collection {}",
+                    total_tasks, req.collection_id
+                );
                 Ok(Response::new(response))
             }
             Err(e) => {
-                error!("Failed to get tasks for collection {}: {:?}", req.collection_id, e);
-                Err(Status::new(Code::Internal, format!("Database error: {}", e)))
+                error!(
+                    "Failed to get tasks for collection {}: {:?}",
+                    req.collection_id, e
+                );
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
             }
         }
     }
@@ -369,14 +474,24 @@ impl CollectionsHandler {
         let mut db = self.db.lock().await;
         match db.batch_add_projects_to_collection(&req.project_ids, &req.collection_id) {
             Ok(results) => {
-                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
-                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
-                });
-                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
-                    id,
-                    success: result.is_ok(),
-                    error_message: result.err().map(|e| e.to_string()),
-                }).collect();
+                let (successful_count, failed_count) = results.iter().fold(
+                    (0, 0),
+                    |(s, f), (_, r)| {
+                        if r.is_ok() {
+                            (s + 1, f)
+                        } else {
+                            (s, f + 1)
+                        }
+                    },
+                );
+                let batch_results = results
+                    .into_iter()
+                    .map(|(id, result)| BatchOperationResult {
+                        id,
+                        success: result.is_ok(),
+                        error_message: result.err().map(|e| e.to_string()),
+                    })
+                    .collect();
                 Ok(Response::new(BatchAddToCollectionResponse {
                     results: batch_results,
                     successful_count,
@@ -396,14 +511,24 @@ impl CollectionsHandler {
         let mut db = self.db.lock().await;
         match db.batch_remove_projects_from_collection(&req.project_ids, &req.collection_id) {
             Ok(results) => {
-                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
-                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
-                });
-                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
-                    id,
-                    success: result.is_ok(),
-                    error_message: result.err().map(|e| e.to_string()),
-                }).collect();
+                let (successful_count, failed_count) = results.iter().fold(
+                    (0, 0),
+                    |(s, f), (_, r)| {
+                        if r.is_ok() {
+                            (s + 1, f)
+                        } else {
+                            (s, f + 1)
+                        }
+                    },
+                );
+                let batch_results = results
+                    .into_iter()
+                    .map(|(id, result)| BatchOperationResult {
+                        id,
+                        success: result.is_ok(),
+                        error_message: result.err().map(|e| e.to_string()),
+                    })
+                    .collect();
                 Ok(Response::new(BatchRemoveFromCollectionResponse {
                     results: batch_results,
                     successful_count,
@@ -421,12 +546,27 @@ impl CollectionsHandler {
         debug!("BatchCreateCollectionFrom request: {:?}", request);
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        match db.batch_create_collection_from_projects(&req.collection_name, &req.project_ids, req.description.as_deref(), req.notes.as_deref()) {
+        match db.batch_create_collection_from_projects(
+            &req.collection_name,
+            &req.project_ids,
+            req.description.as_deref(),
+            req.notes.as_deref(),
+        ) {
             Ok((collection_id, results)) => {
                 // Get the created collection details to return in response
                 let collection = match db.get_collection_by_id(&collection_id) {
-                    Ok(Some((id, name, description, notes, created_at, modified_at, project_ids, cover_art_id))) => {
-                        let (total_duration_seconds, project_count) = db.get_collection_statistics(&id).unwrap_or((None, 0));
+                    Ok(Some((
+                        id,
+                        name,
+                        description,
+                        notes,
+                        created_at,
+                        modified_at,
+                        project_ids,
+                        cover_art_id,
+                    ))) => {
+                        let (total_duration_seconds, project_count) =
+                            db.get_collection_statistics(&id).unwrap_or((None, 0));
                         Some(Collection {
                             id,
                             name,
@@ -442,14 +582,24 @@ impl CollectionsHandler {
                     }
                     _ => None,
                 };
-                let (successful_count, failed_count) = results.iter().fold((0, 0), |(s, f), (_, r)| {
-                    if r.is_ok() { (s+1, f) } else { (s, f+1) }
-                });
-                let batch_results = results.into_iter().map(|(id, result)| BatchOperationResult {
-                    id,
-                    success: result.is_ok(),
-                    error_message: result.err().map(|e| e.to_string()),
-                }).collect();
+                let (successful_count, failed_count) = results.iter().fold(
+                    (0, 0),
+                    |(s, f), (_, r)| {
+                        if r.is_ok() {
+                            (s + 1, f)
+                        } else {
+                            (s, f + 1)
+                        }
+                    },
+                );
+                let batch_results = results
+                    .into_iter()
+                    .map(|(id, result)| BatchOperationResult {
+                        id,
+                        success: result.is_ok(),
+                        error_message: result.err().map(|e| e.to_string()),
+                    })
+                    .collect();
                 Ok(Response::new(BatchCreateCollectionFromResponse {
                     collection,
                     results: batch_results,
@@ -460,4 +610,4 @@ impl CollectionsHandler {
             Err(e) => Err(Status::internal(format!("Database error: {}", e))),
         }
     }
-} 
+}

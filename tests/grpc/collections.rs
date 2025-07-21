@@ -24,10 +24,10 @@ use studio_project_manager::grpc::proto::studio_project_manager_server::StudioPr
 async fn test_get_collections_empty() {
     let server = create_test_server().await;
     let request = Request::new(GetCollectionsRequest {});
-    
+
     let response = server.get_collections(request).await.unwrap();
     let collections = response.into_inner().collections;
-    
+
     assert_eq!(collections.len(), 0);
 }
 
@@ -39,12 +39,18 @@ async fn test_create_collection() {
         description: Some("A collection for testing".to_string()),
         notes: Some("Test notes".to_string()),
     });
-    
+
     let response = server.create_collection(request).await.unwrap();
-    let collection = response.into_inner().collection.expect("Collection should be present");
-    
+    let collection = response
+        .into_inner()
+        .collection
+        .expect("Collection should be present");
+
     assert_eq!(collection.name, "My Test Collection");
-    assert_eq!(collection.description, Some("A collection for testing".to_string()));
+    assert_eq!(
+        collection.description,
+        Some("A collection for testing".to_string())
+    );
     assert_eq!(collection.notes, Some("Test notes".to_string()));
     assert!(!collection.id.is_empty());
     assert!(collection.created_at > 0);
@@ -55,43 +61,46 @@ async fn test_create_collection() {
 #[tokio::test]
 async fn test_get_collections_with_data() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Test Collection".to_string(),
         description: Some("Test Description".to_string()),
         notes: None,
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let created_collection = create_response.into_inner().collection.unwrap();
-    
+
     // Get all collections
     let get_request = Request::new(GetCollectionsRequest {});
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
-    
+
     assert_eq!(collections.len(), 1);
     assert_eq!(collections[0].id, created_collection.id);
     assert_eq!(collections[0].name, "Test Collection");
-    assert_eq!(collections[0].description, Some("Test Description".to_string()));
+    assert_eq!(
+        collections[0].description,
+        Some("Test Description".to_string())
+    );
     assert_eq!(collections[0].notes, None);
 }
 
 #[tokio::test]
 async fn test_update_collection() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Original Name".to_string(),
         description: Some("Original Description".to_string()),
         notes: None,
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let collection_id = create_response.into_inner().collection.unwrap().id;
-    
+
     // Update the collection
     let update_request = Request::new(UpdateCollectionRequest {
         collection_id: collection_id.clone(),
@@ -99,30 +108,33 @@ async fn test_update_collection() {
         description: Some("Updated Description".to_string()),
         notes: Some("Updated Notes".to_string()),
     });
-    
+
     let update_response = server.update_collection(update_request).await.unwrap();
     let updated_collection = update_response.into_inner().collection.unwrap();
-    
+
     assert_eq!(updated_collection.id, collection_id);
     assert_eq!(updated_collection.name, "Updated Name");
-    assert_eq!(updated_collection.description, Some("Updated Description".to_string()));
+    assert_eq!(
+        updated_collection.description,
+        Some("Updated Description".to_string())
+    );
     assert_eq!(updated_collection.notes, Some("Updated Notes".to_string()));
 }
 
 #[tokio::test]
 async fn test_update_collection_partial() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Original Name".to_string(),
         description: Some("Original Description".to_string()),
         notes: Some("Original Notes".to_string()),
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let collection_id = create_response.into_inner().collection.unwrap().id;
-    
+
     // Update only the name
     let update_request = Request::new(UpdateCollectionRequest {
         collection_id: collection_id.clone(),
@@ -130,26 +142,29 @@ async fn test_update_collection_partial() {
         description: None,
         notes: None,
     });
-    
+
     let update_response = server.update_collection(update_request).await.unwrap();
     let updated_collection = update_response.into_inner().collection.unwrap();
-    
+
     assert_eq!(updated_collection.name, "Updated Name Only");
-    assert_eq!(updated_collection.description, Some("Original Description".to_string()));
+    assert_eq!(
+        updated_collection.description,
+        Some("Original Description".to_string())
+    );
     assert_eq!(updated_collection.notes, Some("Original Notes".to_string()));
 }
 
 #[tokio::test]
 async fn test_update_nonexistent_collection() {
     let server = create_test_server().await;
-    
+
     let update_request = Request::new(UpdateCollectionRequest {
         collection_id: Uuid::new_v4().to_string(),
         name: Some("Should Fail".to_string()),
         description: None,
         notes: None,
     });
-    
+
     let result = server.update_collection(update_request).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), Code::NotFound);
@@ -158,35 +173,35 @@ async fn test_update_nonexistent_collection() {
 #[tokio::test]
 async fn test_add_project_to_collection() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Test Collection".to_string(),
         description: None,
         notes: None,
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let collection_id = create_response.into_inner().collection.unwrap().id;
-    
+
     // Create a test project
     let project_id = create_test_project_in_db(server.db()).await;
-    
+
     // Add project to collection
     let add_request = Request::new(AddProjectToCollectionRequest {
         collection_id: collection_id.clone(),
         project_id: project_id.clone(),
         position: None,
     });
-    
+
     let add_response = server.add_project_to_collection(add_request).await.unwrap();
     assert!(add_response.into_inner().success);
-    
+
     // Verify the project was added
     let get_request = Request::new(GetCollectionsRequest {});
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
-    
+
     assert_eq!(collections.len(), 1);
     assert_eq!(collections[0].project_ids.len(), 1);
     assert_eq!(collections[0].project_ids[0], project_id);
@@ -195,46 +210,52 @@ async fn test_add_project_to_collection() {
 #[tokio::test]
 async fn test_add_multiple_projects_to_collection() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Multi-Project Collection".to_string(),
         description: None,
         notes: None,
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let collection_id = create_response.into_inner().collection.unwrap().id;
-    
+
     // Create multiple test projects
     let project_id1 = create_test_project_in_db(server.db()).await;
     let project_id2 = create_test_project_in_db(server.db()).await;
-    
+
     // Add first project
     let add_request1 = Request::new(AddProjectToCollectionRequest {
         collection_id: collection_id.clone(),
         project_id: project_id1.clone(),
         position: None,
     });
-    
-    let add_response1 = server.add_project_to_collection(add_request1).await.unwrap();
+
+    let add_response1 = server
+        .add_project_to_collection(add_request1)
+        .await
+        .unwrap();
     assert!(add_response1.into_inner().success);
-    
+
     // Add second project
     let add_request2 = Request::new(AddProjectToCollectionRequest {
         collection_id: collection_id.clone(),
         project_id: project_id2.clone(),
         position: None,
     });
-    
-    let add_response2 = server.add_project_to_collection(add_request2).await.unwrap();
+
+    let add_response2 = server
+        .add_project_to_collection(add_request2)
+        .await
+        .unwrap();
     assert!(add_response2.into_inner().success);
-    
+
     // Verify both projects were added in order
     let get_request = Request::new(GetCollectionsRequest {});
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
-    
+
     assert_eq!(collections.len(), 1);
     assert_eq!(collections[0].project_ids.len(), 2);
     assert_eq!(collections[0].project_ids[0], project_id1);
@@ -244,42 +265,45 @@ async fn test_add_multiple_projects_to_collection() {
 #[tokio::test]
 async fn test_remove_project_from_collection() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Test Collection".to_string(),
         description: None,
         notes: None,
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let collection_id = create_response.into_inner().collection.unwrap().id;
-    
+
     // Create and add a test project
     let project_id = create_test_project_in_db(server.db()).await;
-    
+
     let add_request = Request::new(AddProjectToCollectionRequest {
         collection_id: collection_id.clone(),
         project_id: project_id.clone(),
         position: None,
     });
-    
+
     server.add_project_to_collection(add_request).await.unwrap();
-    
+
     // Remove the project
     let remove_request = Request::new(RemoveProjectFromCollectionRequest {
         collection_id: collection_id.clone(),
         project_id: project_id.clone(),
     });
-    
-    let remove_response = server.remove_project_from_collection(remove_request).await.unwrap();
+
+    let remove_response = server
+        .remove_project_from_collection(remove_request)
+        .await
+        .unwrap();
     assert!(remove_response.into_inner().success);
-    
+
     // Verify the project was removed
     let get_request = Request::new(GetCollectionsRequest {});
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
-    
+
     assert_eq!(collections.len(), 1);
     assert_eq!(collections[0].project_ids.len(), 0);
 }
@@ -287,22 +311,22 @@ async fn test_remove_project_from_collection() {
 #[tokio::test]
 async fn test_remove_project_maintains_order() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Order Test Collection".to_string(),
         description: None,
         notes: None,
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let collection_id = create_response.into_inner().collection.unwrap().id;
-    
+
     // Create three test projects
     let project_id1 = create_test_project_in_db(server.db()).await;
     let project_id2 = create_test_project_in_db(server.db()).await;
     let project_id3 = create_test_project_in_db(server.db()).await;
-    
+
     // Add all projects
     for project_id in [&project_id1, &project_id2, &project_id3] {
         let add_request = Request::new(AddProjectToCollectionRequest {
@@ -312,20 +336,23 @@ async fn test_remove_project_maintains_order() {
         });
         server.add_project_to_collection(add_request).await.unwrap();
     }
-    
+
     // Remove the middle project
     let remove_request = Request::new(RemoveProjectFromCollectionRequest {
         collection_id: collection_id.clone(),
         project_id: project_id2.clone(),
     });
-    
-    server.remove_project_from_collection(remove_request).await.unwrap();
-    
+
+    server
+        .remove_project_from_collection(remove_request)
+        .await
+        .unwrap();
+
     // Verify the remaining projects maintain their relative order
     let get_request = Request::new(GetCollectionsRequest {});
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
-    
+
     assert_eq!(collections.len(), 1);
     assert_eq!(collections[0].project_ids.len(), 2);
     assert_eq!(collections[0].project_ids[0], project_id1);
@@ -335,15 +362,15 @@ async fn test_remove_project_maintains_order() {
 #[tokio::test]
 async fn test_add_project_to_nonexistent_collection() {
     let server = create_test_server().await;
-    
+
     let project_id = create_test_project_in_db(server.db()).await;
-    
+
     let add_request = Request::new(AddProjectToCollectionRequest {
         collection_id: Uuid::new_v4().to_string(),
         project_id,
         position: None,
     });
-    
+
     let result = server.add_project_to_collection(add_request).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), Code::Internal);
@@ -352,14 +379,14 @@ async fn test_add_project_to_nonexistent_collection() {
 #[tokio::test]
 async fn test_remove_project_from_nonexistent_collection() {
     let server = create_test_server().await;
-    
+
     let project_id = create_test_project_in_db(server.db()).await;
-    
+
     let remove_request = Request::new(RemoveProjectFromCollectionRequest {
         collection_id: Uuid::new_v4().to_string(),
         project_id,
     });
-    
+
     let result = server.remove_project_from_collection(remove_request).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), Code::Internal);
@@ -368,41 +395,41 @@ async fn test_remove_project_from_nonexistent_collection() {
 #[tokio::test]
 async fn test_collection_timestamps() {
     let server = create_test_server().await;
-    
+
     // Create a collection and record creation time
     let before_create = chrono::Utc::now().timestamp();
-    
+
     let create_request = Request::new(CreateCollectionRequest {
         name: "Timestamp Test".to_string(),
         description: None,
         notes: None,
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let collection = create_response.into_inner().collection.unwrap();
     let after_create = chrono::Utc::now().timestamp();
-    
+
     // Verify creation timestamps
     assert!(collection.created_at >= before_create);
     assert!(collection.created_at <= after_create);
     assert!(collection.modified_at >= before_create);
     assert!(collection.modified_at <= after_create);
-    
+
     // Wait a bit then update (ensure timestamp difference)
     tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
     let before_update = chrono::Utc::now().timestamp();
-    
+
     let update_request = Request::new(UpdateCollectionRequest {
         collection_id: collection.id.clone(),
         name: Some("Updated Name".to_string()),
         description: None,
         notes: None,
     });
-    
+
     let update_response = server.update_collection(update_request).await.unwrap();
     let updated_collection = update_response.into_inner().collection.unwrap();
     let after_update = chrono::Utc::now().timestamp();
-    
+
     // Verify update timestamps
     assert_eq!(updated_collection.created_at, collection.created_at); // Should not change
     assert!(updated_collection.modified_at >= before_update);
@@ -413,26 +440,29 @@ async fn test_collection_timestamps() {
 #[tokio::test]
 async fn test_get_collection() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Test Collection for Get".to_string(),
         description: Some("Test Description".to_string()),
         notes: Some("Test Notes".to_string()),
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let created_collection = create_response.into_inner().collection.unwrap();
     let collection_id = created_collection.id.clone();
-    
+
     // Get the collection by ID
     let get_request = Request::new(GetCollectionRequest {
         collection_id: collection_id.clone(),
     });
-    
+
     let get_response = server.get_collection(get_request).await.unwrap();
-    let collection = get_response.into_inner().collection.expect("Collection should be present");
-    
+    let collection = get_response
+        .into_inner()
+        .collection
+        .expect("Collection should be present");
+
     // Verify the collection details
     assert_eq!(collection.id, collection_id);
     assert_eq!(collection.name, "Test Collection for Get");
@@ -446,15 +476,15 @@ async fn test_get_collection() {
 #[tokio::test]
 async fn test_get_collection_not_found() {
     let server = create_test_server().await;
-    
+
     // Try to get a non-existent collection
     let get_request = Request::new(GetCollectionRequest {
         collection_id: Uuid::new_v4().to_string(),
     });
-    
+
     let get_response = server.get_collection(get_request).await.unwrap();
     let collection = get_response.into_inner().collection;
-    
+
     // Verify the collection is None
     assert!(collection.is_none());
 }
@@ -462,21 +492,21 @@ async fn test_get_collection_not_found() {
 #[tokio::test]
 async fn test_get_collection_with_projects() {
     let server = create_test_server().await;
-    
+
     // Create a collection
     let create_request = Request::new(CreateCollectionRequest {
         name: "Collection with Projects".to_string(),
         description: None,
         notes: None,
     });
-    
+
     let create_response = server.create_collection(create_request).await.unwrap();
     let collection_id = create_response.into_inner().collection.unwrap().id;
-    
+
     // Create and add test projects
     let project_id1 = create_test_project_in_db(server.db()).await;
     let project_id2 = create_test_project_in_db(server.db()).await;
-    
+
     // Add projects to collection
     for project_id in [&project_id1, &project_id2] {
         let add_request = Request::new(AddProjectToCollectionRequest {
@@ -486,15 +516,18 @@ async fn test_get_collection_with_projects() {
         });
         server.add_project_to_collection(add_request).await.unwrap();
     }
-    
+
     // Get the collection by ID
     let get_request = Request::new(GetCollectionRequest {
         collection_id: collection_id.clone(),
     });
-    
+
     let get_response = server.get_collection(get_request).await.unwrap();
-    let collection = get_response.into_inner().collection.expect("Collection should be present");
-    
+    let collection = get_response
+        .into_inner()
+        .collection
+        .expect("Collection should be present");
+
     // Verify the collection has the projects
     assert_eq!(collection.id, collection_id);
     assert_eq!(collection.name, "Collection with Projects");

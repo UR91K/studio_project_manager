@@ -21,13 +21,13 @@
 //!
 //! These types support parsing from strings and provide display formatting for UI purposes.
 
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use std::collections::HashSet;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Arc;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
 use uuid::Uuid;
 
 use once_cell::sync::Lazy;
