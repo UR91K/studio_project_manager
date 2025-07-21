@@ -228,8 +228,13 @@ pub enum ConfigError {
     IoError(io::Error),
     ParseError(toml::de::Error),
     HomeDirError,
+    PathNotFound(String),
+    InvalidDirectory(String),
+    PermissionDenied(String),
     InvalidPath(String),
     InvalidValue(String),
+    PortOutOfRange(u16),
+    ConfigFileNotFound,
 }
 
 impl std::error::Error for ConfigError {}
@@ -240,8 +245,13 @@ impl std::fmt::Display for ConfigError {
             ConfigError::IoError(e) => write!(f, "IO error in config: {}", e),
             ConfigError::ParseError(e) => write!(f, "Failed to parse config file: {}", e),
             ConfigError::HomeDirError => write!(f, "Failed to get home directory"),
+            ConfigError::PathNotFound(path) => write!(f, "Path not found: {}", path),
+            ConfigError::InvalidDirectory(path) => write!(f, "Invalid directory: {}", path),
+            ConfigError::PermissionDenied(path) => write!(f, "Permission denied for path: {}", path),
             ConfigError::InvalidPath(s) => write!(f, "Invalid path in config: {}", s),
             ConfigError::InvalidValue(s) => write!(f, "Invalid configuration value: {}", s),
+            ConfigError::PortOutOfRange(port) => write!(f, "Port {} is out of valid range (1-65535)", port),
+            ConfigError::ConfigFileNotFound => write!(f, "Configuration file not found"),
         }
     }
 }
@@ -256,8 +266,13 @@ impl Clone for ConfigError {
                 ConfigError::ParseError(toml::de::Error::custom(e.to_string()))
             }
             ConfigError::HomeDirError => ConfigError::HomeDirError,
+            ConfigError::PathNotFound(path) => ConfigError::PathNotFound(path.clone()),
+            ConfigError::InvalidDirectory(path) => ConfigError::InvalidDirectory(path.clone()),
+            ConfigError::PermissionDenied(path) => ConfigError::PermissionDenied(path.clone()),
             ConfigError::InvalidPath(s) => ConfigError::InvalidPath(s.clone()),
             ConfigError::InvalidValue(s) => ConfigError::InvalidValue(s.clone()),
+            ConfigError::PortOutOfRange(port) => ConfigError::PortOutOfRange(*port),
+            ConfigError::ConfigFileNotFound => ConfigError::ConfigFileNotFound,
         }
     }
 }

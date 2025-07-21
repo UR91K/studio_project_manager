@@ -9,6 +9,7 @@ fn test_config_validation() {
             // Verify basic validation
             assert!(!config.paths.is_empty(), "At least one path should be configured");
             assert!(config.grpc_port > 0, "gRPC port should be greater than 0");
+            
             // Note: Size limits are now optional and handled by media module
             // 0 means no limit, None means use media module default
             // Test that media formats are available (now handled by media module)
@@ -63,6 +64,22 @@ fn test_config_error_types() {
     
     let invalid_path = ConfigError::InvalidPath("test path".to_string());
     assert!(format!("{}", invalid_path).contains("Invalid path in config"));
+    
+    // Test new error types
+    let path_not_found = ConfigError::PathNotFound("test/path".to_string());
+    assert!(format!("{}", path_not_found).contains("Path not found"));
+    
+    let invalid_directory = ConfigError::InvalidDirectory("test/dir".to_string());
+    assert!(format!("{}", invalid_directory).contains("Invalid directory"));
+    
+    let permission_denied = ConfigError::PermissionDenied("test/path".to_string());
+    assert!(format!("{}", permission_denied).contains("Permission denied"));
+    
+    let port_out_of_range = ConfigError::PortOutOfRange(0);
+    assert!(format!("{}", port_out_of_range).contains("Port 0 is out of valid range"));
+    
+    let config_file_not_found = ConfigError::ConfigFileNotFound;
+    assert!(format!("{}", config_file_not_found).contains("Configuration file not found"));
 }
 
 #[test]
