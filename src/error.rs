@@ -225,10 +225,11 @@ pub enum DatabaseError {
 
 #[derive(Debug)]
 pub enum ConfigError {
-    ReadError(io::Error),
+    IoError(io::Error),
     ParseError(toml::de::Error),
     HomeDirError,
     InvalidPath(String),
+    InvalidValue(String),
 }
 
 impl std::error::Error for ConfigError {}
@@ -236,10 +237,11 @@ impl std::error::Error for ConfigError {}
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigError::ReadError(e) => write!(f, "Failed to read config file: {}", e),
+            ConfigError::IoError(e) => write!(f, "IO error in config: {}", e),
             ConfigError::ParseError(e) => write!(f, "Failed to parse config file: {}", e),
             ConfigError::HomeDirError => write!(f, "Failed to get home directory"),
             ConfigError::InvalidPath(s) => write!(f, "Invalid path in config: {}", s),
+            ConfigError::InvalidValue(s) => write!(f, "Invalid configuration value: {}", s),
         }
     }
 }
@@ -247,21 +249,22 @@ impl std::fmt::Display for ConfigError {
 impl Clone for ConfigError {
     fn clone(&self) -> Self {
         match self {
-            ConfigError::ReadError(e) => {
-                ConfigError::ReadError(io::Error::new(e.kind(), e.to_string()))
+            ConfigError::IoError(e) => {
+                ConfigError::IoError(io::Error::new(e.kind(), e.to_string()))
             }
             ConfigError::ParseError(e) => {
                 ConfigError::ParseError(toml::de::Error::custom(e.to_string()))
             }
             ConfigError::HomeDirError => ConfigError::HomeDirError,
             ConfigError::InvalidPath(s) => ConfigError::InvalidPath(s.clone()),
+            ConfigError::InvalidValue(s) => ConfigError::InvalidValue(s.clone()),
         }
     }
 }
 
 impl From<io::Error> for ConfigError {
     fn from(error: io::Error) -> Self {
-        ConfigError::ReadError(error)
+        ConfigError::IoError(error)
     }
 }
 
