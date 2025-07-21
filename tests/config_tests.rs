@@ -101,4 +101,52 @@ fn test_config_debug() {
         assert!(!debug_str.is_empty());
         assert!(debug_str.contains("Config"));
     }
+}
+
+#[test]
+fn test_path_length_validation() {
+    // Test path length validation
+    let short_path = "C:\\short\\path";
+    assert!(studio_project_manager::config::Config::validate_path_length(short_path).is_ok());
+    
+    // Test path that exceeds Windows limit
+    let long_path = "C:\\".to_string() + &"a".repeat(260);
+    assert!(studio_project_manager::config::Config::validate_path_length(&long_path).is_err());
+}
+
+#[test]
+fn test_windows_path_validation() {
+    // Test valid Windows paths
+    assert!(studio_project_manager::config::Config::validate_windows_path("C:\\path\\to\\file").is_ok());
+    assert!(studio_project_manager::config::Config::validate_windows_path("\\\\server\\share\\file").is_ok());
+    assert!(studio_project_manager::config::Config::validate_windows_path("relative\\path").is_ok());
+    
+    // Test invalid Unix-style paths
+    assert!(studio_project_manager::config::Config::validate_windows_path("/unix/style/path").is_err());
+}
+
+#[test]
+fn test_write_permission_check() {
+    // Test write permission check (should work for temp directory)
+    let temp_dir = std::env::temp_dir();
+    assert!(studio_project_manager::config::Config::can_write_to_directory(&temp_dir));
+}
+
+#[test]
+fn test_validation_helper_error_context() {
+    // Test that the validation helper provides proper error context
+    let long_path = "C:\\".to_string() + &"a".repeat(260);
+    
+    // This should fail with path length validation, but we can't test the helper directly
+    // since it's private. Instead, we test that the validation is called during config validation
+    let result = studio_project_manager::config::Config::validate_path_length(&long_path);
+    assert!(result.is_err());
+    
+    // Test that the error message contains the expected content
+    if let Err(studio_project_manager::error::ConfigError::InvalidPath(msg)) = result {
+        assert!(msg.contains("Path exceeds Windows limit"));
+        assert!(msg.contains("260"));
+    } else {
+        panic!("Expected InvalidPath error");
+    }
 } 

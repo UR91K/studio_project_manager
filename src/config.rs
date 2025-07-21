@@ -1,13 +1,16 @@
 use crate::error::ConfigError;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Maximum depth to traverse when searching for config file relative to executable
 pub const MAX_DIRECTORY_TRAVERSAL_DEPTH: usize = 5;
 
 /// Default gRPC port
 pub const DEFAULT_GRPC_PORT: u16 = 50051;
+
+/// Maximum path length for Windows compatibility (260 characters)
+pub const MAX_PATH_LENGTH: usize = 260;
 
 /// Default maximum cover art size in MB
 pub const DEFAULT_MAX_COVER_ART_SIZE_MB: u32 = 10;
@@ -19,7 +22,7 @@ pub const DEFAULT_MAX_AUDIO_FILE_SIZE_MB: u32 = 50;
 pub const DEFAULT_LOG_LEVEL: &str = "info";
 
 /// Configuration for the Studio Project Manager application
-/// 
+///
 /// # Example Configuration File
 /// ```toml
 /// # List of paths to scan for music projects
@@ -27,22 +30,22 @@ pub const DEFAULT_LOG_LEVEL: &str = "info";
 ///     "C:\\Users\\username\\Documents\\Music Projects",
 ///     "{USER_HOME}\\Documents\\Ableton Projects"
 /// ]
-/// 
+///
 /// # Database file path (optional, defaults to user data directory)
 /// # database_path = "C:\\Users\\username\\AppData\\Roaming\\StudioProjectManager\\ableton_live_sets.db"
-/// 
+///
 /// # Directory containing Ableton Live database files
-/// live_database_dir = "C:\\Users\\username\\AppData\\Roaming\\Ableton\\Live Database"
-/// 
+/// live_database_dir = "C:\\Users\\username\\AppData\\Local\\Ableton\\Live Database"
+///
 /// # gRPC server port (can be overridden by STUDIO_PROJECT_MANAGER_GRPC_PORT env var)
 /// grpc_port = 50051
-/// 
+///
 /// # Logging level: error, warn, info, debug, trace
 /// log_level = "info"
-/// 
+///
 /// # Directory for storing media files
 /// media_storage_dir = "C:\\Users\\username\\AppData\\Roaming\\StudioProjectManager\\media"
-/// 
+///
 /// # Media file size limits (optional, 0 = no limit, omit to use defaults)
 /// # max_cover_art_size_mb = 10
 /// # max_audio_file_size_mb = 50
@@ -76,8 +79,16 @@ impl Config {
     /// Creates a new Config instance by loading from the config file
     fn new() -> Result<Self, ConfigError> {
         let config_path = find_config_file()?;
-        let config_str =
-            std::fs::read_to_string(&config_path).map_err(|e| ConfigError::IoError(e))?;
+        let config_str = std::fs::read_to_string(&config_path).map_err(|e| {
+            ConfigError::IoError(std::io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to read config file {}: {}",
+                    config_path.display(),
+                    e
+                ),
+            ))
+        })?;
 
         let mut config: Config =
             toml::from_str(&config_str).map_err(|e| ConfigError::ParseError(e))?;
@@ -104,13 +115,10 @@ impl Config {
             .replace("{USER_HOME}", home_dir_str);
 
         // If database_path is None or empty, set it to the user's data directory
-        if config.database_path.is_none()
-            || config
-                .database_path
-                .as_deref()
-                .unwrap_or("")
-                .trim()
-                .is_empty()
+        if config
+            .database_path
+            .as_deref()
+            .map_or(true, |s| s.trim().is_empty())
         {
             let data_dir = dirs::data_dir()
                 .ok_or_else(|| ConfigError::InvalidPath("Could not get data directory".into()))?;
@@ -130,7 +138,7 @@ impl Config {
 
         // Validate the configuration and collect warnings
         let warnings = config.validate()?;
-        
+
         // Log warnings if any
         for warning in warnings {
             eprintln!("Config warning: {}", warning);
@@ -142,18 +150,18 @@ impl Config {
     /// Validates the configuration for logical constraints
     fn validate(&self) -> Result<Vec<String>, ConfigError> {
         let mut warnings = Vec::new();
-        
+
         if self.paths.is_empty() {
             return Err(ConfigError::InvalidValue(
                 "At least one path must be specified".into(),
             ));
         }
-        
+
         // Validate gRPC port range (u16 is already limited to 0-65535, so just check for 0)
         if self.grpc_port == 0 {
             return Err(ConfigError::PortOutOfRange(0));
         }
-        
+
         // Validate log level
         let valid_log_levels = ["error", "warn", "info", "debug", "trace"];
         if !valid_log_levels.contains(&self.log_level.as_str()) {
@@ -162,11 +170,11 @@ impl Config {
                 self.log_level, valid_log_levels
             )));
         }
-        
+
         // Validate paths and collect warnings
         let path_warnings = self.validate_paths()?;
         warnings.extend(path_warnings);
-        
+
         Ok(warnings)
     }
 
@@ -174,27 +182,28 @@ impl Config {
     /// Returns a list of warnings for non-critical issues
     fn validate_paths(&self) -> Result<Vec<String>, ConfigError> {
         let mut warnings = Vec::new();
-        
+
         for path in &self.paths {
+            // Validate path length and format
+            Self::validate_single_path(path, "Project path")?;
+
             let path_buf = PathBuf::from(path);
-            
+
             if !path_buf.exists() {
                 warnings.push(format!("Path does not exist: {}", path));
                 continue;
             }
-            
+
             if !path_buf.is_dir() {
                 return Err(ConfigError::InvalidDirectory(path.clone()));
             }
-            
+
             // Check read permissions
             match std::fs::read_dir(&path_buf) {
                 Ok(_) => {
-                    // Check write permissions for directories that need to be writable
-                    if let Ok(metadata) = path_buf.metadata() {
-                        if metadata.permissions().readonly() {
-                            warnings.push(format!("Directory is read-only: {}", path));
-                        }
+                    // Check write permissions using actual file operations
+                    if !Self::can_write_to_directory(&path_buf) {
+                        warnings.push(format!("Directory is not writable: {}", path));
                     }
                 }
                 Err(e) => {
@@ -208,12 +217,22 @@ impl Config {
         }
 
         // Validate live database directory
+        Self::validate_single_path(&self.live_database_dir, "Live database directory")?;
         let live_db_path = PathBuf::from(&self.live_database_dir);
         if !live_db_path.exists() {
-            warnings.push(format!("Live database directory does not exist: {}", self.live_database_dir));
+            warnings.push(format!(
+                "Live database directory does not exist: {}",
+                self.live_database_dir
+            ));
+        }
+
+        // Validate database_path if it exists
+        if let Some(ref db_path) = self.database_path {
+            Self::validate_single_path(db_path, "Database path")?;
         }
 
         // Validate media storage directory
+        Self::validate_single_path(&self.media_storage_dir, "Media storage directory")?;
         let media_storage_path = PathBuf::from(&self.media_storage_dir);
         if !media_storage_path.exists() {
             // Try to create the media storage directory
@@ -221,7 +240,7 @@ impl Config {
                 warnings.push(format!("Could not create media storage directory: {}", e));
             }
         }
-        
+
         Ok(warnings)
     }
 
@@ -235,8 +254,7 @@ impl Config {
 
     /// Returns the log level with environment variable override support
     pub fn log_level(&self) -> String {
-        std::env::var("STUDIO_PROJECT_MANAGER_LOG_LEVEL")
-            .unwrap_or_else(|_| self.log_level.clone())
+        std::env::var("STUDIO_PROJECT_MANAGER_LOG_LEVEL").unwrap_or_else(|_| self.log_level.clone())
     }
 
     /// Returns the database path with environment variable override support
@@ -244,6 +262,77 @@ impl Config {
         std::env::var("STUDIO_PROJECT_MANAGER_DATABASE_PATH")
             .ok()
             .or(self.database_path.clone())
+    }
+
+    /// Validates that a path doesn't exceed Windows path length limits
+    pub fn validate_path_length(path: &str) -> Result<(), ConfigError> {
+        if path.len() > MAX_PATH_LENGTH {
+            return Err(ConfigError::InvalidPath(format!(
+                "Path exceeds Windows limit of {} characters: {}",
+                MAX_PATH_LENGTH, path
+            )));
+        }
+        Ok(())
+    }
+
+    /// Tests if a directory is writable by attempting to create and remove a test file
+    pub fn can_write_to_directory(path: &Path) -> bool {
+        let test_file = path.join(".temp_write_test");
+        std::fs::File::create(&test_file)
+            .and_then(|_| std::fs::remove_file(&test_file))
+            .is_ok()
+    }
+
+    /// Validates Windows path format (drive letter, UNC paths, etc.)
+    pub fn validate_windows_path(path: &str) -> Result<(), ConfigError> {
+        // Check for Unix-style absolute paths (starting with /)
+        if path.starts_with('/') {
+            return Err(ConfigError::InvalidPath(format!(
+                "Unix-style absolute path not supported on Windows: {}",
+                path
+            )));
+        }
+
+        let path_buf = PathBuf::from(path);
+
+        if path_buf.is_absolute() {
+            // Check for valid Windows path components
+            let mut components = path_buf.components();
+
+            if let Some(first) = components.next() {
+                match first {
+                    std::path::Component::Prefix(_prefix) => {
+                        // Valid Windows path prefix (drive letter or UNC)
+                        return Ok(());
+                    }
+                    std::path::Component::RootDir => {
+                        // This shouldn't happen after the string check above, but just in case
+                        return Err(ConfigError::InvalidPath(format!(
+                            "Unix-style absolute path not supported on Windows: {}",
+                            path
+                        )));
+                    }
+                    _ => {
+                        // Other components shouldn't be first in absolute paths
+                        return Err(ConfigError::InvalidPath(format!(
+                            "Invalid Windows path format: {}",
+                            path
+                        )));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validates a single path with length and format checks, providing context in error messages
+    fn validate_single_path(path: &str, path_name: &str) -> Result<(), ConfigError> {
+        Self::validate_path_length(path)
+            .map_err(|e| ConfigError::InvalidPath(format!("{}: {}", path_name, e)))?;
+        Self::validate_windows_path(path)
+            .map_err(|e| ConfigError::InvalidPath(format!("{}: {}", path_name, e)))?;
+        Ok(())
     }
 }
 
@@ -321,12 +410,13 @@ fn default_log_level() -> String {
 
 /// Generates a default configuration file content
 fn generate_default_config() -> Result<String, ConfigError> {
-    // Get proper directories using dirs crate
-    let data_dir = dirs::data_dir()
-        .ok_or_else(|| ConfigError::InvalidPath("Could not get data directory".into()))?;
+    let local_data_dir = dirs::data_local_dir()
+        .ok_or_else(|| ConfigError::InvalidPath("Could not get local data directory".into()))?;
+    let roaming_data_dir = dirs::data_dir()
+        .ok_or_else(|| ConfigError::InvalidPath("Could not get roaming data directory".into()))?;
 
-    let live_database_path = data_dir.join("Ableton").join("Live Database");
-    let media_storage_path = data_dir.join("StudioProjectManager").join("media");
+    let live_database_path = local_data_dir.join("Ableton").join("Live Database");
+    let media_storage_path = roaming_data_dir.join("StudioProjectManager").join("media");
 
     let config_content = format!(
         r#"# config.toml
