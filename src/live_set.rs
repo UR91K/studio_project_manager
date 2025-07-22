@@ -78,6 +78,7 @@ impl LiveSet {
             let xml_data = decompress_gzip_file(&preprocessed.path)?;
             let parser_options = ParseOptions::default();
             let mut parser = Parser::new(&xml_data, parser_options)?;
+            parser.set_current_file(&preprocessed.name);
             parser.parse(&xml_data)?
             // xml_data is dropped here when the block ends
         };

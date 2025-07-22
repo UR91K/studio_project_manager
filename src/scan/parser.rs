@@ -365,6 +365,8 @@ pub struct Parser {
     pub options: ParseOptions,
     /// Line tracking for error reporting and debugging
     line_tracker: LineTrackingBuffer,
+    /// Current file being parsed (for debugging purposes)
+    current_file: Option<String>,
 
     // Sample parsing state
     /// Collected sample file paths discovered during parsing
@@ -469,6 +471,7 @@ impl Parser {
             ableton_version: version,
             options,
             line_tracker: LineTrackingBuffer::new(xml_data.to_vec()),
+            current_file: None,
 
             // Initialize sample parsing state
             sample_paths: HashSet::new(),
@@ -493,6 +496,25 @@ impl Parser {
             current_scale_info: None,
             current_clip_in_key: false,
         })
+    }
+
+    /// Sets the current file name for debugging purposes.
+    ///
+    /// This method allows setting the name of the file being parsed so it can be
+    /// included in log messages for better debugging context.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_name` - The name or path of the file being parsed
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let mut parser = Parser::new(xml_data, options)?;
+    /// parser.set_current_file("MyProject.als");
+    /// ```
+    pub fn set_current_file(&mut self, file_name: &str) {
+        self.current_file = Some(file_name.to_string());
     }
 
     /// Detects the Ableton Live version from XML header information.
@@ -840,7 +862,7 @@ impl Parser {
                     let db_plugin = ableton_db
                         .get_plugin_by_dev_identifier(dev_identifier)
                         .map_err(LiveSetError::DatabaseError)?;
-                    let plugin = Self::make_plugin(dev_identifier, info, db_plugin.as_ref());
+                    let plugin = Self::make_plugin(dev_identifier, info, db_plugin.as_ref(), self.current_file.as_ref());
                     result.plugins.insert(plugin);
                 }
             } else {
@@ -849,7 +871,7 @@ impl Parser {
                     "Failed to open Ableton database, using unverified plugins"
                 );
                 for (dev_identifier, info) in &self.plugin_info_tags {
-                    let plugin = Self::make_plugin(dev_identifier, info, None);
+                    let plugin = Self::make_plugin(dev_identifier, info, None, self.current_file.as_ref());
                     result.plugins.insert(plugin);
                 }
             }
@@ -859,7 +881,7 @@ impl Parser {
                 "Ableton database file not found, using unverified plugins"
             );
             for (dev_identifier, info) in &self.plugin_info_tags {
-                let plugin = Self::make_plugin(dev_identifier, info, None);
+                let plugin = Self::make_plugin(dev_identifier, info, None, self.current_file.as_ref());
                 result.plugins.insert(plugin);
             }
         }
@@ -897,8 +919,9 @@ impl Parser {
         dev_identifier: &str,
         info: &PluginInfo,
         db_plugin: Option<&crate::ableton_db::DbPlugin>,
+        current_file: Option<&String>,
     ) -> Plugin {
-        match db_plugin {
+        let plugin = match db_plugin {
             Some(db_plugin) => {
                 trace_fn!(
                     "finalize_result",
@@ -944,7 +967,24 @@ impl Parser {
                     installed: false,
                 }
             }
+        };
+
+        // Check for blank plugin names and warn
+        if plugin.name.trim().is_empty() {
+            let file_info = current_file
+                .map(|f| format!(" in file: {}", f))
+                .unwrap_or_default();
+            warn_fn!(
+                "finalize_result",
+                "Created plugin with blank name - Device ID: {}, Plugin Info: {:?}{}",
+                dev_identifier,
+                info,
+                file_info
+            );
+            println!();
         }
+
+        plugin
     }
 
     /// Handles XML start/empty element events with context-aware processing.
@@ -1292,6 +1332,22 @@ impl Parser {
                                     if let Some(plugin_format) =
                                         crate::utils::plugins::parse_plugin_format(device_id)
                                     {
+                                        // Check for blank plugin names and warn with line number
+                                        if value.trim().is_empty() {
+                                            let file_info = self.current_file.as_ref()
+                                                .map(|f| format!(" in file: {}", f))
+                                                .unwrap_or_default();
+                                            warn_fn!(
+                                                "handle_start_event",
+                                                "[{}] Found blank plugin name at depth {} for device: {}{}",
+                                                line,
+                                                self.depth,
+                                                device_id,
+                                                file_info
+                                            );
+                                            println!();
+                                        }
+                                        
                                         trace_fn!(
                                             "handle_start_event",
                                             "[{}] Found plugin name at depth {}: {} for device: {}",
