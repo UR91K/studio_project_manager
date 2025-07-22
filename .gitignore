@@ -9,3 +9,4 @@ Cargo.lock
 tests/MIGRATION_GUIDE.md
 spec.md
 test_data/Flock With Us.rpp
+appdata_roaming_junction/
