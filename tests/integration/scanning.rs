@@ -94,7 +94,7 @@ fn test_process_projects_integration() {
 
 #[test]
 fn test_process_projects_with_progress() {
-    setup("error");
+    setup("warn");
 
     // Get expected project paths from config
     let config = CONFIG.as_ref().expect("Failed to load config");
