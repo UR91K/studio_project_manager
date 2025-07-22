@@ -13,6 +13,8 @@ use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
+use crate::common::setup;
+
 struct TestEnvironment {
     temp_dir: TempDir,
     watcher: FileWatcher,
@@ -154,6 +156,7 @@ impl TestEnvironment {
 
 #[tokio::test]
 async fn test_file_creation() {
+    setup("error");
     let env = TestEnvironment::new().await;
     env.wait_for_watcher().await;
 
@@ -177,6 +180,7 @@ async fn test_file_creation() {
 
 #[tokio::test]
 async fn test_file_modification() {
+    setup("error");
     let env = TestEnvironment::new().await;
     env.wait_for_watcher().await;
 
@@ -203,6 +207,7 @@ async fn test_file_modification() {
 
 #[tokio::test]
 async fn test_file_deletion() {
+    setup("error");
     let env = TestEnvironment::new().await;
     env.wait_for_watcher().await;
 
@@ -228,6 +233,7 @@ async fn test_file_deletion() {
 
 #[tokio::test]
 async fn test_file_rename() {
+    setup("error");
     let env = TestEnvironment::new().await;
     env.wait_for_watcher().await;
 
@@ -254,6 +260,7 @@ async fn test_file_rename() {
 
 #[tokio::test]
 async fn test_non_als_file_ignored() {
+    setup("error");
     let env = TestEnvironment::new().await;
 
     // Create a non-.als file
@@ -268,6 +275,7 @@ async fn test_non_als_file_ignored() {
 
 #[tokio::test]
 async fn test_offline_changes() {
+    setup("error");
     let env = TestEnvironment::new().await;
     env.wait_for_watcher().await;
 
@@ -324,6 +332,7 @@ async fn test_offline_changes() {
 
 #[tokio::test]
 async fn test_scan_for_new_files() {
+    setup("error");
     let env = TestEnvironment::new().await;
 
     // Create test files before scanning

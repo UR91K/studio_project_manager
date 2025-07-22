@@ -7,7 +7,7 @@ use studio_project_manager::grpc::StudioProjectManagerServer;
 use studio_project_manager::media::{MediaConfig, MediaStorageManager};
 
 pub async fn create_test_server() -> StudioProjectManagerServer {
-    setup("debug");
+    setup("error");
 
     // Create in-memory database
     let db =

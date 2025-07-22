@@ -520,7 +520,7 @@ async fn test_get_projects_by_deletion_status_pagination() {
 
 #[tokio::test]
 async fn test_project_deletion_workflow() {
-    setup("trace");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();

@@ -5,7 +5,7 @@ use common::{setup, LiveSetBuilder};
 
 #[test]
 fn test_common_utilities_work() {
-    setup("debug");
+    setup("error");
 
     let result = LiveSetBuilder::new()
         .with_plugin("Test Plugin")

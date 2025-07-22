@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use studio_project_manager::scan::project_scanner::ProjectPathScanner;
 use tempfile::TempDir;
 
+use crate::common::setup;
+
 fn create_test_file(dir: &Path, name: &str) -> PathBuf {
     let path = dir.join(name);
     File::create(&path).unwrap();
@@ -13,6 +15,7 @@ fn create_test_file(dir: &Path, name: &str) -> PathBuf {
 
 #[test]
 fn test_basic_file_detection() {
+    setup("error");
     let temp_dir = TempDir::new().unwrap();
 
     // Create test files
@@ -29,6 +32,7 @@ fn test_basic_file_detection() {
 
 #[test]
 fn test_backup_file_exclusion() {
+    setup("error");
     let temp_dir = TempDir::new().unwrap();
 
     // Create test files
@@ -45,6 +49,7 @@ fn test_backup_file_exclusion() {
 
 #[test]
 fn test_nested_directory_scanning() {
+    setup("error");
     let temp_dir = TempDir::new().unwrap();
 
     // Create nested directory structure
@@ -65,6 +70,7 @@ fn test_nested_directory_scanning() {
 
 #[test]
 fn test_multiple_directory_scanning() {
+    setup("error");
     let temp_dir1 = TempDir::new().unwrap();
     let temp_dir2 = TempDir::new().unwrap();
 

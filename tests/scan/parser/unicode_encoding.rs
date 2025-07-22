@@ -10,6 +10,7 @@ use crate::{common::setup, scan::parser::macos_sample_paths};
 
 #[test]
 fn test_play_project_unicode_encoding() {
+    setup("error");
     // Path to the problematic project
     let project_path = PathBuf::from("C:\\Users\\judee\\Documents\\Projects\\Misc\\Play\\Play.als");
 
@@ -116,6 +117,7 @@ fn test_reverse_lookup(live_set: &LiveSet) {
 
 #[test]
 fn test_sample_path_decoding_edge_cases() {
+    setup("error");
     // Test various unicode edge cases that might appear in sample paths
     let test_cases = vec![
         "\u{0002}test.wav",     // Starts with STX
@@ -160,6 +162,7 @@ fn test_sample_path_decoding_edge_cases() {
 
 #[test]
 fn test_unicode_normalization() {
+    setup("error");
     // Test various unicode normalization approaches
     let problematic_string = "\u{0002}Ȁ䌃䅏쯔剳⭈̀᥾匕慮敲㠭㠰吭湯㍥爭眮癡̀㑾痚䣃￿￿";
 
@@ -189,7 +192,7 @@ fn test_unicode_normalization() {
 
 #[test]
 fn test_path_decoding_macos_alias() {
-    setup("trace");
+    setup("error");
     let path_data: &str = macos_sample_paths::HEX_DATA;
     let path = studio_project_manager::utils::samples::decode_sample_path(path_data);
     let path = path.unwrap();
@@ -201,7 +204,7 @@ fn test_path_decoding_macos_alias() {
 
 #[test]
 fn test_path_decoding_valid() {
-    setup("trace");
+    setup("error");
     let path_data: &str = "
             45003A005C00530061006D0070006C00650073005C006400720075006D0073005C0059006F007500
             6E00670020004B00690063006F0020002D0020004300680072006F006E00690063006C0065007300

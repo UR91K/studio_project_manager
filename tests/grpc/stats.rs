@@ -7,7 +7,7 @@ use crate::common::setup;
 
 #[tokio::test]
 async fn test_get_statistics_with_trace_logging() {
-    setup("trace");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -52,7 +52,7 @@ async fn test_get_statistics_with_trace_logging() {
 
 #[tokio::test]
 async fn test_get_statistics_with_empty_database() {
-    setup("trace");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -92,7 +92,7 @@ async fn test_get_statistics_with_empty_database() {
 
 #[tokio::test]
 async fn test_individual_statistics_functions() {
-    setup("trace");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();

@@ -11,7 +11,7 @@ use studio_project_manager::{
 
 #[test]
 fn test_process_projects_integration() {
-    setup("debug");
+    setup("error");
 
     // Get expected project paths from config
     let config = CONFIG.as_ref().expect("Failed to load config");
@@ -94,7 +94,7 @@ fn test_process_projects_integration() {
 
 #[test]
 fn test_process_projects_with_progress() {
-    setup("info");
+    setup("error");
 
     // Get expected project paths from config
     let config = CONFIG.as_ref().expect("Failed to load config");

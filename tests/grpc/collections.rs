@@ -16,12 +16,15 @@
 //! - test_remove_project_from_nonexistent_collection() (line ~1144)
 //! - test_collection_timestamps() (line ~1191)
 
+use crate::common::setup;
+
 use super::*;
 // use crate::common::setup;
 use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
 
 #[tokio::test]
 async fn test_get_collections_empty() {
+    setup("error");
     let server = create_test_server().await;
     let request = Request::new(GetCollectionsRequest {});
 
@@ -33,6 +36,7 @@ async fn test_get_collections_empty() {
 
 #[tokio::test]
 async fn test_create_collection() {
+    setup("error");
     let server = create_test_server().await;
     let request = Request::new(CreateCollectionRequest {
         name: "My Test Collection".to_string(),
@@ -60,6 +64,7 @@ async fn test_create_collection() {
 
 #[tokio::test]
 async fn test_get_collections_with_data() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -89,6 +94,7 @@ async fn test_get_collections_with_data() {
 
 #[tokio::test]
 async fn test_update_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -123,6 +129,7 @@ async fn test_update_collection() {
 
 #[tokio::test]
 async fn test_update_collection_partial() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -156,6 +163,7 @@ async fn test_update_collection_partial() {
 
 #[tokio::test]
 async fn test_update_nonexistent_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     let update_request = Request::new(UpdateCollectionRequest {
@@ -172,6 +180,7 @@ async fn test_update_nonexistent_collection() {
 
 #[tokio::test]
 async fn test_add_project_to_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -209,6 +218,7 @@ async fn test_add_project_to_collection() {
 
 #[tokio::test]
 async fn test_add_multiple_projects_to_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -264,6 +274,7 @@ async fn test_add_multiple_projects_to_collection() {
 
 #[tokio::test]
 async fn test_remove_project_from_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -310,6 +321,7 @@ async fn test_remove_project_from_collection() {
 
 #[tokio::test]
 async fn test_remove_project_maintains_order() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -361,6 +373,7 @@ async fn test_remove_project_maintains_order() {
 
 #[tokio::test]
 async fn test_add_project_to_nonexistent_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     let project_id = create_test_project_in_db(server.db()).await;
@@ -378,6 +391,7 @@ async fn test_add_project_to_nonexistent_collection() {
 
 #[tokio::test]
 async fn test_remove_project_from_nonexistent_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     let project_id = create_test_project_in_db(server.db()).await;
@@ -394,6 +408,7 @@ async fn test_remove_project_from_nonexistent_collection() {
 
 #[tokio::test]
 async fn test_collection_timestamps() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection and record creation time
@@ -439,6 +454,7 @@ async fn test_collection_timestamps() {
 
 #[tokio::test]
 async fn test_get_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -475,6 +491,7 @@ async fn test_get_collection() {
 
 #[tokio::test]
 async fn test_get_collection_not_found() {
+    setup("error");
     let server = create_test_server().await;
 
     // Try to get a non-existent collection
@@ -491,6 +508,7 @@ async fn test_get_collection_not_found() {
 
 #[tokio::test]
 async fn test_get_collection_with_projects() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection

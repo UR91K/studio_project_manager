@@ -165,7 +165,7 @@ async fn test_batch_delete_projects() {
 
 #[tokio::test]
 async fn test_batch_tag_projects() {
-    setup("info");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -437,7 +437,7 @@ async fn test_batch_remove_projects_from_collection() {
 
 #[tokio::test]
 async fn test_batch_create_collection_from_projects() {
-    setup("trace");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -627,7 +627,7 @@ async fn test_batch_delete_tasks() {
 
 #[tokio::test]
 async fn test_batch_operations_with_mixed_success_failure() {
-    setup("trace");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();

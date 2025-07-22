@@ -6,6 +6,8 @@
 //! - Project audio file management
 //! - Error handling and validation
 
+use crate::common::setup;
+
 use super::*;
 use std::collections::VecDeque;
 use studio_project_manager::grpc::media::media_service_server::MediaService;
@@ -14,6 +16,7 @@ use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn test_set_collection_cover_art_success() {
+    setup("error"); // Add this line
     let server = create_test_server().await;
 
     // Create a collection
@@ -65,6 +68,7 @@ async fn test_set_collection_cover_art_success() {
 
 #[tokio::test]
 async fn test_set_collection_cover_art_nonexistent_collection() {
+    setup("error");
     let server = create_test_server().await;
 
     let request = Request::new(SetCollectionCoverArtRequest {
@@ -81,6 +85,7 @@ async fn test_set_collection_cover_art_nonexistent_collection() {
 
 #[tokio::test]
 async fn test_remove_collection_cover_art_success() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a collection
@@ -132,6 +137,7 @@ async fn test_remove_collection_cover_art_success() {
 
 #[tokio::test]
 async fn test_set_project_audio_file_success() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a test project
@@ -177,6 +183,7 @@ async fn test_set_project_audio_file_success() {
 
 #[tokio::test]
 async fn test_remove_project_audio_file_success() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a test project
@@ -222,6 +229,7 @@ async fn test_remove_project_audio_file_success() {
 
 #[tokio::test]
 async fn test_delete_media_success() {
+    setup("error");
     let server = create_test_server().await;
 
     // Create a test media file in the database
@@ -262,6 +270,7 @@ async fn test_delete_media_success() {
 
 #[tokio::test]
 async fn test_delete_media_not_found() {
+    setup("error");
     let server = create_test_server().await;
 
     let request = Request::new(DeleteMediaRequest {
@@ -276,95 +285,9 @@ async fn test_delete_media_not_found() {
     assert!(inner.error_message.unwrap().contains("not found"));
 }
 
-// TODO: Implement streaming tests - these require proper tonic::Streaming mocks
-// #[tokio::test]
-// async fn test_upload_cover_art_streaming() {
-//     let server = create_test_server().await;
-//
-//     // Prepare streaming data
-//     let collection_id = "test-collection-id".to_string();
-//     let filename = "cover.jpg".to_string();
-//     let file_data = b"fake image data";
-//
-//     let requests = vec![
-//         UploadCoverArtRequest {
-//             data: Some(upload_cover_art_request::Data::CollectionId(collection_id)),
-//         },
-//         UploadCoverArtRequest {
-//             data: Some(upload_cover_art_request::Data::Filename(filename)),
-//         },
-//         UploadCoverArtRequest {
-//             data: Some(upload_cover_art_request::Data::Chunk(file_data.to_vec())),
-//         },
-//     ];
-//
-//     let stream = iter(requests.into_iter().map(Ok));
-//     let request = Request::new(stream);
-//
-//     let response = server.upload_cover_art(request).await.unwrap();
-//     let inner = response.into_inner();
-//
-//     assert!(inner.success);
-//     assert!(!inner.media_file_id.is_empty());
-//     assert!(inner.error_message.is_none());
-// }
-
-// #[tokio::test]
-// async fn test_upload_cover_art_missing_collection_id() {
-//     let server = create_test_server().await;
-//
-//     // Only send filename and data, no collection ID
-//     let requests = vec![
-//         UploadCoverArtRequest {
-//             data: Some(upload_cover_art_request::Data::Filename("cover.jpg".to_string())),
-//         },
-//         UploadCoverArtRequest {
-//             data: Some(upload_cover_art_request::Data::Chunk(b"data".to_vec())),
-//         },
-//     ];
-//
-//     let stream = iter(requests.into_iter().map(Ok));
-//     let request = Request::new(stream);
-//
-//     let result = server.upload_cover_art(request).await;
-//     assert!(result.is_err());
-//     assert_eq!(result.unwrap_err().code(), Code::InvalidArgument);
-// }
-
-// #[tokio::test]
-// async fn test_upload_audio_file_streaming() {
-//     let server = create_test_server().await;
-//
-//     // Prepare streaming data
-//     let project_id = "test-project-id".to_string();
-//     let filename = "demo.mp3".to_string();
-//     let file_data = b"fake audio data";
-//
-//     let requests = vec![
-//         UploadAudioFileRequest {
-//             data: Some(upload_audio_file_request::Data::ProjectId(project_id)),
-//         },
-//         UploadAudioFileRequest {
-//             data: Some(upload_audio_file_request::Data::Filename(filename)),
-//         },
-//         UploadAudioFileRequest {
-//             data: Some(upload_audio_file_request::Data::Chunk(file_data.to_vec())),
-//         },
-//     ];
-//
-//     let stream = iter(requests.into_iter().map(Ok));
-//     let request = Request::new(stream);
-//
-//     let response = server.upload_audio_file(request).await.unwrap();
-//     let inner = response.into_inner();
-//
-//     assert!(inner.success);
-//     assert!(!inner.media_file_id.is_empty());
-//     assert!(inner.error_message.is_none());
-// }
-
 #[tokio::test]
 async fn test_download_media_streaming() {
+    setup("error"); 
     let server = create_test_server().await;
 
     // Create a test file using the MediaStorageManager
@@ -425,6 +348,7 @@ async fn test_download_media_streaming() {
 
 #[tokio::test]
 async fn test_download_media_not_found() {
+    setup("error");
     let server = create_test_server().await;
 
     let request = Request::new(DownloadMediaRequest {

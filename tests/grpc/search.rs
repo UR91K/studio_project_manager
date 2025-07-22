@@ -7,7 +7,7 @@ use crate::common::setup;
 
 #[tokio::test]
 async fn test_search_empty_database() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -26,7 +26,7 @@ async fn test_search_empty_database() {
 
 #[tokio::test]
 async fn test_search_basic_query() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -62,7 +62,7 @@ async fn test_search_basic_query() {
 
 #[tokio::test]
 async fn test_search_with_limit() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -89,7 +89,7 @@ async fn test_search_with_limit() {
 
 #[tokio::test]
 async fn test_search_with_offset() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -116,7 +116,7 @@ async fn test_search_with_offset() {
 
 #[tokio::test]
 async fn test_search_with_limit_and_offset() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -143,7 +143,7 @@ async fn test_search_with_limit_and_offset() {
 
 #[tokio::test]
 async fn test_search_empty_query() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -168,7 +168,7 @@ async fn test_search_empty_query() {
 
 #[tokio::test]
 async fn test_search_no_matches() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -192,7 +192,7 @@ async fn test_search_no_matches() {
 
 #[tokio::test]
 async fn test_search_special_characters() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -217,7 +217,7 @@ async fn test_search_special_characters() {
 
 #[tokio::test]
 async fn test_search_unicode_characters() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -242,7 +242,7 @@ async fn test_search_unicode_characters() {
 
 #[tokio::test]
 async fn test_search_case_sensitivity() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -283,7 +283,7 @@ async fn test_search_case_sensitivity() {
 
 #[tokio::test]
 async fn test_search_large_offset() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -310,7 +310,7 @@ async fn test_search_large_offset() {
 
 #[tokio::test]
 async fn test_search_zero_limit() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -335,7 +335,7 @@ async fn test_search_zero_limit() {
 
 #[tokio::test]
 async fn test_search_negative_offset() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -359,7 +359,7 @@ async fn test_search_negative_offset() {
 
 #[tokio::test]
 async fn test_search_project_attributes_returned() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -405,7 +405,7 @@ async fn test_search_project_attributes_returned() {
 // Tests for search operators
 #[tokio::test]
 async fn test_search_name_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -433,7 +433,7 @@ async fn test_search_name_operator() {
 
 #[tokio::test]
 async fn test_search_bpm_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -460,7 +460,7 @@ async fn test_search_bpm_operator() {
 
 #[tokio::test]
 async fn test_search_plugin_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -488,7 +488,7 @@ async fn test_search_plugin_operator() {
 
 #[tokio::test]
 async fn test_search_sample_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -519,7 +519,7 @@ async fn test_search_sample_operator() {
 
 #[tokio::test]
 async fn test_search_tag_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -563,7 +563,7 @@ async fn test_search_tag_operator() {
 
 #[tokio::test]
 async fn test_search_path_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -590,7 +590,7 @@ async fn test_search_path_operator() {
 
 #[tokio::test]
 async fn test_search_version_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -618,7 +618,7 @@ async fn test_search_version_operator() {
 
 #[tokio::test]
 async fn test_search_key_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -646,7 +646,7 @@ async fn test_search_key_operator() {
 
 #[tokio::test]
 async fn test_search_ts_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -675,7 +675,7 @@ async fn test_search_ts_operator() {
 
 #[tokio::test]
 async fn test_search_multiple_operators() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -711,7 +711,7 @@ async fn test_search_multiple_operators() {
 
 #[tokio::test]
 async fn test_search_quoted_operator_value() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -735,7 +735,7 @@ async fn test_search_quoted_operator_value() {
 
 #[tokio::test]
 async fn test_search_unknown_operator() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -759,7 +759,7 @@ async fn test_search_unknown_operator() {
 
 #[tokio::test]
 async fn test_search_operator_no_matches() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -784,7 +784,7 @@ async fn test_search_operator_no_matches() {
 
 #[tokio::test]
 async fn test_search_mixed_text_and_operators() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();

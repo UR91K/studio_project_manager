@@ -7,7 +7,7 @@ use crate::{common::setup, database::core::create_test_live_set};
 
 #[test]
 fn test_tags() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 

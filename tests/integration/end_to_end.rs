@@ -13,7 +13,7 @@ use studio_project_manager::utils::decompress_gzip_file;
 
 #[test]
 fn test_load_real_project() {
-    setup("debug");
+    setup("error");
 
     let project_path = Path::new(
         r"C:\Users\judee\Documents\Projects\band with joel\Forkspan Project\Forkspan.als",

@@ -10,7 +10,7 @@ use crate::{
 
 #[test]
 fn test_collections() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 

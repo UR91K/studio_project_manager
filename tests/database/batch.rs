@@ -8,7 +8,7 @@ use tempfile::tempdir;
 
 #[test]
 fn test_batch_insert() {
-    setup("debug");
+    setup("error");
     // Create a temporary database
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let db_path = temp_dir.path().join("test.db");

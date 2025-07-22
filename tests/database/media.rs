@@ -36,7 +36,7 @@ fn create_test_media_file(
 
 #[test]
 fn test_media_file_crud() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -61,7 +61,7 @@ fn test_media_file_crud() {
 
 #[test]
 fn test_collection_cover_art_management() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -93,7 +93,7 @@ fn test_collection_cover_art_management() {
 
 #[test]
 fn test_project_audio_file_management() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -131,7 +131,7 @@ fn test_project_audio_file_management() {
 
 #[test]
 fn test_media_file_types_separation() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -157,7 +157,7 @@ fn test_media_file_types_separation() {
 
 #[test]
 fn test_media_file_statistics() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -196,7 +196,7 @@ fn test_media_file_statistics() {
 
 #[test]
 fn test_orphaned_media_files() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -239,7 +239,7 @@ fn test_orphaned_media_files() {
 
 #[test]
 fn test_media_file_database_constraints() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -255,7 +255,7 @@ fn test_media_file_database_constraints() {
 
 #[test]
 fn test_media_file_cascade_deletion() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -286,7 +286,7 @@ fn test_media_file_cascade_deletion() {
 
 #[test]
 fn test_media_file_cleanup_on_association_removal() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -315,7 +315,7 @@ fn test_media_file_cleanup_on_association_removal() {
 
 #[test]
 fn test_media_type_conversion() {
-    setup("debug");
+    setup("error");
 
     // Test MediaType enum functionality
     assert_eq!(MediaType::CoverArt.as_str(), "cover_art");
@@ -337,7 +337,7 @@ fn test_media_type_conversion() {
 
 #[test]
 fn test_media_file_validation_edge_cases() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -376,7 +376,7 @@ fn test_media_file_validation_edge_cases() {
 
 #[test]
 fn test_media_file_foreign_key_constraints() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 

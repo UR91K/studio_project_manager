@@ -109,6 +109,7 @@ pub fn create_test_scanner_with_version(version: u32) -> Parser {
 
 #[test]
 fn test_tempo_parsing() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -138,6 +139,7 @@ fn test_tempo_parsing() {
 
 #[test]
 fn test_invalid_tempo() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -159,6 +161,7 @@ fn test_invalid_tempo() {
 
 #[test]
 fn test_version_parsing() {
+    setup("error");
     let xml_data = r#"
         <?xml version="1.0" encoding="UTF-8"?>
             <Ableton MajorVersion="5" MinorVersion="12.0_12049" SchemaChangeCount="7" Creator="Ableton Live 12.0" Revision="5094b92fa547974769f44cf233f1474777d9434a">
@@ -175,6 +178,7 @@ fn test_version_parsing() {
 
 #[test]
 fn test_beta_version() {
+    setup("error");
     let xml_data = r#"<?xml version="1.0" encoding="UTF-8"?>
 <Ableton MajorVersion="5" MinorVersion="12.0_12049" SchemaChangeCount="beta" Creator="Ableton Live 12.0">
     <LiveSet>
@@ -190,6 +194,7 @@ fn test_beta_version() {
 
 #[test]
 fn test_invalid_version_format() {
+    setup("error");
     let xml_data = r#"<?xml version="1.0" encoding="UTF-8"?>
 <Ableton MajorVersion="5" MinorVersion="invalid" SchemaChangeCount="7">
     <LiveSet>
@@ -203,6 +208,7 @@ fn test_invalid_version_format() {
 
 #[test]
 fn test_missing_version() {
+    setup("error");
     let xml_data = r#"<?xml version="1.0" encoding="UTF-8"?>
 <Ableton MajorVersion="5" SchemaChangeCount="7">
     <LiveSet>
@@ -218,6 +224,7 @@ fn test_missing_version() {
 
 #[test]
 fn test_time_signature() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -235,6 +242,7 @@ fn test_time_signature() {
 
 #[test]
 fn test_invalid_time_signature() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -251,6 +259,7 @@ fn test_invalid_time_signature() {
 
 #[test]
 fn test_furthest_bar() {
+    setup("error");
     let mut scanner = create_test_scanner();
     setup_valid_scanner(&mut scanner);
 
@@ -271,6 +280,7 @@ fn test_furthest_bar() {
 
 #[test]
 fn test_furthest_bar_no_tempo() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -294,6 +304,7 @@ fn test_furthest_bar_no_tempo() {
 
 #[test]
 fn test_key_signature_v12() {
+    setup("error");
     let mut scanner = create_test_scanner();
     setup_valid_scanner(&mut scanner);
 
@@ -420,6 +431,7 @@ fn test_key_signature_v12() {
 
 #[test]
 fn test_key_signature_v9() {
+    setup("error");
     let mut scanner = create_test_scanner_with_version(9);
     setup_valid_scanner(&mut scanner);
 
@@ -452,6 +464,7 @@ fn test_key_signature_v9() {
 
 #[test]
 fn test_multiple_key_signatures() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -491,6 +504,7 @@ fn test_multiple_key_signatures() {
 
 #[test]
 fn test_key_signature_not_in_key() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"

@@ -1,3 +1,4 @@
+use crate::common::setup;
 use crate::scan::parser::basic::{
     assert_clean_state, create_test_scanner, process_xml, setup_valid_scanner,
 };
@@ -7,6 +8,7 @@ use studio_project_manager::scan::parser::ParseResult;
 
 #[test]
 fn test_interleaved_plugins_and_sample() {
+    setup("error");
     let mut scanner = create_test_scanner();
     setup_valid_scanner(&mut scanner);
     let mut reader = Reader::from_str(
@@ -98,6 +100,7 @@ fn test_interleaved_plugins_and_sample() {
 
 #[test]
 fn test_malformed_missing_browser_path() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -128,6 +131,7 @@ fn test_malformed_missing_browser_path() {
 
 #[test]
 fn test_malformed_missing_device_id() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -158,6 +162,7 @@ fn test_malformed_missing_device_id() {
 
 #[test]
 fn test_malformed_multiple_plugin_info() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -199,6 +204,7 @@ fn test_malformed_multiple_plugin_info() {
 
 #[test]
 fn test_malformed_invalid_device_id() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -230,6 +236,7 @@ fn test_malformed_invalid_device_id() {
 
 #[test]
 fn test_malformed_orphaned_plugin_desc() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"
@@ -253,6 +260,7 @@ fn test_malformed_orphaned_plugin_desc() {
 
 #[test]
 fn test_malformed_orphaned_plugin_info() {
+    setup("error");
     let mut scanner = create_test_scanner();
     let mut reader = Reader::from_str(
         r#"

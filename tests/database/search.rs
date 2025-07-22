@@ -116,7 +116,7 @@ fn setup_test_projects() -> (
 
 #[test]
 fn test_query_parser() {
-    setup("debug");
+    setup("error");
     let query = SearchQuery::parse("drum mix bpm:120-140 plugin:serum path:\"C:/Music\"");
 
     assert_eq!(query.text, "drum mix");
@@ -127,7 +127,7 @@ fn test_query_parser() {
 
 #[test]
 fn test_query_parser_interleaved() {
-    setup("debug");
+    setup("error");
     let query = SearchQuery::parse("bpm:98 plugin:omnisphere big dog beat path:\"C:/Music\"");
 
     assert_eq!(query.text, "big dog beat");
@@ -138,7 +138,7 @@ fn test_query_parser_interleaved() {
 
 #[test]
 fn test_multiple_operators() {
-    setup("debug");
+    setup("error");
     let query = SearchQuery::parse("tag:wip ts:4/4 key:cmaj");
 
     assert!(query.text.is_empty());
@@ -149,7 +149,7 @@ fn test_multiple_operators() {
 
 #[test]
 fn test_search_plugins() {
-    setup("debug");
+    setup("error");
     let (mut db, _, _, _, _) = setup_test_projects();
 
     // Test specific plugin search
@@ -169,7 +169,7 @@ fn test_search_plugins() {
 
 #[test]
 fn test_search_tempo() {
-    setup("debug");
+    setup("error");
     let (mut db, _, _, _, _) = setup_test_projects();
 
     let tempo_query = SearchQuery::parse("bpm:140");
@@ -184,7 +184,7 @@ fn test_search_tempo() {
 
 #[test]
 fn test_search_exact_creation_date() {
-    setup("debug");
+    setup("error");
     let (mut db, edm_created, _, _, _) = setup_test_projects();
 
     let date_query = SearchQuery::parse("dc:2024-01-01");
@@ -198,7 +198,7 @@ fn test_search_exact_creation_date() {
 
 #[test]
 fn test_search_exact_modified_date() {
-    setup("debug");
+    setup("error");
     let (mut db, _, _, _, rock_modified) = setup_test_projects();
 
     let date_query = SearchQuery::parse("dm:2024-01-04");
@@ -212,7 +212,7 @@ fn test_search_exact_modified_date() {
 
 #[test]
 fn test_search_full_timestamp() {
-    setup("debug");
+    setup("error");
     let (mut db, edm_created, _, _, _) = setup_test_projects();
 
     let date_query = SearchQuery::parse("dc:2024-01-01 08:00:00");
@@ -223,7 +223,7 @@ fn test_search_full_timestamp() {
 
 #[test]
 fn test_search_partial_date_match() {
-    setup("debug");
+    setup("error");
     let (mut db, _, edm_modified, _, _) = setup_test_projects();
 
     let date_query = SearchQuery::parse("dm:2024-01-02");
@@ -237,7 +237,7 @@ fn test_search_partial_date_match() {
 
 #[test]
 fn test_search_nonexistent_date() {
-    setup("debug");
+    setup("error");
     let (mut db, _, _, _, _) = setup_test_projects();
 
     let date_query = SearchQuery::parse("dc:2023-12-31");
@@ -251,7 +251,7 @@ fn test_search_nonexistent_date() {
 
 #[test]
 fn test_search_invalid_date_format() {
-    setup("debug");
+    setup("error");
     let (mut db, _, _, _, _) = setup_test_projects();
 
     let date_query = SearchQuery::parse("dc:not-a-date");
@@ -265,7 +265,7 @@ fn test_search_invalid_date_format() {
 
 #[test]
 fn test_search_year_month_only() {
-    setup("debug");
+    setup("error");
     let (mut db, _, _, _, _) = setup_test_projects();
 
     let date_query = SearchQuery::parse("dc:2024-01");
@@ -279,7 +279,7 @@ fn test_search_year_month_only() {
 
 #[test]
 fn test_search_year_only() {
-    setup("debug");
+    setup("error");
     let (mut db, _, _, _, _) = setup_test_projects();
 
     let date_query = SearchQuery::parse("dc:2024");

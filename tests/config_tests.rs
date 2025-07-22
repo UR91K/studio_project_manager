@@ -1,8 +1,13 @@
+mod common;
+
 use studio_project_manager::config::CONFIG;
 use studio_project_manager::error::ConfigError;
 
+use crate::common::setup;
+
 #[test]
 fn test_config_validation() {
+    setup("error");
     // Test that the global config loads successfully
     match &*CONFIG {
         Ok(config) => {
@@ -59,6 +64,7 @@ fn test_config_validation() {
 
 #[test]
 fn test_config_constants() {
+    setup("error");
     // Test that constants are properly defined
     assert_eq!(studio_project_manager::config::DEFAULT_GRPC_PORT, 50051);
     assert_eq!(studio_project_manager::config::DEFAULT_LOG_LEVEL, "info");
@@ -82,6 +88,7 @@ fn test_config_constants() {
 
 #[test]
 fn test_config_error_types() {
+    setup("error");
     // Test that ConfigError variants exist and work
     let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
     let config_error = ConfigError::IoError(io_error);
@@ -112,6 +119,7 @@ fn test_config_error_types() {
 
 #[test]
 fn test_config_clone() {
+    setup("error");
     // Test that Config can be cloned
     if let Ok(config) = &*CONFIG {
         let cloned = config.clone();
@@ -123,6 +131,7 @@ fn test_config_clone() {
 
 #[test]
 fn test_config_debug() {
+    setup("error");
     // Test that Config can be debug printed
     if let Ok(config) = &*CONFIG {
         let debug_str = format!("{:?}", config);
@@ -133,6 +142,7 @@ fn test_config_debug() {
 
 #[test]
 fn test_path_length_validation() {
+    setup("error");
     // Test path length validation
     let short_path = "C:\\short\\path";
     assert!(studio_project_manager::config::Config::validate_path_length(short_path).is_ok());
@@ -163,6 +173,7 @@ fn test_path_length_validation() {
 
 #[test]
 fn test_windows_path_validation() {
+    setup("error");
     // Test valid Windows paths
     assert!(
         studio_project_manager::config::Config::validate_windows_path("C:\\path\\to\\file").is_ok()
@@ -183,6 +194,7 @@ fn test_windows_path_validation() {
 
 #[test]
 fn test_write_permission_check() {
+    setup("error");
     // Test write permission check (should work for temp directory)
     let temp_dir = std::env::temp_dir();
     assert!(studio_project_manager::config::Config::can_write_to_directory(&temp_dir));
@@ -190,6 +202,7 @@ fn test_write_permission_check() {
 
 #[test]
 fn test_validation_helper_error_context() {
+    setup("error");
     // Test that the validation helper provides proper error context
     let long_path = "C:\\".to_string() + &"a".repeat(260);
 
@@ -227,6 +240,7 @@ fn test_validation_helper_error_context() {
 #[cfg(windows)]
 #[test]
 fn test_windows_path_length_detection() {
+    setup("error");
     // Test that we can access the Windows path length detection
     use studio_project_manager::config::windows_paths;
 

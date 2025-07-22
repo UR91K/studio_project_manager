@@ -7,7 +7,7 @@ use crate::common::setup;
 
 #[tokio::test]
 async fn test_get_tags_empty() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -20,7 +20,7 @@ async fn test_get_tags_empty() {
 
 #[tokio::test]
 async fn test_create_tag() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -41,7 +41,7 @@ async fn test_create_tag() {
 #[allow(unused)]
 #[tokio::test]
 async fn test_get_tags_with_data() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -85,7 +85,7 @@ async fn test_get_tags_with_data() {
 
 #[tokio::test]
 async fn test_tag_project() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -122,7 +122,7 @@ async fn test_tag_project() {
 
 #[tokio::test]
 async fn test_untag_project() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -196,7 +196,7 @@ async fn test_untag_project() {
 
 #[tokio::test]
 async fn test_tag_project_nonexistent_project() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -220,7 +220,7 @@ async fn test_tag_project_nonexistent_project() {
 
 #[tokio::test]
 async fn test_tag_project_nonexistent_tag() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -242,7 +242,7 @@ async fn test_tag_project_nonexistent_tag() {
 #[allow(unused)]
 #[tokio::test]
 async fn test_create_duplicate_tag() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -265,7 +265,7 @@ async fn test_create_duplicate_tag() {
 
 #[tokio::test]
 async fn test_tag_project_idempotent() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -314,7 +314,7 @@ async fn test_tag_project_idempotent() {
 
 #[tokio::test]
 async fn test_update_tag() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -348,7 +348,7 @@ async fn test_update_tag() {
 
 #[tokio::test]
 async fn test_update_tag_nonexistent() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -365,7 +365,7 @@ async fn test_update_tag_nonexistent() {
 
 #[tokio::test]
 async fn test_update_tag_empty_name() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -398,7 +398,7 @@ async fn test_update_tag_empty_name() {
 
 #[tokio::test]
 async fn test_delete_tag() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -442,7 +442,7 @@ async fn test_delete_tag() {
 
 #[tokio::test]
 async fn test_delete_tag_nonexistent() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
 
@@ -459,7 +459,7 @@ async fn test_delete_tag_nonexistent() {
 
 #[tokio::test]
 async fn test_delete_tag_with_project_associations() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();
@@ -516,7 +516,7 @@ async fn test_delete_tag_with_project_associations() {
 
 #[tokio::test]
 async fn test_update_tag_with_project_associations() {
-    setup("debug");
+    setup("error");
 
     let server = create_test_server().await;
     let db = server.db();

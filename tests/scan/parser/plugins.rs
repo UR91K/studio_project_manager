@@ -1,10 +1,11 @@
 //! Plugin parsing tests
 
 use super::*;
-use crate::scan::parser::basic::{create_test_scanner, process_xml, setup_valid_scanner};
+use crate::{common::setup, scan::parser::basic::{create_test_scanner, process_xml, setup_valid_scanner}};
 
 #[test]
 fn test_vst3_audio_fx() {
+    setup("error");
     let mut scanner = create_test_scanner();
     setup_valid_scanner(&mut scanner);
     let mut reader = Reader::from_str(
@@ -47,6 +48,7 @@ fn test_vst3_audio_fx() {
 
 #[test]
 fn test_vst2_audio_fx() {
+    setup("error");
     let mut scanner = create_test_scanner();
     setup_valid_scanner(&mut scanner);
     let mut reader = Reader::from_str(
@@ -89,6 +91,7 @@ fn test_vst2_audio_fx() {
 
 #[test]
 fn test_vst3_instrument() {
+    setup("error");
     let mut scanner = create_test_scanner();
     setup_valid_scanner(&mut scanner);
     let mut reader = Reader::from_str(

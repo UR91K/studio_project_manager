@@ -11,6 +11,8 @@ use studio_project_manager::scan::ParallelParser;
 use studio_project_manager::{AbletonVersion, LiveSet, CONFIG};
 use tempfile::tempdir;
 
+use crate::common::setup;
+
 #[derive(Default)]
 struct ProjectStats {
     version_counts: HashMap<AbletonVersion, usize>,
@@ -228,6 +230,7 @@ impl ProjectStats {
 
 #[test]
 fn test_parallel_parser() {
+    setup("error");
     let dir = tempdir().unwrap();
     let test_file = dir.path().join("test.als");
     let mut file = File::create(&test_file).unwrap();
@@ -246,6 +249,7 @@ fn test_parallel_parser() {
 
 #[test]
 fn test_integrated_scanning_and_parsing() {
+    setup("error");
     // Create a scanner
     let scanner = ProjectPathScanner::new().unwrap();
 

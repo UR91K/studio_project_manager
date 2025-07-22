@@ -1,13 +1,14 @@
 //! Sample parsing tests
 
 use super::*;
-use crate::scan::parser::basic::{
+use crate::{common::setup, scan::parser::basic::{
     assert_clean_state, create_test_scanner, create_test_scanner_with_version, process_xml,
     setup_valid_scanner,
-};
+}};
 
 #[test]
 fn test_sample_v12() {
+    setup("error");
     let mut scanner = create_test_scanner();
     setup_valid_scanner(&mut scanner);
 
@@ -68,6 +69,7 @@ fn test_sample_v12() {
 
 #[test]
 fn test_sample_v10() {
+    setup("error");
     let mut scanner = create_test_scanner_with_version(10);
     setup_valid_scanner(&mut scanner);
 
@@ -135,6 +137,7 @@ fn test_sample_v10() {
 
 #[test]
 fn test_sample_v9() {
+    setup("error");
     let mut scanner = create_test_scanner_with_version(9);
     setup_valid_scanner(&mut scanner);
 
@@ -204,6 +207,7 @@ fn test_sample_v9() {
 
 #[test]
 fn test_sample_v10_macos_alias() {
+    setup("error");
     let mut scanner = create_test_scanner_with_version(10);
     setup_valid_scanner(&mut scanner);
 

@@ -103,7 +103,7 @@ pub fn create_test_live_set_from_parse(name: &str, parse_result: ParseResult) ->
 
 #[test]
 pub fn test_database_initialization() {
-    setup("debug");
+    setup("error");
     let db = LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
     // Verify tables exist
@@ -125,7 +125,7 @@ pub fn test_database_initialization() {
 
 #[test]
 pub fn test_insert_and_retrieve_project() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -196,7 +196,7 @@ pub fn test_insert_and_retrieve_project() {
 
 #[test]
 pub fn test_multiple_projects() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -280,7 +280,7 @@ pub fn test_multiple_projects() {
 #[test]
 #[allow(unused_variables)]
 fn test_notes_and_tasks() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -412,7 +412,7 @@ fn test_notes_and_tasks() {
 
 #[test]
 fn test_mark_project_deleted() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -443,7 +443,7 @@ fn test_mark_project_deleted() {
 
 #[test]
 fn test_find_deleted_by_hash() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -474,7 +474,7 @@ fn test_find_deleted_by_hash() {
 
 #[test]
 fn test_reactivate_project() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 
@@ -511,7 +511,7 @@ fn test_reactivate_project() {
 
 #[test]
 fn test_permanent_deletion() {
-    setup("debug");
+    setup("error");
     let mut db =
         LiveSetDatabase::new(PathBuf::from(":memory:")).expect("Failed to create database");
 

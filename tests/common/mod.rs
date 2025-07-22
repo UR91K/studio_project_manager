@@ -267,6 +267,7 @@ mod tests {
 
     #[test]
     fn test_builder_basic() {
+        setup("error");
         let result = LiveSetBuilder::new()
             .with_plugin("Serum")
             .with_sample("kick.wav")
@@ -286,6 +287,7 @@ mod tests {
 
     #[test]
     fn test_builder_with_installed_plugin() {
+        setup("error");
         let result = LiveSetBuilder::new()
             .with_installed_plugin("Serum", Some("Xfer Records".to_string()))
             .build();
@@ -298,6 +300,7 @@ mod tests {
 
     #[test]
     fn test_generate_mock_plugin() {
+        setup("error");
         let plugin = generate_mock_plugin(1);
 
         // Basic fields
@@ -330,6 +333,7 @@ mod tests {
 
     #[test]
     fn test_generate_mock_live_set() {
+        setup("error");
         let live_set = generate_mock_live_set(1);
 
         // Basic fields
@@ -418,6 +422,7 @@ mod tests {
 
     #[test]
     fn test_generate_test_live_sets_arc() {
+        setup("error");
         let count = 5;
         let live_sets = generate_test_live_sets_arc(count);
 
