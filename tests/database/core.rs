@@ -4,13 +4,13 @@ use std::collections::HashSet;
 
 use chrono::Local;
 use studio_project_manager::{
-    scan::ParseResult, AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, Scale,
+    AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, Scale,
     TimeSignature, Tonic,
 };
 use uuid::Uuid;
 
 use super::*;
-use crate::common::{setup, LiveSetBuilder};
+use crate::common::{create_test_live_set_from_parse, setup, LiveSetBuilder};
 
 pub fn create_test_live_set() -> LiveSet {
     let now = Local::now();
@@ -71,31 +71,6 @@ pub fn create_test_live_set() -> LiveSet {
         furthest_bar: Some(16.0),
         plugins,
         samples,
-        estimated_duration: Some(chrono::Duration::seconds(60)),
-        tags: HashSet::new(),
-    }
-}
-
-pub fn create_test_live_set_from_parse(name: &str, parse_result: ParseResult) -> LiveSet {
-    let now = Local::now();
-    LiveSet {
-        is_active: true,
-        id: Uuid::new_v4(),
-        file_path: PathBuf::from(format!("C:/test/{}", name)),
-        name: name.to_string(),
-        file_hash: format!("test_hash_{}", name),
-        created_time: now,
-        modified_time: now,
-        last_parsed_timestamp: now,
-
-        ableton_version: parse_result.version,
-        key_signature: parse_result.key_signature,
-        tempo: parse_result.tempo,
-        time_signature: parse_result.time_signature,
-        furthest_bar: parse_result.furthest_bar,
-        plugins: parse_result.plugins,
-        samples: parse_result.samples,
-
         estimated_duration: Some(chrono::Duration::seconds(60)),
         tags: HashSet::new(),
     }

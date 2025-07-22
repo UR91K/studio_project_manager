@@ -1,10 +1,7 @@
 //! Database collections functionality tests
 
 use super::*;
-use crate::{
-    common::{setup, LiveSetBuilder},
-    database::core::create_test_live_set_from_parse,
-};
+use crate::common::{create_test_live_set_from_parse, setup, LiveSetBuilder};
 
 // TODO: Create database-level collection tests
 

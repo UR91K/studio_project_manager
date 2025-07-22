@@ -260,6 +260,32 @@ pub fn generate_test_live_sets_arc(count: usize) -> Arc<Vec<LiveSet>> {
     Arc::new(generate_test_live_sets_vec(count))
 }
 
+
+pub fn create_test_live_set_from_parse(name: &str, parse_result: ParseResult) -> LiveSet {
+    let now = Local::now();
+    LiveSet {
+        is_active: true,
+        id: Uuid::new_v4(),
+        file_path: PathBuf::from(format!("C:/test/{}", name)),
+        name: name.to_string(),
+        file_hash: format!("test_hash_{}", name),
+        created_time: now,
+        modified_time: now,
+        last_parsed_timestamp: now,
+
+        ableton_version: parse_result.version,
+        key_signature: parse_result.key_signature,
+        tempo: parse_result.tempo,
+        time_signature: parse_result.time_signature,
+        furthest_bar: parse_result.furthest_bar,
+        plugins: parse_result.plugins,
+        samples: parse_result.samples,
+
+        estimated_duration: Some(chrono::Duration::seconds(60)),
+        tags: HashSet::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
