@@ -94,6 +94,8 @@ pub fn convert_live_set_to_proto(
                 flags: p.flags,
                 scanstate: p.scanstate,
                 enabled: p.enabled,
+                usage_count: None, // Not available in this context
+                project_count: None, // Not available in this context
             })
             .collect(),
 

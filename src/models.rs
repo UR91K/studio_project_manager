@@ -612,6 +612,16 @@ pub struct Plugin {
     pub installed: bool,
 }
 
+/// Plugin data with usage statistics for gRPC responses
+pub struct GrpcPlugin {
+    /// The base plugin data
+    pub plugin: Plugin,
+    /// Number of times this plugin is used across all projects
+    pub usage_count: i32,
+    /// Number of unique projects that use this plugin
+    pub project_count: i32,
+}
+
 #[allow(dead_code)]
 impl Plugin {
     /// Creates a new plugin instance with minimal information.

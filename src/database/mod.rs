@@ -15,5 +15,5 @@ mod tasks;
 
 pub use batch::BatchInsertManager;
 pub use core::LiveSetDatabase;
-pub use plugins::{PluginStats, PluginUsageInfo};
+pub use plugins::PluginStats;
 pub use samples::{SampleStats, SampleUsageInfo};

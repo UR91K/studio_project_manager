@@ -10,8 +10,6 @@ service PluginService {
       returns (GetPluginByInstalledStatusResponse);
   rpc SearchPlugins(SearchPluginsRequest) returns (SearchPluginsResponse);
   rpc GetPluginStats(GetPluginStatsRequest) returns (GetPluginStatsResponse);
-  rpc GetAllPluginUsageNumbers(GetAllPluginUsageNumbersRequest)
-      returns (GetAllPluginUsageNumbersResponse);
   rpc GetProjectsByPlugin(GetProjectsByPluginRequest)
       returns (GetProjectsByPluginResponse);
 }
@@ -69,20 +67,7 @@ message GetPluginStatsResponse {
   map<string, int32> plugins_by_vendor = 6;
 }
 
-// Usage Numbers
-message GetAllPluginUsageNumbersRequest {}
 
-message PluginUsage {
-  string plugin_id = 1;
-  string name = 2;
-  string vendor = 3;
-  int32 usage_count = 4;
-  int32 project_count = 5;  // How many unique projects use this plugin
-}
-
-message GetAllPluginUsageNumbersResponse {
-  repeated PluginUsage plugin_usages = 1;
-}
 
 message GetProjectsByPluginRequest {
   string plugin_id = 1;

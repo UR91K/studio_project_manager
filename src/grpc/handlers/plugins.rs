@@ -28,23 +28,25 @@ impl PluginsHandler {
         let db = self.db.lock().await;
 
         match db.get_all_plugins(req.limit, req.offset, req.sort_by, req.sort_desc) {
-            Ok((plugins, total_count)) => {
-                let proto_plugins = plugins
+            Ok((grpc_plugins, total_count)) => {
+                let proto_plugins = grpc_plugins
                     .into_iter()
-                    .map(|plugin| Plugin {
-                        id: plugin.id.to_string(),
-                        ableton_plugin_id: plugin.plugin_id,
-                        ableton_module_id: plugin.module_id,
-                        dev_identifier: plugin.dev_identifier,
-                        name: plugin.name,
-                        format: plugin.plugin_format.to_string(),
-                        installed: plugin.installed,
-                        vendor: plugin.vendor,
-                        version: plugin.version,
-                        sdk_version: plugin.sdk_version,
-                        flags: plugin.flags,
-                        scanstate: plugin.scanstate,
-                        enabled: plugin.enabled,
+                    .map(|grpc_plugin| Plugin {
+                        id: grpc_plugin.plugin.id.to_string(),
+                        ableton_plugin_id: grpc_plugin.plugin.plugin_id,
+                        ableton_module_id: grpc_plugin.plugin.module_id,
+                        dev_identifier: grpc_plugin.plugin.dev_identifier,
+                        name: grpc_plugin.plugin.name,
+                        format: grpc_plugin.plugin.plugin_format.to_string(),
+                        installed: grpc_plugin.plugin.installed,
+                        vendor: grpc_plugin.plugin.vendor,
+                        version: grpc_plugin.plugin.version,
+                        sdk_version: grpc_plugin.plugin.sdk_version,
+                        flags: grpc_plugin.plugin.flags,
+                        scanstate: grpc_plugin.plugin.scanstate,
+                        enabled: grpc_plugin.plugin.enabled,
+                        usage_count: Some(grpc_plugin.usage_count),
+                        project_count: Some(grpc_plugin.project_count),
                     })
                     .collect();
 
@@ -97,6 +99,8 @@ impl PluginsHandler {
                         flags: plugin.flags,
                         scanstate: plugin.scanstate,
                         enabled: plugin.enabled,
+                        usage_count: None, // This method doesn't include usage data
+                        project_count: None, // This method doesn't include usage data
                     })
                     .collect();
 
@@ -150,6 +154,8 @@ impl PluginsHandler {
                         flags: plugin.flags,
                         scanstate: plugin.scanstate,
                         enabled: plugin.enabled,
+                        usage_count: None, // This method doesn't include usage data
+                        project_count: None, // This method doesn't include usage data
                     })
                     .collect();
 
@@ -199,41 +205,7 @@ impl PluginsHandler {
         }
     }
 
-    pub async fn get_all_plugin_usage_numbers(
-        &self,
-        _request: Request<GetAllPluginUsageNumbersRequest>,
-    ) -> Result<Response<GetAllPluginUsageNumbersResponse>, Status> {
-        debug!("GetAllPluginUsageNumbers request");
 
-        let db = self.db.lock().await;
-
-        match db.get_all_plugin_usage_numbers() {
-            Ok(usage_info) => {
-                let plugin_usages = usage_info
-                    .into_iter()
-                    .map(|info| {
-                        PluginUsage {
-                            plugin_id: info.plugin_id,
-                            name: info.name,
-                            vendor: info.vendor.unwrap_or_default(), // TODO: plugin should not ever be in incorrect state.
-                            usage_count: info.usage_count,
-                            project_count: info.project_count,
-                        }
-                    })
-                    .collect();
-
-                let response = GetAllPluginUsageNumbersResponse { plugin_usages };
-                Ok(Response::new(response))
-            }
-            Err(e) => {
-                error!("Failed to get plugin usage numbers: {:?}", e);
-                Err(Status::new(
-                    Code::Internal,
-                    format!("Database error: {}", e),
-                ))
-            }
-        }
-    }
 
     pub async fn get_projects_by_plugin(
         &self,

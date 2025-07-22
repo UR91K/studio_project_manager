@@ -49,6 +49,8 @@ message Plugin {
   optional int32 flags = 11;
   optional int32 scanstate = 12;
   optional int32 enabled = 13;
+  optional int32 usage_count = 14;
+  optional int32 project_count = 15;
 }
 
 message Sample {

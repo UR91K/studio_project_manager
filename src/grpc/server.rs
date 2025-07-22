@@ -620,14 +620,7 @@ impl plugin_service_server::PluginService for StudioProjectManagerServer {
         self.plugins_handler.get_plugin_stats(request).await
     }
 
-    async fn get_all_plugin_usage_numbers(
-        &self,
-        request: Request<GetAllPluginUsageNumbersRequest>,
-    ) -> Result<Response<GetAllPluginUsageNumbersResponse>, Status> {
-        self.plugins_handler
-            .get_all_plugin_usage_numbers(request)
-            .await
-    }
+
 
     async fn get_projects_by_plugin(
         &self,

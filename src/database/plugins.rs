@@ -1,24 +1,25 @@
 use crate::error::DatabaseError;
-use crate::models::Plugin;
+use crate::models::{Plugin, GrpcPlugin};
 use rusqlite::params;
 use uuid::Uuid;
 
 use super::LiveSetDatabase;
 
 impl LiveSetDatabase {
-    /// Get all plugins with pagination and sorting
+    /// Get all plugins with pagination and sorting, including usage data
     pub fn get_all_plugins(
         &self,
         limit: Option<i32>,
         offset: Option<i32>,
         sort_by: Option<String>,
         sort_desc: Option<bool>,
-    ) -> Result<(Vec<Plugin>, i32), DatabaseError> {
+    ) -> Result<(Vec<GrpcPlugin>, i32), DatabaseError> {
         let sort_column = match sort_by.as_deref() {
             Some("name") => "name",
             Some("vendor") => "vendor",
             Some("installed") => "installed",
             Some("format") => "format",
+            Some("usage_count") => "usage_count",
             _ => "name", // default sort
         };
 
@@ -33,15 +34,30 @@ impl LiveSetDatabase {
             .conn
             .query_row("SELECT COUNT(*) FROM plugins", [], |row| row.get(0))?;
 
-        // Build query with pagination
+        // Build query with pagination and usage data
         let query = format!(
-            "SELECT * FROM plugins ORDER BY {} {} LIMIT ? OFFSET ?",
+            r#"
+            SELECT 
+                p.*,
+                COALESCE(usage_stats.usage_count, 0) as usage_count,
+                COALESCE(usage_stats.project_count, 0) as project_count
+            FROM plugins p
+            LEFT JOIN (
+                SELECT 
+                    pp.plugin_id,
+                    COUNT(pp.project_id) as usage_count,
+                    COUNT(DISTINCT pp.project_id) as project_count
+                FROM project_plugins pp
+                GROUP BY pp.plugin_id
+            ) usage_stats ON usage_stats.plugin_id = p.id
+            ORDER BY {} {} LIMIT ? OFFSET ?
+            "#,
             sort_column, sort_order
         );
 
         let mut stmt = self.conn.prepare(&query)?;
         let rows = stmt.query_map(params![limit.unwrap_or(1000), offset.unwrap_or(0)], |row| {
-            Ok(Plugin {
+            let plugin = Plugin {
                 id: Uuid::new_v4(),
                 plugin_id: row.get("ableton_plugin_id")?,
                 module_id: row.get("ableton_module_id")?,
@@ -58,11 +74,17 @@ impl LiveSetDatabase {
                 flags: row.get("flags")?,
                 scanstate: row.get("scanstate")?,
                 enabled: row.get("enabled")?,
+            };
+            
+            Ok(GrpcPlugin {
+                plugin,
+                usage_count: row.get("usage_count")?,
+                project_count: row.get("project_count")?,
             })
         })?;
 
-        let plugins: Result<Vec<Plugin>, _> = rows.collect();
-        Ok((plugins?, total_count))
+        let grpc_plugins: Result<Vec<GrpcPlugin>, _> = rows.collect();
+        Ok((grpc_plugins?, total_count))
     }
 
     /// Get plugins filtered by installation status
@@ -264,36 +286,7 @@ impl LiveSetDatabase {
         })
     }
 
-    /// Get plugin usage numbers
-    pub fn get_all_plugin_usage_numbers(&self) -> Result<Vec<PluginUsageInfo>, DatabaseError> {
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT 
-                p.id,
-                p.name,
-                p.vendor,
-                COUNT(pp.project_id) as usage_count,
-                COUNT(DISTINCT pp.project_id) as project_count
-            FROM plugins p
-            LEFT JOIN project_plugins pp ON pp.plugin_id = p.id
-            GROUP BY p.id, p.name, p.vendor
-            ORDER BY usage_count DESC
-            "#,
-        )?;
 
-        let rows = stmt.query_map([], |row| {
-            Ok(PluginUsageInfo {
-                plugin_id: row.get("id")?,
-                name: row.get("name")?,
-                vendor: row.get::<_, Option<String>>("vendor")?,
-                usage_count: row.get("usage_count")?,
-                project_count: row.get("project_count")?,
-            })
-        })?;
-
-        let usage_info: Result<Vec<PluginUsageInfo>, _> = rows.collect();
-        Ok(usage_info?)
-    }
 }
 
 pub struct PluginStats {
@@ -305,10 +298,4 @@ pub struct PluginStats {
     pub plugins_by_vendor: std::collections::HashMap<String, i32>,
 }
 
-pub struct PluginUsageInfo {
-    pub plugin_id: String,
-    pub name: String,
-    pub vendor: Option<String>,
-    pub usage_count: i32,
-    pub project_count: i32,
-}
+
