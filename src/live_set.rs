@@ -145,7 +145,7 @@ impl LiveSet {
         Ok(())
     }
 
-    pub fn log_info(&self) {
+    pub fn debug_log_info(&self) {
         println!("{}", "\n=== Live Set Information ===".bold().blue());
 
         // Basic Information

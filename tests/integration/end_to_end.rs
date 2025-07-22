@@ -49,7 +49,7 @@ fn test_load_real_project() {
     );
 
     // Log project info for manual verification
-    live_set.log_info();
+    live_set.debug_log_info();
 }
 
 #[test]
