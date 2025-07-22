@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package studio_project_manager.watcher;
+
+import "common.proto";
+
+// File Watching Service
+service WatcherService {
+  // Copy these RPC methods from your original studio_project_manager.proto:
+  rpc StartWatcher(StartWatcherRequest) returns (StartWatcherResponse);
+  rpc StopWatcher(StopWatcherRequest) returns (StopWatcherResponse);
+  rpc GetWatcherEvents(GetWatcherEventsRequest) returns (stream WatcherEventResponse);
+}
+
+message StartWatcherRequest {
+    repeated string paths = 1;
+  }
+  
+  message StartWatcherResponse {
+    bool success = 1;
+  }
+  
+  message StopWatcherRequest {}
+  
+  message StopWatcherResponse {
+    bool success = 1;
+  }
+  
+  message GetWatcherEventsRequest {}
+  
+  message WatcherEventResponse {
+    studio_project_manager.common.WatcherEventType event_type = 1;
+    string path = 2;
+    optional string new_path = 3;
+    int64 timestamp = 4;
+  }

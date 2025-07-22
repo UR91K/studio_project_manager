@@ -3,10 +3,12 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Code, Request, Response, Status};
 
-use super::super::proto::*;
+use super::super::plugins::*;
+use super::super::common::*;
 use super::utils::convert_live_set_to_proto;
 use crate::database::LiveSetDatabase;
 
+#[derive(Clone)]
 pub struct PluginsHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
 }

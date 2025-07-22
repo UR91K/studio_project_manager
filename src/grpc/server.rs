@@ -10,8 +10,20 @@ use crate::database::LiveSetDatabase;
 use crate::media::{MediaConfig, MediaStorageManager};
 
 use super::handlers::*;
-use super::proto::*;
+use super::common::*;
+use super::projects::*;
+use super::collections::*;
+use super::tasks::*;
+use super::search::*;
+use super::tags::*;
+use super::media::*;
+use super::system::*;
+use super::plugins::*;
+use super::samples::*;
+use super::scanning::*;
+use super::watcher::*;
 
+#[derive(Clone)]
 pub struct StudioProjectManagerServer {
     pub projects_handler: ProjectsHandler,
     pub search_handler: SearchHandler,
@@ -109,9 +121,9 @@ impl StudioProjectManagerServer {
     }
 }
 
+// Project Service Implementation
 #[tonic::async_trait]
-impl studio_project_manager_server::StudioProjectManager for StudioProjectManagerServer {
-    // PROJECT METHODS - delegate to projects_handler
+impl project_service_server::ProjectService for StudioProjectManagerServer {
     async fn get_projects(
         &self,
         request: Request<GetProjectsRequest>,
@@ -187,16 +199,22 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<BatchDeleteProjectsResponse>, Status> {
         self.projects_handler.batch_delete_projects(request).await
     }
+}
 
-    // SEARCH METHODS - delegate to search_handler
+// Search Service Implementation
+#[tonic::async_trait]
+impl search_service_server::SearchService for StudioProjectManagerServer {
     async fn search(
         &self,
         request: Request<SearchRequest>,
     ) -> Result<Response<SearchResponse>, Status> {
         self.search_handler.search(request).await
     }
+}
 
-    // COLLECTION METHODS - delegate to collections_handler
+// Collection Service Implementation
+#[tonic::async_trait]
+impl collection_service_server::CollectionService for StudioProjectManagerServer {
     async fn get_collections(
         &self,
         request: Request<GetCollectionsRequest>,
@@ -284,7 +302,26 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
             .await
     }
 
-    // TAG METHODS - delegate to tags_handler
+    async fn set_collection_cover_art(
+        &self,
+        request: Request<SetCollectionCoverArtRequest>,
+    ) -> Result<Response<SetCollectionCoverArtResponse>, Status> {
+        self.media_handler.set_collection_cover_art(request).await
+    }
+
+    async fn remove_collection_cover_art(
+        &self,
+        request: Request<RemoveCollectionCoverArtRequest>,
+    ) -> Result<Response<RemoveCollectionCoverArtResponse>, Status> {
+        self.media_handler
+            .remove_collection_cover_art(request)
+            .await
+    }
+}
+
+// Tag Service Implementation
+#[tonic::async_trait]
+impl tag_service_server::TagService for StudioProjectManagerServer {
     async fn get_tags(
         &self,
         request: Request<GetTagsRequest>,
@@ -340,8 +377,11 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<BatchUntagProjectsResponse>, Status> {
         self.tags_handler.batch_untag_projects(request).await
     }
+}
 
-    // TASK METHODS - delegate to tasks_handler
+// Task Service Implementation
+#[tonic::async_trait]
+impl task_service_server::TaskService for StudioProjectManagerServer {
     async fn get_project_tasks(
         &self,
         request: Request<GetProjectTasksRequest>,
@@ -383,8 +423,11 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<BatchDeleteTasksResponse>, Status> {
         self.tasks_handler.batch_delete_tasks(request).await
     }
+}
 
-    // MEDIA METHODS - delegate to media_handler
+// Media Service Implementation
+#[tonic::async_trait]
+impl media_service_server::MediaService for StudioProjectManagerServer {
     async fn upload_cover_art(
         &self,
         request: Request<tonic::Streaming<UploadCoverArtRequest>>,
@@ -413,22 +456,6 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         request: Request<DeleteMediaRequest>,
     ) -> Result<Response<DeleteMediaResponse>, Status> {
         self.media_handler.delete_media(request).await
-    }
-
-    async fn set_collection_cover_art(
-        &self,
-        request: Request<SetCollectionCoverArtRequest>,
-    ) -> Result<Response<SetCollectionCoverArtResponse>, Status> {
-        self.media_handler.set_collection_cover_art(request).await
-    }
-
-    async fn remove_collection_cover_art(
-        &self,
-        request: Request<RemoveCollectionCoverArtRequest>,
-    ) -> Result<Response<RemoveCollectionCoverArtResponse>, Status> {
-        self.media_handler
-            .remove_collection_cover_art(request)
-            .await
     }
 
     async fn set_project_audio_file(
@@ -479,8 +506,36 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<CleanupOrphanedMediaResponse>, Status> {
         self.media_handler.cleanup_orphaned_media(request).await
     }
+}
 
-    // SYSTEM METHODS - delegate to system_handler
+// System Service Implementation
+#[tonic::async_trait]
+impl system_service_server::SystemService for StudioProjectManagerServer {
+    async fn get_system_info(
+        &self,
+        request: Request<GetSystemInfoRequest>,
+    ) -> Result<Response<GetSystemInfoResponse>, Status> {
+        self.system_handler.get_system_info(request).await
+    }
+
+    async fn get_statistics(
+        &self,
+        request: Request<GetStatisticsRequest>,
+    ) -> Result<Response<GetStatisticsResponse>, Status> {
+        self.system_handler.get_statistics(request).await
+    }
+
+    async fn export_statistics(
+        &self,
+        request: Request<ExportStatisticsRequest>,
+    ) -> Result<Response<ExportStatisticsResponse>, Status> {
+        self.system_handler.export_statistics(request).await
+    }
+}
+
+// Scanning Service Implementation
+#[tonic::async_trait]
+impl scanning_service_server::ScanningService for StudioProjectManagerServer {
     type ScanDirectoriesStream = ReceiverStream<Result<ScanProgressResponse, Status>>;
 
     async fn scan_directories(
@@ -503,7 +558,11 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<AddSingleProjectResponse>, Status> {
         self.system_handler.add_single_project(request).await
     }
+}
 
+// Watcher Service Implementation
+#[tonic::async_trait]
+impl watcher_service_server::WatcherService for StudioProjectManagerServer {
     async fn start_watcher(
         &self,
         request: Request<StartWatcherRequest>,
@@ -526,29 +585,11 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
     ) -> Result<Response<Self::GetWatcherEventsStream>, Status> {
         self.system_handler.get_watcher_events(request).await
     }
+}
 
-    async fn get_system_info(
-        &self,
-        request: Request<GetSystemInfoRequest>,
-    ) -> Result<Response<GetSystemInfoResponse>, Status> {
-        self.system_handler.get_system_info(request).await
-    }
-
-    async fn get_statistics(
-        &self,
-        request: Request<GetStatisticsRequest>,
-    ) -> Result<Response<GetStatisticsResponse>, Status> {
-        self.system_handler.get_statistics(request).await
-    }
-
-    async fn export_statistics(
-        &self,
-        request: Request<ExportStatisticsRequest>,
-    ) -> Result<Response<ExportStatisticsResponse>, Status> {
-        self.system_handler.export_statistics(request).await
-    }
-
-    // PLUGIN METHODS - delegate to plugins_handler
+// Plugin Service Implementation
+#[tonic::async_trait]
+impl plugin_service_server::PluginService for StudioProjectManagerServer {
     async fn get_all_plugins(
         &self,
         request: Request<GetAllPluginsRequest>,
@@ -588,7 +629,17 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
             .await
     }
 
-    // SAMPLE METHODS - delegate to samples_handler
+    async fn get_projects_by_plugin(
+        &self,
+        request: Request<GetProjectsByPluginRequest>,
+    ) -> Result<Response<GetProjectsByPluginResponse>, Status> {
+        self.plugins_handler.get_projects_by_plugin(request).await
+    }
+}
+
+// Sample Service Implementation
+#[tonic::async_trait]
+impl sample_service_server::SampleService for StudioProjectManagerServer {
     async fn get_all_samples(
         &self,
         request: Request<GetAllSamplesRequest>,
@@ -631,12 +682,5 @@ impl studio_project_manager_server::StudioProjectManager for StudioProjectManage
         request: Request<GetProjectsBySampleRequest>,
     ) -> Result<Response<GetProjectsBySampleResponse>, Status> {
         self.samples_handler.get_projects_by_sample(request).await
-    }
-
-    async fn get_projects_by_plugin(
-        &self,
-        request: Request<GetProjectsByPluginRequest>,
-    ) -> Result<Response<GetProjectsByPluginResponse>, Status> {
-        self.plugins_handler.get_projects_by_plugin(request).await
     }
 }

@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package studio_project_manager.projects;
+
+import "common.proto";
+
+// Project Management Service
+service ProjectService {
+  // Project Management
+  rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+  rpc UpdateProjectNotes(UpdateProjectNotesRequest)
+      returns (UpdateProjectNotesResponse);
+  rpc UpdateProjectName(UpdateProjectNameRequest)
+      returns (UpdateProjectNameResponse);
+  rpc MarkProjectDeleted(MarkProjectDeletedRequest)
+      returns (MarkProjectDeletedResponse);
+  rpc ReactivateProject(ReactivateProjectRequest)
+      returns (ReactivateProjectResponse);
+  rpc GetProjectsByDeletionStatus(GetProjectsByDeletionStatusRequest)
+      returns (GetProjectsByDeletionStatusResponse);
+  rpc PermanentlyDeleteProject(PermanentlyDeleteProjectRequest)
+      returns (PermanentlyDeleteProjectResponse);
+
+  // Batch Project Management
+  rpc BatchMarkProjectsAsArchived(BatchMarkProjectsAsArchivedRequest)
+      returns (BatchMarkProjectsAsArchivedResponse);
+  rpc BatchDeleteProjects(BatchDeleteProjectsRequest)
+      returns (BatchDeleteProjectsResponse);
+}
+
+// Copy these request/response messages from your original
+// studio_project_manager.proto:
+
+// Project Management
+message GetProjectsRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string sort_by = 3;
+  optional bool sort_desc = 4;
+}
+
+message GetProjectsResponse {
+  repeated studio_project_manager.common.Project projects = 1;
+  int32 total_count = 2;
+}
+
+message GetProjectRequest {
+  string project_id = 1;
+}
+
+message GetProjectResponse {
+  optional studio_project_manager.common.Project project = 1;
+}
+
+message UpdateProjectNotesRequest {
+  string project_id = 1;
+  string notes = 2;
+}
+
+message UpdateProjectNotesResponse {
+  bool success = 1;
+}
+
+message UpdateProjectNameRequest {
+  string project_id = 1;
+  string name = 2;
+}
+
+message UpdateProjectNameResponse {
+  bool success = 1;
+}
+
+message MarkProjectDeletedRequest {
+  string project_id = 1;
+}
+
+message MarkProjectDeletedResponse {
+  bool success = 1;
+}
+
+message ReactivateProjectRequest {
+  string project_id = 1;
+}
+
+message ReactivateProjectResponse {
+  bool success = 1;
+}
+
+message GetProjectsByDeletionStatusRequest {
+  bool is_deleted = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message GetProjectsByDeletionStatusResponse {
+  repeated studio_project_manager.common.Project projects = 1;
+  int32 total_count = 2;
+}
+
+message PermanentlyDeleteProjectRequest {
+  string project_id = 1;
+}
+
+message PermanentlyDeleteProjectResponse {
+  bool success = 1;
+}
+
+// Batch Project Management
+message BatchMarkProjectsAsArchivedRequest {
+  repeated string project_ids = 1;
+  bool archived = 2;
+}
+
+message BatchMarkProjectsAsArchivedResponse {
+  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+message BatchDeleteProjectsRequest {
+  repeated string project_ids = 1;
+}
+
+message BatchDeleteProjectsResponse {
+  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}

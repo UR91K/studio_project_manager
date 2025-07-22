@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package studio_project_manager.tags;
+
+import "common.proto";
+
+// Tags Management Service
+service TagService {
+  // Tags
+  rpc GetTags(GetTagsRequest) returns (GetTagsResponse);
+  rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  rpc UpdateTag(UpdateTagRequest) returns (UpdateTagResponse);
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
+  rpc TagProject(TagProjectRequest) returns (TagProjectResponse);
+  rpc UntagProject(UntagProjectRequest) returns (UntagProjectResponse);
+
+  // Batch Tagging
+  rpc BatchTagProjects(BatchTagProjectsRequest)
+      returns (BatchTagProjectsResponse);
+  rpc BatchUntagProjects(BatchUntagProjectsRequest)
+      returns (BatchUntagProjectsResponse);
+}
+
+message GetTagsRequest {}
+
+message GetTagsResponse {
+  repeated studio_project_manager.common.Tag tags = 1;
+}
+
+message CreateTagRequest {
+  string name = 1;
+}
+
+message CreateTagResponse {
+  studio_project_manager.common.Tag tag = 1;
+}
+
+message UpdateTagRequest {
+  string tag_id = 1;
+  string name = 2;
+}
+
+message UpdateTagResponse {
+  studio_project_manager.common.Tag tag = 1;
+}
+
+message DeleteTagRequest {
+  string tag_id = 1;
+}
+
+message DeleteTagResponse {
+  bool success = 1;
+}
+
+message TagProjectRequest {
+  string project_id = 1;
+  string tag_id = 2;
+}
+
+message TagProjectResponse {
+  bool success = 1;
+}
+
+message UntagProjectRequest {
+  string project_id = 1;
+  string tag_id = 2;
+}
+
+message UntagProjectResponse {
+  bool success = 1;
+}
+
+// Batch Tagging
+message BatchTagProjectsRequest {
+  repeated string project_ids = 1;
+  repeated string tag_ids = 2;
+}
+
+message BatchTagProjectsResponse {
+  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+message BatchUntagProjectsRequest {
+  repeated string project_ids = 1;
+  repeated string tag_ids = 2;
+}
+
+message BatchUntagProjectsResponse {
+  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}

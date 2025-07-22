@@ -2,6 +2,17 @@ use log::info;
 use std::env;
 use studio_project_manager::config::CONFIG;
 use studio_project_manager::{grpc, tray};
+use studio_project_manager::grpc::projects::project_service_server;
+use studio_project_manager::grpc::search::search_service_server;
+use studio_project_manager::grpc::collections::collection_service_server;
+use studio_project_manager::grpc::tags::tag_service_server;
+use studio_project_manager::grpc::tasks::task_service_server;
+use studio_project_manager::grpc::media::media_service_server;
+use studio_project_manager::grpc::system::system_service_server;
+use studio_project_manager::grpc::plugins::plugin_service_server;
+use studio_project_manager::grpc::samples::sample_service_server;
+use studio_project_manager::grpc::scanning::scanning_service_server;
+use studio_project_manager::grpc::watcher::watcher_service_server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -80,11 +91,19 @@ async fn start_grpc_server() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("127.0.0.1:{}", config.grpc_port).parse()?;
     info!("gRPC server listening on {}", addr);
 
-    // Start the server
+    // Start the server with all services
     tonic::transport::Server::builder()
-        .add_service(
-            grpc::proto::studio_project_manager_server::StudioProjectManagerServer::new(server),
-        )
+        .add_service(project_service_server::ProjectServiceServer::new(server.clone()))
+        .add_service(search_service_server::SearchServiceServer::new(server.clone()))
+        .add_service(collection_service_server::CollectionServiceServer::new(server.clone()))
+        .add_service(tag_service_server::TagServiceServer::new(server.clone()))
+        .add_service(task_service_server::TaskServiceServer::new(server.clone()))
+        .add_service(media_service_server::MediaServiceServer::new(server.clone()))
+        .add_service(system_service_server::SystemServiceServer::new(server.clone()))
+        .add_service(plugin_service_server::PluginServiceServer::new(server.clone()))
+        .add_service(sample_service_server::SampleServiceServer::new(server.clone()))
+        .add_service(scanning_service_server::ScanningServiceServer::new(server.clone()))
+        .add_service(watcher_service_server::WatcherServiceServer::new(server))
         .serve(addr)
         .await?;
 

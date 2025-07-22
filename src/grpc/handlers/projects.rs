@@ -3,7 +3,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Code, Request, Response, Status};
 
-use super::super::proto::*;
+use super::super::projects::*;
+use super::super::common::*;
 use super::utils::convert_live_set_to_proto;
 use crate::database::LiveSetDatabase;
 use crate::error::DatabaseError;
@@ -26,6 +27,7 @@ use crate::LiveSet;
 //   Handles UpdateProjectNameRequest
 //   Calls db.set_project_name()
 
+#[derive(Clone)]
 pub struct ProjectsHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
 }

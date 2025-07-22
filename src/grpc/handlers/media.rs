@@ -5,64 +5,12 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use crate::database::LiveSetDatabase;
-use crate::grpc::proto::*;
+use super::super::media::*;
+use super::super::collections::*;
+use super::super::common::*;
 use crate::media::{MediaStorageManager, MediaType};
 
-// MOVE FROM server.rs:
-// - upload_cover_art method (lines ~1324-1414)
-//   Handles streaming UploadCoverArtRequest
-//   Processes streaming data chunks and stores using MediaStorageManager
-//   Updates collection cover art in database
-//
-// - upload_audio_file method (lines ~1416-1506)
-//   Handles streaming UploadAudioFileRequest
-//   Processes streaming data chunks and stores using MediaStorageManager
-//   Updates project audio file in database
-//
-// - download_media method (lines ~1510-1577)
-//   Handles DownloadMediaRequest with streaming response
-//   Gets media file metadata from database and streams file data
-//
-// - delete_media method (lines ~1579-1624)
-//   Handles DeleteMediaRequest
-//   Deletes from database and physical storage
-//
-// - set_collection_cover_art method (lines ~1626-1651)
-//   Handles SetCollectionCoverArtRequest
-//   Updates collection cover art reference in database
-//
-// - remove_collection_cover_art method (lines ~1653-1678)
-//   Handles RemoveCollectionCoverArtRequest
-//   Removes collection cover art reference from database
-//
-// - set_project_audio_file method (lines ~1680-1705)
-//   Handles SetProjectAudioFileRequest
-//   Updates project audio file reference in database
-//
-// - remove_project_audio_file method (lines ~1707-1732)
-//   Handles RemoveProjectAudioFileRequest
-//   Removes project audio file reference from database
-//
-// - list_media_files method (lines ~1735-1771)
-//   Handles ListMediaFilesRequest with pagination
-//   Returns list of media files from database
-//
-// - get_media_files_by_type method (lines ~1773-1809)
-//   Handles GetMediaFilesByTypeRequest with pagination
-//   Returns media files filtered by type
-//
-// - get_orphaned_media_files method (lines ~1811-1847)
-//   Handles GetOrphanedMediaFilesRequest
-//   Returns media files not referenced by any project/collection
-//
-// - get_media_statistics method (lines ~1849-1890)
-//   Handles GetMediaStatisticsRequest
-//   Returns comprehensive media statistics
-//
-// - cleanup_orphaned_media method (lines ~1892-1959)
-//   Handles CleanupOrphanedMediaRequest
-//   Deletes orphaned media files from storage and database
-
+#[derive(Clone)]
 pub struct MediaHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
     pub media_storage: Arc<MediaStorageManager>,

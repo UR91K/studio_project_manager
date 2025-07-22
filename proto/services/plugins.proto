@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package studio_project_manager.plugins;
+
+import "common.proto";
+
+service PluginService {
+  rpc GetAllPlugins(GetAllPluginsRequest) returns (GetAllPluginsResponse);
+  rpc GetPluginByInstalledStatus(GetPluginByInstalledStatusRequest)
+      returns (GetPluginByInstalledStatusResponse);
+  rpc SearchPlugins(SearchPluginsRequest) returns (SearchPluginsResponse);
+  rpc GetPluginStats(GetPluginStatsRequest) returns (GetPluginStatsResponse);
+  rpc GetAllPluginUsageNumbers(GetAllPluginUsageNumbersRequest)
+      returns (GetAllPluginUsageNumbersResponse);
+  rpc GetProjectsByPlugin(GetProjectsByPluginRequest)
+      returns (GetProjectsByPluginResponse);
+}
+
+message GetAllPluginsRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string sort_by = 3;  // name, vendor, installed, usage_count
+  optional bool sort_desc = 4;
+}
+
+message GetAllPluginsResponse {
+  repeated studio_project_manager.common.Plugin plugins = 1;
+  int32 total_count = 2;
+}
+
+// Filter by Status
+message GetPluginByInstalledStatusRequest {
+  bool installed = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+  optional string sort_by = 4;
+  optional bool sort_desc = 5;
+}
+
+message GetPluginByInstalledStatusResponse {
+  repeated studio_project_manager.common.Plugin plugins = 1;
+  int32 total_count = 2;
+}
+
+// Search
+message SearchPluginsRequest {
+  string query = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+  optional bool installed_only = 4;
+  optional string vendor_filter = 5;
+  optional string format_filter = 6;
+}
+
+message SearchPluginsResponse {
+  repeated studio_project_manager.common.Plugin plugins = 1;
+  int32 total_count = 2;
+}
+
+// Stats for Status Bar
+message GetPluginStatsRequest {}
+
+message GetPluginStatsResponse {
+  int32 total_plugins = 1;
+  int32 installed_plugins = 2;
+  int32 missing_plugins = 3;
+  int32 unique_vendors = 4;
+  map<string, int32> plugins_by_format = 5;  // VST3, VST, AU, etc.
+  map<string, int32> plugins_by_vendor = 6;
+}
+
+// Usage Numbers
+message GetAllPluginUsageNumbersRequest {}
+
+message PluginUsage {
+  string plugin_id = 1;
+  string name = 2;
+  string vendor = 3;
+  int32 usage_count = 4;
+  int32 project_count = 5;  // How many unique projects use this plugin
+}
+
+message GetAllPluginUsageNumbersResponse {
+  repeated PluginUsage plugin_usages = 1;
+}
+
+message GetProjectsByPluginRequest {
+  string plugin_id = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message GetProjectsByPluginResponse {
+  repeated studio_project_manager.common.Project projects = 1;
+  int32 total_count = 2;
+}

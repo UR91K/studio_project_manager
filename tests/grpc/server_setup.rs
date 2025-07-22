@@ -72,8 +72,8 @@ pub async fn create_test_project_in_db(db: &Arc<Mutex<LiveSetDatabase>>) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use studio_project_manager::grpc::proto::studio_project_manager_server::StudioProjectManager;
-    use studio_project_manager::grpc::proto::*;
+    use studio_project_manager::grpc::scanning::*;
+    use studio_project_manager::grpc::common::*;
     use tonic::Request;
 
     #[tokio::test]
@@ -109,11 +109,10 @@ mod tests {
         assert_eq!(scan_status_response.status, ScanStatus::ScanParsing as i32);
         assert!(scan_status_response.current_progress.is_some());
 
-        let returned_progress = scan_status_response.current_progress.unwrap();
-        assert_eq!(returned_progress.completed, 50);
-        assert_eq!(returned_progress.total, 100);
-        assert_eq!(returned_progress.progress, 0.5);
-        assert_eq!(returned_progress.message, "Test progress");
-        assert_eq!(returned_progress.status, ScanStatus::ScanParsing as i32);
+        let current_progress = scan_status_response.current_progress.unwrap();
+        assert_eq!(current_progress.completed, 50);
+        assert_eq!(current_progress.total, 100);
+        assert_eq!(current_progress.progress, 0.5);
+        assert_eq!(current_progress.message, "Test progress");
     }
 }

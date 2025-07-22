@@ -3,7 +3,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Code, Request, Response, Status};
 
-use super::super::proto::*;
+use super::super::collections::*;
+use super::super::common::*;
 use crate::database::LiveSetDatabase;
 
 // MOVE FROM server.rs:
@@ -27,6 +28,7 @@ use crate::database::LiveSetDatabase;
 //   Handles RemoveProjectFromCollectionRequest
 //   Calls db.remove_project_from_collection()
 
+#[derive(Clone)]
 pub struct CollectionsHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
 }

@@ -10,11 +10,15 @@ use tonic::{Code, Request, Response, Status};
 use super::utils::convert_live_set_to_proto;
 use crate::config::CONFIG;
 use crate::database::LiveSetDatabase;
-use crate::grpc::proto::*;
+use super::super::system::*;
+use super::super::scanning::*;
+use super::super::watcher::*;
+use super::super::common::*;
 use crate::live_set::LiveSet;
 use crate::process_projects_with_progress;
 use crate::watcher::file_watcher::{FileEvent, FileWatcher};
 
+#[derive(Clone)]
 pub struct SystemHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
     pub scan_status: Arc<Mutex<ScanStatus>>,
@@ -57,8 +61,8 @@ impl SystemHandler {
         *self.scan_progress.lock().await = None;
 
         // Clone necessary data for the task
-        let scan_status = Arc::clone(&self.scan_status);
-        let scan_progress = Arc::clone(&self.scan_progress);
+        let scan_status: Arc<Mutex<ScanStatus>> = Arc::clone(&self.scan_status);
+        let scan_progress: Arc<Mutex<Option<ScanProgressResponse>>> = Arc::clone(&self.scan_progress);
         let tx_for_callback = tx.clone();
         let scan_status_for_callback = Arc::clone(&scan_status);
         let scan_progress_for_callback = Arc::clone(&scan_progress);
@@ -470,7 +474,7 @@ impl SystemHandler {
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
             .map(
-                |(name, vendor, count)| crate::grpc::proto::PluginStatistic {
+                |(name, vendor, count)| PluginStatistic {
                     name,
                     vendor,
                     usage_count: count,
@@ -483,7 +487,7 @@ impl SystemHandler {
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
             .map(
-                |(vendor, plugin_count, usage_count)| crate::grpc::proto::VendorStatistic {
+                |(vendor, plugin_count, usage_count)| VendorStatistic {
                     vendor,
                     plugin_count,
                     usage_count,
@@ -496,14 +500,14 @@ impl SystemHandler {
             .get_tempo_distribution()
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
-            .map(|(tempo, count)| crate::grpc::proto::TempoStatistic { tempo, count })
+            .map(|(tempo, count)| TempoStatistic { tempo, count })
             .collect();
 
         let key_distribution = db
             .get_key_distribution()
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
-            .map(|(key, count)| crate::grpc::proto::KeyStatistic { key, count })
+            .map(|(key, count)| KeyStatistic { key, count })
             .collect();
 
         let time_signature_distribution = db
@@ -511,7 +515,7 @@ impl SystemHandler {
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
             .map(
-                |(numerator, denominator, count)| crate::grpc::proto::TimeSignatureStatistic {
+                |(numerator, denominator, count)| TimeSignatureStatistic {
                     numerator,
                     denominator,
                     count,
@@ -524,14 +528,14 @@ impl SystemHandler {
             .get_projects_per_year()
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
-            .map(|(year, count)| crate::grpc::proto::YearStatistic { year, count })
+            .map(|(year, count)| YearStatistic { year, count })
             .collect();
 
-        let projects_per_month: Vec<crate::grpc::proto::MonthStatistic> = db
+        let projects_per_month: Vec<MonthStatistic> = db
             .get_projects_per_month(12)
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
-            .map(|(year, month, count)| crate::grpc::proto::MonthStatistic { year, month, count })
+            .map(|(year, month, count)| MonthStatistic { year, month, count })
             .collect();
 
         // Calculate average monthly projects
@@ -576,7 +580,7 @@ impl SystemHandler {
         for (project_id, plugin_count, sample_count, complexity_score) in most_complex_projects {
             if let Ok(Some(project)) = db.get_project_by_id(&project_id) {
                 if let Ok(proto_project) = convert_live_set_to_proto(project, &mut *db) {
-                    proto_complex_projects.push(crate::grpc::proto::ProjectComplexityStatistic {
+                    proto_complex_projects.push(ProjectComplexityStatistic {
                         project: Some(proto_project),
                         plugin_count,
                         sample_count,
@@ -592,7 +596,7 @@ impl SystemHandler {
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
             .map(
-                |(name, path, usage_count)| crate::grpc::proto::SampleStatistic {
+                |(name, path, usage_count)| SampleStatistic {
                     name,
                     path,
                     usage_count,
@@ -605,7 +609,7 @@ impl SystemHandler {
             .get_top_tags(10)
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
-            .map(|(name, usage_count)| crate::grpc::proto::TagStatistic { name, usage_count })
+            .map(|(name, usage_count)| TagStatistic { name, usage_count })
             .collect();
 
         // Task statistics
@@ -619,7 +623,7 @@ impl SystemHandler {
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
             .map(|(year, month, day, projects_created, projects_modified)| {
-                crate::grpc::proto::ActivityTrendStatistic {
+                ActivityTrendStatistic {
                     year,
                     month,
                     day,
@@ -634,7 +638,7 @@ impl SystemHandler {
             .get_ableton_version_stats()
             .map_err(|e| Status::internal(format!("Database error: {}", e)))?
             .into_iter()
-            .map(|(version, count)| crate::grpc::proto::VersionStatistic { version, count })
+            .map(|(version, count)| VersionStatistic { version, count })
             .collect();
 
         // Collection analytics
@@ -658,7 +662,7 @@ impl SystemHandler {
                     let (total_duration_seconds, project_count) =
                         db.get_collection_statistics(&id).unwrap_or((None, 0));
 
-                    Some(crate::grpc::proto::Collection {
+                    Some(Collection {
                         id,
                         name,
                         description,
@@ -684,7 +688,7 @@ impl SystemHandler {
             .into_iter()
             .map(
                 |(year, month, completed_tasks, total_tasks, completion_rate)| {
-                    crate::grpc::proto::TaskCompletionTrendStatistic {
+                    TaskCompletionTrendStatistic {
                         year,
                         month,
                         completed_tasks,

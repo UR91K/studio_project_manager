@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package studio_project_manager.common;
+
+// Common types used across multiple services
+// Copy these message definitions from your original studio_project_manager.proto:
+
+// Core Data Types
+message Project {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  string hash = 4;
+  string notes = 5;
+  int64 created_at = 6;
+  int64 modified_at = 7;
+  int64 last_parsed_at = 8;
+  
+  // Musical properties
+  double tempo = 9;
+  TimeSignature time_signature = 10;
+  KeySignature key_signature = 11;
+  optional double duration_seconds = 12;
+  optional double furthest_bar = 13;
+  
+  // Ableton version
+  AbletonVersion ableton_version = 14;
+  
+  // Related data
+  repeated Plugin plugins = 15;
+  repeated Sample samples = 16;
+  repeated Tag tags = 17;
+  repeated Task tasks = 18;
+  repeated string collection_ids = 19;
+  optional string audio_file_id = 20;
+}
+
+message Plugin {
+  string id = 1;
+  optional int32 ableton_plugin_id = 2;
+  optional int32 ableton_module_id = 3;
+  string dev_identifier = 4;
+  string name = 5;
+  string format = 6;
+  bool installed = 7;
+  optional string vendor = 8;
+  optional string version = 9;
+  optional string sdk_version = 10;
+  optional int32 flags = 11;
+  optional int32 scanstate = 12;
+  optional int32 enabled = 13;
+}
+
+message Sample {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  bool is_present = 4;
+}
+
+message Tag {
+  string id = 1;
+  string name = 2;
+  int64 created_at = 3;
+}
+
+message Task {
+  string id = 1;
+  string project_id = 2;
+  string description = 3;
+  bool completed = 4;
+  int64 created_at = 5;
+}
+
+message Collection {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  optional string notes = 4;
+  int64 created_at = 5;
+  int64 modified_at = 6;
+  repeated string project_ids = 7;
+  optional string cover_art_id = 8;
+  optional double total_duration_seconds = 9;
+  int32 project_count = 10;
+}
+
+message TimeSignature {
+  int32 numerator = 1;
+  int32 denominator = 2;
+}
+
+message KeySignature {
+  string tonic = 1;
+  string scale = 2;
+}
+
+message AbletonVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+  uint32 patch = 3;
+  bool beta = 4;
+}
+
+message MediaFile {
+  string id = 1;
+  string original_filename = 2;
+  string file_extension = 3;
+  string media_type = 4;
+  int64 file_size_bytes = 5;
+  string mime_type = 6;
+  int64 uploaded_at = 7;
+  string checksum = 8;
+}
+
+message DateRange {
+  int64 start_timestamp = 1;
+  int64 end_timestamp = 2;
+}
+
+// Common batch operation result
+message BatchOperationResult {
+  string id = 1;
+  bool success = 2;
+  optional string error_message = 3;
+}
+
+// Common enums
+enum ExportFormat {
+  EXPORT_CSV = 0;
+}
+
+enum ScanStatus {
+  SCAN_UNKNOWN = 0;
+  SCAN_STARTING = 1;
+  SCAN_DISCOVERING = 2;
+  SCAN_PARSING = 3;
+  SCAN_INSERTING = 4;
+  SCAN_COMPLETED = 5;
+  SCAN_ERROR = 6;
+}
+
+enum WatcherEventType {
+  WATCHER_UNKNOWN = 0;
+  WATCHER_CREATED = 1;
+  WATCHER_MODIFIED = 2;
+  WATCHER_DELETED = 3;
+  WATCHER_RENAMED = 4;
+} 

@@ -3,17 +3,12 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 
-use super::super::proto::*;
+use super::super::search::*;
 use super::utils::convert_live_set_to_proto;
 use crate::database::search::SearchQuery;
 use crate::database::LiveSetDatabase;
 
-// MOVE FROM server.rs:
-// - search method (lines ~169-207)
-//   Handles SearchRequest with pagination
-//   Calls db.search() and converts results to proto
-//   Uses SearchQuery::parse() for query parsing
-
+#[derive(Clone)]
 pub struct SearchHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
 }

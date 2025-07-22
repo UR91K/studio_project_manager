@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package studio_project_manager.samples;
+
+import "common.proto";
+
+// Sample Management Service
+service SampleService {
+  rpc GetAllSamples(GetAllSamplesRequest) returns (GetAllSamplesResponse);
+  rpc GetSampleByPresence(GetSampleByPresenceRequest)
+      returns (GetSampleByPresenceResponse);
+  rpc SearchSamples(SearchSamplesRequest) returns (SearchSamplesResponse);
+  rpc GetSampleStats(GetSampleStatsRequest) returns (GetSampleStatsResponse);
+  rpc GetAllSampleUsageNumbers(GetAllSampleUsageNumbersRequest)
+      returns (GetAllSampleUsageNumbersResponse);
+
+  // Reverse Lookup - Projects by Plugin/Sample
+  rpc GetProjectsBySample(GetProjectsBySampleRequest)
+      returns (GetProjectsBySampleResponse);
+}
+
+message GetAllSamplesRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string sort_by = 3;  // name, path, present, usage_count
+  optional bool sort_desc = 4;
+}
+
+message GetAllSamplesResponse {
+  repeated studio_project_manager.common.Sample samples = 1;
+  int32 total_count = 2;
+}
+
+message GetSampleByPresenceRequest {
+  bool is_present = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+  optional string sort_by = 4;
+  optional bool sort_desc = 5;
+}
+
+message GetSampleByPresenceResponse {
+  repeated studio_project_manager.common.Sample samples = 1;
+  int32 total_count = 2;
+}
+
+message SearchSamplesRequest {
+  string query = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+  optional bool present_only = 4;
+  optional string extension_filter = 5;
+}
+
+message SearchSamplesResponse {
+  repeated studio_project_manager.common.Sample samples = 1;
+  int32 total_count = 2;
+}
+
+message GetSampleStatsRequest {}
+
+message GetSampleStatsResponse {
+  int32 total_samples = 1;
+  int32 present_samples = 2;
+  int32 missing_samples = 3;
+  int32 unique_paths = 4;
+  map<string, int32> samples_by_extension = 5;  // .wav, .aiff, etc.
+  int64 total_estimated_size_bytes = 6;
+}
+
+message GetAllSampleUsageNumbersRequest {}
+
+message SampleUsage {
+  string sample_id = 1;
+  string name = 2;
+  string path = 3;
+  int32 usage_count = 4;
+  int32 project_count = 5;  // How many unique projects use this sample
+}
+
+message GetAllSampleUsageNumbersResponse {
+  repeated SampleUsage sample_usages = 1;
+}
+
+// Reverse Lookup Messages
+
+message GetProjectsBySampleRequest {
+  string sample_id = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message GetProjectsBySampleResponse {
+  repeated studio_project_manager.common.Project projects = 1;
+  int32 total_count = 2;
+}

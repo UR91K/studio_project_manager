@@ -4,7 +4,8 @@ use tokio::sync::Mutex;
 use tonic::{Code, Request, Response, Status};
 
 use crate::database::LiveSetDatabase;
-use crate::grpc::proto::*;
+use super::super::tasks::*;
+use super::super::common::*;
 
 // MOVE FROM server.rs:
 // - get_project_tasks method (lines ~542-564)
@@ -24,6 +25,7 @@ use crate::grpc::proto::*;
 //   Handles DeleteTaskRequest
 //   Calls db.get_task() to check existence, then db.remove_task()
 
+#[derive(Clone)]
 pub struct TasksHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
 }
@@ -130,7 +132,7 @@ impl TasksHandler {
 
         // Update description if provided
         if let Some(description) = req.description {
-            if let Err(e) = db.update_task_description(&req.task_id, &description) {
+            if let Err(e) = db.update_task_description(&req.task_id, &description.as_str()) {
                 error!(
                     "Failed to update task description for {}: {:?}",
                     req.task_id, e

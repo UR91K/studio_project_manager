@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package studio_project_manager.scanning;
+
+import "common.proto";
+
+// Scanning Service
+service ScanningService {
+  rpc ScanDirectories(ScanDirectoriesRequest)
+      returns (stream ScanProgressResponse);
+  rpc GetScanStatus(GetScanStatusRequest) returns (GetScanStatusResponse);
+  rpc AddSingleProject(AddSingleProjectRequest)
+      returns (AddSingleProjectResponse);
+}
+
+message ScanDirectoriesRequest {
+  repeated string paths = 1;
+  optional bool force_rescan = 2;
+}
+
+message ScanProgressResponse {
+  uint32 completed = 1;
+  uint32 total = 2;
+  float progress = 3;
+  string message = 4;
+  studio_project_manager.common.ScanStatus status = 5;
+}
+
+message GetScanStatusRequest {}
+
+message GetScanStatusResponse {
+  studio_project_manager.common.ScanStatus status = 1;
+  optional ScanProgressResponse current_progress = 2;
+}
+
+message AddSingleProjectRequest {
+  string file_path = 1;
+}
+
+message AddSingleProjectResponse {
+  bool success = 1;
+  optional studio_project_manager.common.Project project = 2;
+  optional string error_message = 3;
+}

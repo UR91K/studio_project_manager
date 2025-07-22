@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package studio_project_manager.search;
+
+import "common.proto";
+
+// Search Service
+service SearchService {
+  rpc Search(SearchRequest) returns (SearchResponse);
+}
+
+message SearchRequest {
+  string query = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message SearchResponse {
+  repeated studio_project_manager.common.Project projects = 1;
+  int32 total_count = 2;
+}

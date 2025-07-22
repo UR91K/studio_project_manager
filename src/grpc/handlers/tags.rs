@@ -4,7 +4,8 @@ use tokio::sync::Mutex;
 use tonic::{Code, Request, Response, Status};
 
 use crate::database::LiveSetDatabase;
-use crate::grpc::proto::*;
+use super::super::tags::*;
+use super::super::common::*;
 
 // MOVE FROM server.rs:
 // - get_tags method (lines ~448-470)
@@ -23,6 +24,7 @@ use crate::grpc::proto::*;
 //   Handles UntagProjectRequest
 //   Calls db.untag_project() to remove tag from project
 
+#[derive(Clone)]
 pub struct TagsHandler {
     pub db: Arc<Mutex<LiveSetDatabase>>,
 }

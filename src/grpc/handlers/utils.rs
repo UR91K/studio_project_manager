@@ -1,6 +1,6 @@
 use crate::database::LiveSetDatabase;
 use crate::error::DatabaseError;
-use crate::grpc::proto::{AbletonVersion, KeySignature, Plugin, Project, Sample, TimeSignature};
+use super::super::common::{AbletonVersion, KeySignature, Plugin, Project, Sample, TimeSignature, Task, Tag};
 use crate::live_set::LiveSet;
 
 pub fn convert_live_set_to_proto(
@@ -28,7 +28,7 @@ pub fn convert_live_set_to_proto(
         .get_project_tasks(&project_id)?
         .into_iter()
         .map(
-            |(task_id, description, completed, created_at)| crate::grpc::proto::Task {
+            |(task_id, description, completed, created_at)| Task {
                 id: task_id,
                 description,
                 completed,
@@ -41,7 +41,7 @@ pub fn convert_live_set_to_proto(
     // Convert tags with proper IDs and creation timestamps
     let tags = tag_data
         .into_iter()
-        .map(|(tag_id, tag_name, created_at)| crate::grpc::proto::Tag {
+        .map(|(tag_id, tag_name, created_at)| Tag {
             id: tag_id,
             name: tag_name,
             created_at,

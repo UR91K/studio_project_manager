@@ -14,7 +14,17 @@ pub mod tags;
 
 // Common imports for gRPC tests
 use studio_project_manager::database::LiveSetDatabase;
-use studio_project_manager::grpc::proto::*;
+use studio_project_manager::grpc::projects::*;
+use studio_project_manager::grpc::collections::*;
+use studio_project_manager::grpc::tags::*;
+use studio_project_manager::grpc::search::*;
+use studio_project_manager::grpc::media::*;
+use studio_project_manager::grpc::system::*;
+
+// Import all service traits
+use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
+use studio_project_manager::grpc::tags::tag_service_server::TagService;
+use studio_project_manager::grpc::scanning::scanning_service_server::ScanningService;
 // use crate::common;
 use std::sync::Arc;
 use tokio::sync::Mutex;

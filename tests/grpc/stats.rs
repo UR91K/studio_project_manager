@@ -1,6 +1,6 @@
 //! Statistics-related gRPC tests
 
-use studio_project_manager::grpc::proto::studio_project_manager_server::StudioProjectManager;
+use studio_project_manager::grpc::system::system_service_server::SystemService;
 
 use super::*;
 use crate::common::setup;

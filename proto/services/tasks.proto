@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package studio_project_manager.tasks;
+
+import "common.proto";
+
+// Tasks Management Service
+service TaskService {
+  // Tasks
+  rpc GetProjectTasks(GetProjectTasksRequest) returns (GetProjectTasksResponse);
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse);
+
+  // Batch Tasks
+  rpc BatchUpdateTaskStatus(BatchUpdateTaskStatusRequest)
+      returns (BatchUpdateTaskStatusResponse);
+  rpc BatchDeleteTasks(BatchDeleteTasksRequest)
+      returns (BatchDeleteTasksResponse);
+}
+
+message GetProjectTasksRequest {
+  string project_id = 1;
+}
+
+message GetProjectTasksResponse {
+  repeated studio_project_manager.common.Task tasks = 1;
+}
+
+message CreateTaskRequest {
+  string project_id = 1;
+  string description = 2;
+}
+
+message CreateTaskResponse {
+  studio_project_manager.common.Task task = 1;
+}
+
+message UpdateTaskRequest {
+  string task_id = 1;
+  optional string description = 2;
+  optional bool completed = 3;
+}
+
+message UpdateTaskResponse {
+  studio_project_manager.common.Task task = 1;
+}
+
+message DeleteTaskRequest {
+  string task_id = 1;
+}
+
+message DeleteTaskResponse {
+  bool success = 1;
+}
+
+// Batch Tasks
+message BatchUpdateTaskStatusRequest {
+  repeated string task_ids = 1;
+  bool completed = 2;
+}
+
+message BatchUpdateTaskStatusResponse {
+  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+message BatchDeleteTasksRequest {
+  repeated string task_ids = 1;
+}
+
+message BatchDeleteTasksResponse {
+  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}

@@ -18,7 +18,7 @@
 
 use super::*;
 // use crate::common::setup;
-use studio_project_manager::grpc::proto::studio_project_manager_server::StudioProjectManager;
+use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
 
 #[tokio::test]
 async fn test_get_collections_empty() {

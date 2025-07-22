@@ -8,7 +8,7 @@
 
 use super::*;
 use std::collections::VecDeque;
-use studio_project_manager::grpc::proto::studio_project_manager_server::StudioProjectManager;
+use studio_project_manager::grpc::media::media_service_server::MediaService;
 use studio_project_manager::media::{MediaFile, MediaType};
 use tokio_stream::StreamExt;
 
