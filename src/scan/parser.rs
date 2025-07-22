@@ -387,6 +387,8 @@ pub struct Parser {
     pub in_source_context: bool,
     /// Flag to prevent duplicate plugin info processing
     pub plugin_info_processed: bool,
+    /// Flag to track if we're inside a Vst3Preset element
+    pub in_vst3_preset: bool,
 
     // Tempo and timing state
     /// Thread-safe collection of device identifiers
@@ -484,6 +486,7 @@ impl Parser {
             plugin_info_tags: HashMap::new(),
             in_source_context: false,
             plugin_info_processed: false,
+            in_vst3_preset: false,
 
             // Initialize other state
             dev_identifiers: Arc::new(parking_lot::RwLock::new(HashMap::new())),
@@ -929,12 +932,20 @@ impl Parser {
                     db_plugin.vendor.as_deref().unwrap_or("Unknown").purple(),
                     db_plugin.name.green()
                 );
+                
+                // Use database name if it's not empty, otherwise fall back to XML name
+                let final_name = if !db_plugin.name.trim().is_empty() {
+                    db_plugin.name.clone()
+                } else {
+                    info.name.clone()
+                };
+                
                 Plugin {
                     id: Uuid::new_v4(),
                     plugin_id: Some(db_plugin.plugin_id),
                     module_id: db_plugin.module_id,
                     dev_identifier: db_plugin.dev_identifier.clone(),
-                    name: db_plugin.name.clone(),
+                    name: final_name,
                     vendor: db_plugin.vendor.clone(),
                     version: db_plugin.version.clone(),
                     sdk_version: db_plugin.sdk_version.clone(),
@@ -969,19 +980,34 @@ impl Parser {
             }
         };
 
-        // Check for blank plugin names and warn
+        // Check for blank plugin names and warn only if both XML and database names are empty
         if plugin.name.trim().is_empty() {
             let file_info = current_file
                 .map(|f| format!(" in file: {}", f))
                 .unwrap_or_default();
-            warn_fn!(
-                "finalize_result",
-                "Created plugin with blank name - Device ID: {}, Plugin Info: {:?}{}",
-                dev_identifier,
-                info,
-                file_info
-            );
-            println!();
+            
+            // Only warn if this is a truly blank plugin (no name in XML and no name in database)
+            let should_warn = match db_plugin {
+                Some(db_plugin) => {
+                    // If database plugin exists but has empty name, and XML also has empty name
+                    db_plugin.name.trim().is_empty() && info.name.trim().is_empty()
+                }
+                None => {
+                    // If no database plugin found, warn if XML name is empty
+                    info.name.trim().is_empty()
+                }
+            };
+            
+            if should_warn {
+                warn_fn!(
+                    "finalize_result",
+                    "Created plugin with blank name - Device ID: {}, Plugin Info: {:?}{}",
+                    dev_identifier,
+                    info,
+                    file_info
+                );
+                println!();
+            }
         }
 
         plugin
@@ -1323,31 +1349,36 @@ impl Parser {
                     );
                 }
             }
+            "Vst3Preset" => {
+                if matches!(self.state, ParserState::InVst3PluginInfo) {
+                    trace_fn!(
+                        "handle_start_event",
+                        "[{}] Entering Vst3Preset at depth {}",
+                        line,
+                        self.depth
+                    );
+                    self.in_vst3_preset = true;
+                }
+            }
             "Name" | "PlugName" => {
                 if let Some(value) = event.get_value_as_string_result()? {
                     match self.state {
                         ParserState::InVst3PluginInfo | ParserState::InVstPluginInfo => {
-                            if !self.plugin_info_processed {
+                            trace_fn!(
+                                "handle_start_event",
+                                "[{}] Processing Name element in plugin state, current_branch_info = {:?}, plugin_info_processed = {}, depth = {}",
+                                line,
+                                self.current_branch_info,
+                                self.plugin_info_processed,
+                                self.depth
+                            );
+                            // Only process Name elements when we're not inside a Vst3Preset
+                            // Skip Name elements that are nested inside preset elements
+                            if !self.plugin_info_processed && !self.in_vst3_preset {
                                 if let Some(device_id) = &self.current_branch_info {
                                     if let Some(plugin_format) =
                                         crate::utils::plugins::parse_plugin_format(device_id)
                                     {
-                                        // Check for blank plugin names and warn with line number
-                                        if value.trim().is_empty() {
-                                            let file_info = self.current_file.as_ref()
-                                                .map(|f| format!(" in file: {}", f))
-                                                .unwrap_or_default();
-                                            warn_fn!(
-                                                "handle_start_event",
-                                                "[{}] Found blank plugin name at depth {} for device: {}{}",
-                                                line,
-                                                self.depth,
-                                                device_id,
-                                                file_info
-                                            );
-                                            println!();
-                                        }
-                                        
                                         trace_fn!(
                                             "handle_start_event",
                                             "[{}] Found plugin name at depth {}: {} for device: {}",
@@ -1356,6 +1387,23 @@ impl Parser {
                                             value,
                                             device_id
                                         );
+                                        
+                                        // Only check for blank plugin names after confirming this is a valid plugin
+                                        if value.trim().is_empty() {
+                                            let file_info = self.current_file.as_ref()
+                                                .map(|f| format!(" in file: {}", f))
+                                                .unwrap_or_default();
+                                            warn_fn!(
+                                                "handle_start_event",
+                                                "[{}] Found blank plugin name ({}) at depth {} for device: {}{}",
+                                                line,
+                                                value,
+                                                self.depth,
+                                                device_id,
+                                                file_info
+                                            );
+                                        }
+                                        
                                         let plugin_info = PluginInfo {
                                             name: value,
                                             dev_identifier: device_id.clone(),
@@ -1748,14 +1796,14 @@ impl Parser {
                 }
             }
             "PluginDesc" => {
-                // Clear the current branch info and plugin info processed flag
+                // Don't clear current_branch_info yet - it might still be needed for plugin processing
+                // Only clear it when we're completely done with plugin processing
                 trace_fn!(
                     "handle_end_event",
-                    "Exiting PluginDesc at depth {}, clearing device ID: {:?}",
+                    "Exiting PluginDesc at depth {}, keeping device ID: {:?} for plugin processing",
                     self.depth,
                     self.current_branch_info
                 );
-                self.current_branch_info = None;
                 self.plugin_info_processed = false;
                 self.state = if self.in_source_context {
                     trace_fn!(
@@ -1773,6 +1821,16 @@ impl Parser {
                     ParserState::Root
                 };
             }
+            "Vst3Preset" => {
+                if self.in_vst3_preset {
+                    trace_fn!(
+                        "handle_end_event",
+                        "Exiting Vst3Preset at depth {}",
+                        self.depth
+                    );
+                    self.in_vst3_preset = false;
+                }
+            }
             "Vst3PluginInfo" | "VstPluginInfo" => {
                 if let Some(device_id) = &self.current_branch_info {
                     trace_fn!(
@@ -1781,8 +1839,12 @@ impl Parser {
                         self.depth,
                         device_id
                     );
+                    // Clone the device_id before clearing current_branch_info
+                    let device_id_clone = device_id.clone();
+                    // Clear current_branch_info now that we're done with plugin processing
+                    self.current_branch_info = None;
                     self.state = ParserState::InPluginDesc {
-                        device_id: device_id.clone(),
+                        device_id: device_id_clone,
                     };
                 } else {
                     trace_fn!(

@@ -98,6 +98,10 @@ impl<'a> BatchTransaction<'a> {
         if new.module_id.is_some() {
             existing.module_id = new.module_id;
         }
+        // Merge name: use new name if existing name is empty or if new name is non-empty
+        if !new.name.trim().is_empty() && (existing.name.trim().is_empty() || existing.name != new.name) {
+            existing.name = new.name.clone();
+        }
         if new.vendor.is_some() {
             existing.vendor = new.vendor.clone();
         }
