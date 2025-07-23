@@ -27,6 +27,26 @@ This document outlines the required features and endpoints for the Studio Projec
 - MoveProjectsBetweenCollections (achievable via existing endpoints)
 - Additional metadata management (already covered by existing endpoints)
 
+## Plugins Service
+
+### High Priority
+- [ ] **GetPlugin** - Get individual plugin details by ID
+- [ ] **GetPluginAnalytics** - Get advanced plugin statistics for status bars/overviews
+
+### Medium Priority
+- [ ] **Enhanced GetAllPlugins filtering** - Add vendor_filter, format_filter, installed_only, min_usage_count to existing endpoint
+- [ ] **GetPluginVendors** - Get list of all vendors with statistics (if dedicated vendor management UI needed)
+- [ ] **GetPluginFormats** - Get list of all formats with statistics (if dedicated format management UI needed)
+
+### Not in Scope
+- Plugin CRUD operations (plugins are discovered from .als files)
+- Plugin installation management (handled by Ableton)
+- Plugin configuration
+- Plugin export/import (frontend responsibility)
+- Plugin templates
+- Plugin sharing (frontend responsibility)
+- BatchGetPlugins (not needed at this time)
+
 ## Services to Review
 
 The following services need similar analysis and endpoint review:
