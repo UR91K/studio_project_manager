@@ -250,6 +250,99 @@ impl SystemHandler {
         }
     }
 
+    pub async fn add_multiple_projects(
+        &self,
+        request: Request<AddMultipleProjectsRequest>,
+    ) -> Result<Response<AddMultipleProjectsResponse>, Status> {
+        debug!("AddMultipleProjects request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut projects = Vec::new();
+        let mut failed_paths = Vec::new();
+        let mut error_messages = Vec::new();
+        let mut successful_imports = 0;
+        let mut failed_imports = 0;
+        let total_requested = req.file_paths.len() as i32;
+
+        // Process each file path
+        for file_path_str in req.file_paths {
+            let file_path = PathBuf::from(&file_path_str);
+
+            // Validate file path
+            if !file_path.exists() {
+                failed_paths.push(file_path_str.clone());
+                error_messages.push("File does not exist".to_string());
+                failed_imports += 1;
+                continue;
+            }
+
+            // Validate file extension
+            if !file_path.extension().map_or(false, |ext| ext == "als") {
+                failed_paths.push(file_path_str.clone());
+                error_messages.push("File must have .als extension".to_string());
+                failed_imports += 1;
+                continue;
+            }
+
+            // Parse the file
+            match LiveSet::new(file_path.clone()) {
+                Ok(live_set) => {
+                    debug!("Successfully parsed project: {}", live_set.name);
+
+                    // Insert into database
+                    let mut db = self.db.lock().await;
+                    match db.insert_project(&live_set) {
+                        Ok(()) => {
+                            debug!(
+                                "Successfully inserted project into database: {}",
+                                live_set.name
+                            );
+
+                            // Convert to proto project
+                            match convert_live_set_to_proto(live_set, &mut *db) {
+                                Ok(proto_project) => {
+                                    projects.push(proto_project);
+                                    successful_imports += 1;
+                                    info!("Successfully added project: {}", file_path_str);
+                                }
+                                Err(e) => {
+                                    error!("Failed to convert project to proto: {:?}", e);
+                                    failed_paths.push(file_path_str.clone());
+                                    error_messages.push(format!("Failed to convert project: {}", e));
+                                    failed_imports += 1;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to insert project into database: {:?}", e);
+                            failed_paths.push(file_path_str.clone());
+                            error_messages.push(format!("Database error: {}", e));
+                            failed_imports += 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to parse project file {}: {:?}", file_path_str, e);
+                    failed_paths.push(file_path_str.clone());
+                    error_messages.push(format!("Failed to parse project: {}", e));
+                    failed_imports += 1;
+                }
+            }
+        }
+
+        let success = failed_imports == 0; // Consider it successful if no projects failed to import
+
+        Ok(Response::new(AddMultipleProjectsResponse {
+            success,
+            projects,
+            failed_paths,
+            error_messages,
+            total_requested,
+            successful_imports,
+            failed_imports,
+        }))
+    }
+
     pub async fn start_watcher(
         &self,
         _request: Request<StartWatcherRequest>,

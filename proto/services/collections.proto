@@ -19,6 +19,8 @@ service CollectionService {
       returns (AddProjectToCollectionResponse);
   rpc RemoveProjectFromCollection(RemoveProjectFromCollectionRequest)
       returns (RemoveProjectFromCollectionResponse);
+  rpc ReorderCollection(ReorderCollectionRequest)
+      returns (ReorderCollectionResponse);
   rpc GetCollectionTasks(GetCollectionTasksRequest)
       returns (GetCollectionTasksResponse);
 
@@ -97,6 +99,15 @@ message RemoveProjectFromCollectionRequest {
 }
 
 message RemoveProjectFromCollectionResponse {
+  bool success = 1;
+}
+
+message ReorderCollectionRequest {
+  string collection_id = 1;
+  repeated string project_ids = 2;
+}
+
+message ReorderCollectionResponse {
   bool success = 1;
 }
 

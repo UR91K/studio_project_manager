@@ -17,6 +17,8 @@ service SampleService {
   // Reverse Lookup - Projects by Plugin/Sample
   rpc GetProjectsBySample(GetProjectsBySampleRequest)
       returns (GetProjectsBySampleResponse);
+  rpc RefreshSamplePresenceStatus(RefreshSamplePresenceStatusRequest)
+      returns (RefreshSamplePresenceStatusResponse);
 }
 
 message GetAllSamplesRequest {
@@ -93,4 +95,16 @@ message GetProjectsBySampleRequest {
 message GetProjectsBySampleResponse {
   repeated studio_project_manager.common.Project projects = 1;
   int32 total_count = 2;
+}
+
+// Sample Presence Status Refresh
+message RefreshSamplePresenceStatusRequest {}
+
+message RefreshSamplePresenceStatusResponse {
+  int32 total_samples_checked = 1;
+  int32 samples_now_present = 2;
+  int32 samples_now_missing = 3;
+  int32 samples_unchanged = 4;
+  bool success = 5;
+  optional string error_message = 6;
 }

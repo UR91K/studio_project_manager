@@ -403,6 +403,72 @@ impl CollectionsHandler {
         }
     }
 
+    pub async fn reorder_collection(
+        &self,
+        request: Request<ReorderCollectionRequest>,
+    ) -> Result<Response<ReorderCollectionResponse>, Status> {
+        debug!("ReorderCollection request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        // Validate that all project IDs exist in the collection
+        let collection = match db.get_collection_by_id(&req.collection_id) {
+            Ok(Some((_, _, _, _, _, _, project_ids, _))) => project_ids,
+            Ok(None) => {
+                return Err(Status::new(Code::NotFound, "Collection not found"));
+            }
+            Err(e) => {
+                error!("Failed to get collection {}: {:?}", req.collection_id, e);
+                return Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ));
+            }
+        };
+
+        // Check if all provided project IDs are in the collection
+        let collection_set: std::collections::HashSet<_> = collection.iter().collect();
+        let request_set: std::collections::HashSet<_> = req.project_ids.iter().collect();
+        
+        if collection_set != request_set {
+            return Err(Status::new(
+                Code::InvalidArgument,
+                "Project IDs must match exactly with the collection's projects",
+            ));
+        }
+
+        // Reorder the projects by updating their positions
+        for (new_position, project_id) in req.project_ids.iter().enumerate() {
+            match db.reorder_project_in_collection(&req.collection_id, project_id, new_position as i32) {
+                Ok(()) => {
+                    debug!(
+                        "Successfully moved project {} to position {} in collection {}",
+                        project_id, new_position, req.collection_id
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to move project {} to position {} in collection {}: {:?}",
+                        project_id, new_position, req.collection_id, e
+                    );
+                    return Err(Status::new(
+                        Code::Internal,
+                        format!("Database error: {}", e),
+                    ));
+                }
+            }
+        }
+
+        debug!(
+            "Successfully reordered collection {} with {} projects",
+            req.collection_id,
+            req.project_ids.len()
+        );
+        let response = ReorderCollectionResponse { success: true };
+        Ok(Response::new(response))
+    }
+
     pub async fn get_collection_tasks(
         &self,
         request: Request<GetCollectionTasksRequest>,

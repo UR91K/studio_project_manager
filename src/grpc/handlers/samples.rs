@@ -243,4 +243,34 @@ impl SamplesHandler {
             }
         }
     }
+
+    pub async fn refresh_sample_presence_status(
+        &self,
+        _request: Request<RefreshSamplePresenceStatusRequest>,
+    ) -> Result<Response<RefreshSamplePresenceStatusResponse>, Status> {
+        debug!("RefreshSamplePresenceStatus request");
+
+        let mut db = self.db.lock().await;
+
+        match db.refresh_sample_presence_status() {
+            Ok(result) => {
+                let response = RefreshSamplePresenceStatusResponse {
+                    total_samples_checked: result.total_samples_checked,
+                    samples_now_present: result.samples_now_present,
+                    samples_now_missing: result.samples_now_missing,
+                    samples_unchanged: result.samples_unchanged,
+                    success: true,
+                    error_message: None,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to refresh sample presence status: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
 }

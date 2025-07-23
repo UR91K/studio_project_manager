@@ -554,3 +554,151 @@ async fn test_get_collection_with_projects() {
     assert!(collection.project_ids.contains(&project_id2));
     assert_eq!(collection.project_count, 2);
 }
+
+#[tokio::test]
+async fn test_reorder_collection() {
+    setup("error");
+    let server = create_test_server().await;
+
+    // Create a collection
+    let create_request = Request::new(CreateCollectionRequest {
+        name: "Reorder Test Collection".to_string(),
+        description: Some("Testing reordering".to_string()),
+        notes: None,
+    });
+
+    let create_response = server.create_collection(create_request).await.unwrap();
+    let created_collection = create_response.into_inner().collection.unwrap();
+    let collection_id = created_collection.id.clone();
+
+    // Create some test projects
+    let project1_id = create_test_project_in_db(server.db()).await;
+    let project2_id = create_test_project_in_db(server.db()).await;
+    let project3_id = create_test_project_in_db(server.db()).await;
+
+    // Add projects to collection
+    let add_request1 = Request::new(AddProjectToCollectionRequest {
+        collection_id: collection_id.clone(),
+        project_id: project1_id.clone(),
+        position: None,
+    });
+    server.add_project_to_collection(add_request1).await.unwrap();
+
+    let add_request2 = Request::new(AddProjectToCollectionRequest {
+        collection_id: collection_id.clone(),
+        project_id: project2_id.clone(),
+        position: None,
+    });
+    server.add_project_to_collection(add_request2).await.unwrap();
+
+    let add_request3 = Request::new(AddProjectToCollectionRequest {
+        collection_id: collection_id.clone(),
+        project_id: project3_id.clone(),
+        position: None,
+    });
+    server.add_project_to_collection(add_request3).await.unwrap();
+
+    // Get collection to verify initial order
+    let get_request = Request::new(GetCollectionRequest {
+        collection_id: collection_id.clone(),
+    });
+    let get_response = server.get_collection(get_request).await.unwrap();
+    let collection = get_response.into_inner().collection.unwrap();
+    
+    let initial_order = collection.project_ids.clone();
+    assert_eq!(initial_order.len(), 3);
+    assert_eq!(initial_order[0], project1_id);
+    assert_eq!(initial_order[1], project2_id);
+    assert_eq!(initial_order[2], project3_id);
+
+    // Reorder the collection (reverse the order)
+    let reorder_request = Request::new(ReorderCollectionRequest {
+        collection_id: collection_id.clone(),
+        project_ids: vec![
+            project3_id.clone(),
+            project2_id.clone(),
+            project1_id.clone(),
+        ],
+    });
+
+    let reorder_response = server.reorder_collection(reorder_request).await.unwrap();
+    let reorder_result = reorder_response.into_inner();
+    assert!(reorder_result.success);
+
+    // Get collection again to verify new order
+    let get_request = Request::new(GetCollectionRequest {
+        collection_id: collection_id.clone(),
+    });
+    let get_response = server.get_collection(get_request).await.unwrap();
+    let collection = get_response.into_inner().collection.unwrap();
+    
+    let new_order = collection.project_ids;
+    assert_eq!(new_order.len(), 3);
+    assert_eq!(new_order[0], project3_id);
+    assert_eq!(new_order[1], project2_id);
+    assert_eq!(new_order[2], project1_id);
+}
+
+#[tokio::test]
+async fn test_reorder_collection_invalid_project_ids() {
+    setup("error");
+    let server = create_test_server().await;
+
+    // Create a collection
+    let create_request = Request::new(CreateCollectionRequest {
+        name: "Invalid Reorder Test Collection".to_string(),
+        description: Some("Testing invalid reordering".to_string()),
+        notes: None,
+    });
+
+    let create_response = server.create_collection(create_request).await.unwrap();
+    let created_collection = create_response.into_inner().collection.unwrap();
+    let collection_id = created_collection.id.clone();
+
+    // Create test projects
+    let project1_id = create_test_project_in_db(server.db()).await;
+    let project2_id = create_test_project_in_db(server.db()).await;
+
+    // Add only one project to collection
+    let add_request = Request::new(AddProjectToCollectionRequest {
+        collection_id: collection_id.clone(),
+        project_id: project1_id.clone(),
+        position: None,
+    });
+    server.add_project_to_collection(add_request).await.unwrap();
+
+    // Try to reorder with project IDs that don't match the collection
+    let reorder_request = Request::new(ReorderCollectionRequest {
+        collection_id: collection_id.clone(),
+        project_ids: vec![
+            project1_id.clone(),
+            project2_id.clone(), // This project is not in the collection
+        ],
+    });
+
+    let reorder_response = server.reorder_collection(reorder_request).await;
+    assert!(reorder_response.is_err());
+    
+    let status = reorder_response.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
+    assert!(status.message().contains("Project IDs must match exactly"));
+}
+
+#[tokio::test]
+async fn test_reorder_collection_nonexistent_collection() {
+    setup("error");
+    let server = create_test_server().await;
+
+    // Try to reorder a collection that doesn't exist
+    let reorder_request = Request::new(ReorderCollectionRequest {
+        collection_id: "nonexistent-collection-id".to_string(),
+        project_ids: vec!["project1".to_string(), "project2".to_string()],
+    });
+
+    let reorder_response = server.reorder_collection(reorder_request).await;
+    assert!(reorder_response.is_err());
+    
+    let status = reorder_response.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::NotFound);
+    assert!(status.message().contains("Collection not found"));
+}

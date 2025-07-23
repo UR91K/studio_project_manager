@@ -268,6 +268,13 @@ impl collection_service_server::CollectionService for StudioProjectManagerServer
             .await
     }
 
+    async fn reorder_collection(
+        &self,
+        request: Request<ReorderCollectionRequest>,
+    ) -> Result<Response<ReorderCollectionResponse>, Status> {
+        self.collections_handler.reorder_collection(request).await
+    }
+
     async fn get_collection_tasks(
         &self,
         request: Request<GetCollectionTasksRequest>,
@@ -558,6 +565,13 @@ impl scanning_service_server::ScanningService for StudioProjectManagerServer {
     ) -> Result<Response<AddSingleProjectResponse>, Status> {
         self.system_handler.add_single_project(request).await
     }
+
+    async fn add_multiple_projects(
+        &self,
+        request: Request<AddMultipleProjectsRequest>,
+    ) -> Result<Response<AddMultipleProjectsResponse>, Status> {
+        self.system_handler.add_multiple_projects(request).await
+    }
 }
 
 // Watcher Service Implementation
@@ -682,5 +696,12 @@ impl sample_service_server::SampleService for StudioProjectManagerServer {
         request: Request<GetProjectsBySampleRequest>,
     ) -> Result<Response<GetProjectsBySampleResponse>, Status> {
         self.samples_handler.get_projects_by_sample(request).await
+    }
+
+    async fn refresh_sample_presence_status(
+        &self,
+        request: Request<RefreshSamplePresenceStatusRequest>,
+    ) -> Result<Response<RefreshSamplePresenceStatusResponse>, Status> {
+        self.samples_handler.refresh_sample_presence_status(request).await
     }
 }

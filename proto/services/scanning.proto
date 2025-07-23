@@ -11,6 +11,8 @@ service ScanningService {
   rpc GetScanStatus(GetScanStatusRequest) returns (GetScanStatusResponse);
   rpc AddSingleProject(AddSingleProjectRequest)
       returns (AddSingleProjectResponse);
+  rpc AddMultipleProjects(AddMultipleProjectsRequest)
+      returns (AddMultipleProjectsResponse);
 }
 
 message ScanDirectoriesRequest {
@@ -41,4 +43,18 @@ message AddSingleProjectResponse {
   bool success = 1;
   optional studio_project_manager.common.Project project = 2;
   optional string error_message = 3;
+}
+
+message AddMultipleProjectsRequest {
+  repeated string file_paths = 1;
+}
+
+message AddMultipleProjectsResponse {
+  bool success = 1;
+  repeated studio_project_manager.common.Project projects = 2;
+  repeated string failed_paths = 3;
+  repeated string error_messages = 4;
+  int32 total_requested = 5;
+  int32 successful_imports = 6;
+  int32 failed_imports = 7;
 }

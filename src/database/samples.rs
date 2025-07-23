@@ -270,6 +270,57 @@ impl LiveSetDatabase {
         let usage_info: Result<Vec<SampleUsageInfo>, _> = rows.collect();
         Ok(usage_info?)
     }
+
+    /// Refresh sample presence status by checking if files still exist
+    pub fn refresh_sample_presence_status(&mut self) -> Result<SampleRefreshResult, DatabaseError> {
+        let mut total_checked = 0;
+        let mut now_present = 0;
+        let mut now_missing = 0;
+        let mut unchanged = 0;
+
+        // Get all samples from our database
+        let mut stmt = self.conn.prepare("SELECT id, name, path, is_present FROM samples")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>("id")?,
+                row.get::<_, String>("name")?,
+                row.get::<_, String>("path")?,
+                row.get::<_, bool>("is_present")?,
+            ))
+        })?;
+
+        for row_result in rows {
+            let (sample_id, _name, path_str, current_present) = row_result?;
+            total_checked += 1;
+
+            // Check if file exists
+            let path = PathBuf::from(path_str);
+            let is_present = path.exists();
+
+            if current_present != is_present {
+                // Status changed, update it
+                self.conn.execute(
+                    "UPDATE samples SET is_present = ? WHERE id = ?",
+                    params![is_present, sample_id]
+                )?;
+
+                if is_present {
+                    now_present += 1;
+                } else {
+                    now_missing += 1;
+                }
+            } else {
+                unchanged += 1;
+            }
+        }
+
+        Ok(SampleRefreshResult {
+            total_samples_checked: total_checked,
+            samples_now_present: now_present,
+            samples_now_missing: now_missing,
+            samples_unchanged: unchanged,
+        })
+    }
 }
 
 pub struct SampleStats {
@@ -287,4 +338,11 @@ pub struct SampleUsageInfo {
     pub path: String,
     pub usage_count: i32,
     pub project_count: i32,
+}
+
+pub struct SampleRefreshResult {
+    pub total_samples_checked: i32,
+    pub samples_now_present: i32,
+    pub samples_now_missing: i32,
+    pub samples_unchanged: i32,
 }
