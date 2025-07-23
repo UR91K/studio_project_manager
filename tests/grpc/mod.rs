@@ -6,6 +6,7 @@
 pub mod batch;
 pub mod collections;
 pub mod media;
+pub mod plugins;
 pub mod projects;
 pub mod search;
 pub mod server_setup;
@@ -20,11 +21,13 @@ use studio_project_manager::grpc::tags::*;
 use studio_project_manager::grpc::search::*;
 use studio_project_manager::grpc::media::*;
 use studio_project_manager::grpc::system::*;
+use studio_project_manager::grpc::plugins::*;
 
 // Import all service traits
 use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
 use studio_project_manager::grpc::tags::tag_service_server::TagService;
 use studio_project_manager::grpc::scanning::scanning_service_server::ScanningService;
+use studio_project_manager::grpc::plugins::plugin_service_server::PluginService;
 // use crate::common;
 use std::sync::Arc;
 use tokio::sync::Mutex;

@@ -628,6 +628,13 @@ impl plugin_service_server::PluginService for StudioProjectManagerServer {
     ) -> Result<Response<GetProjectsByPluginResponse>, Status> {
         self.plugins_handler.get_projects_by_plugin(request).await
     }
+
+    async fn refresh_plugin_installation_status(
+        &self,
+        request: Request<RefreshPluginInstallationStatusRequest>,
+    ) -> Result<Response<RefreshPluginInstallationStatusResponse>, Status> {
+        self.plugins_handler.refresh_plugin_installation_status(request).await
+    }
 }
 
 // Sample Service Implementation

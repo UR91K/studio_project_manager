@@ -12,6 +12,8 @@ service PluginService {
   rpc GetPluginStats(GetPluginStatsRequest) returns (GetPluginStatsResponse);
   rpc GetProjectsByPlugin(GetProjectsByPluginRequest)
       returns (GetProjectsByPluginResponse);
+  rpc RefreshPluginInstallationStatus(RefreshPluginInstallationStatusRequest)
+      returns (RefreshPluginInstallationStatusResponse);
 }
 
 message GetAllPluginsRequest {
@@ -78,4 +80,16 @@ message GetProjectsByPluginRequest {
 message GetProjectsByPluginResponse {
   repeated studio_project_manager.common.Project projects = 1;
   int32 total_count = 2;
+}
+
+// Plugin Installation Status Refresh
+message RefreshPluginInstallationStatusRequest {}
+
+message RefreshPluginInstallationStatusResponse {
+  int32 total_plugins_checked = 1;
+  int32 plugins_now_installed = 2;
+  int32 plugins_now_missing = 3;
+  int32 plugins_unchanged = 4;
+  bool success = 5;
+  optional string error_message = 6;
 }

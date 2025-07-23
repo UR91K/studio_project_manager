@@ -87,6 +87,95 @@ impl LiveSetDatabase {
         Ok((grpc_plugins?, total_count))
     }
 
+    /// Refresh plugin installation status by checking against Ableton's database
+    pub fn refresh_plugin_installation_status(&mut self) -> Result<PluginRefreshResult, DatabaseError> {
+        use crate::config::CONFIG;
+        use crate::utils::plugins::get_most_recent_db_file;
+        use crate::ableton_db::AbletonDatabase;
+        use std::path::PathBuf;
+
+        let config = CONFIG
+            .as_ref()
+            .map_err(|e| DatabaseError::ConfigError(e.clone()))?;
+        
+        let db_dir = &config.live_database_dir;
+        let db_path_result = get_most_recent_db_file(&PathBuf::from(db_dir));
+        
+        let ableton_db = match db_path_result {
+            Ok(db_path) => {
+                match AbletonDatabase::new(db_path) {
+                    Ok(db) => Some(db),
+                    Err(e) => {
+                        log::warn!("Failed to open Ableton database: {:?}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("Ableton database file not found: {:?}", e);
+                None
+            }
+        };
+
+        let mut total_checked = 0;
+        let mut now_installed = 0;
+        let mut now_missing = 0;
+        let mut unchanged = 0;
+
+        // Get all plugins from our database
+        let mut stmt = self.conn.prepare("SELECT id, dev_identifier, name, format FROM plugins")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>("id")?,
+                row.get::<_, String>("dev_identifier")?,
+                row.get::<_, String>("name")?,
+                row.get::<_, String>("format")?,
+            ))
+        })?;
+
+        for row_result in rows {
+            let (plugin_id, dev_identifier, _name, _plugin_format_str) = row_result?;
+            total_checked += 1;
+
+            // Check if plugin exists in Ableton's database
+            let is_installed = if let Some(ref db) = ableton_db {
+                db.get_plugin_by_dev_identifier(&dev_identifier).is_ok()
+            } else {
+                false
+            };
+
+            // Update the plugin's installation status
+            let current_installed: bool = self.conn.query_row(
+                "SELECT installed FROM plugins WHERE id = ?",
+                params![plugin_id],
+                |row| row.get(0)
+            )?;
+
+            if current_installed != is_installed {
+                // Status changed, update it
+                self.conn.execute(
+                    "UPDATE plugins SET installed = ? WHERE id = ?",
+                    params![is_installed, plugin_id]
+                )?;
+
+                if is_installed {
+                    now_installed += 1;
+                } else {
+                    now_missing += 1;
+                }
+            } else {
+                unchanged += 1;
+            }
+        }
+
+        Ok(PluginRefreshResult {
+            total_plugins_checked: total_checked,
+            plugins_now_installed: now_installed,
+            plugins_now_missing: now_missing,
+            plugins_unchanged: unchanged,
+        })
+    }
+
     /// Get plugins filtered by installation status
     pub fn get_plugins_by_installed_status(
         &self,
@@ -296,6 +385,13 @@ pub struct PluginStats {
     pub unique_vendors: i32,
     pub plugins_by_format: std::collections::HashMap<String, i32>,
     pub plugins_by_vendor: std::collections::HashMap<String, i32>,
+}
+
+pub struct PluginRefreshResult {
+    pub total_plugins_checked: i32,
+    pub plugins_now_installed: i32,
+    pub plugins_now_missing: i32,
+    pub plugins_unchanged: i32,
 }
 
 

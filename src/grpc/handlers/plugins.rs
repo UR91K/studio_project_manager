@@ -245,4 +245,34 @@ impl PluginsHandler {
             }
         }
     }
+
+    pub async fn refresh_plugin_installation_status(
+        &self,
+        _request: Request<RefreshPluginInstallationStatusRequest>,
+    ) -> Result<Response<RefreshPluginInstallationStatusResponse>, Status> {
+        debug!("RefreshPluginInstallationStatus request");
+
+        let mut db = self.db.lock().await;
+
+        match db.refresh_plugin_installation_status() {
+            Ok(result) => {
+                let response = RefreshPluginInstallationStatusResponse {
+                    total_plugins_checked: result.total_plugins_checked,
+                    plugins_now_installed: result.plugins_now_installed,
+                    plugins_now_missing: result.plugins_now_missing,
+                    plugins_unchanged: result.plugins_unchanged,
+                    success: true,
+                    error_message: None,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to refresh plugin installation status: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
 }
