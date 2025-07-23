@@ -82,19 +82,30 @@ This document outlines the required features and endpoints for the Studio Projec
 - Sample sharing (frontend responsibility)
 - BatchGetSamples (no clear use case identified)
 
+## Tags Service
+
+### High Priority
+- [ ] **GetTag** - Get individual tag details by ID
+- [ ] **SearchTags** - Search tags by name
+- [ ] **GetProjectsByTag** - Get projects that have a specific tag
+
+### Medium Priority
+- [ ] **GetTagStatistics** - Get tag analytics and usage statistics
+- [ ] **GetAllTagsWithUsage** - Enhanced tag listing with usage counts and project counts
+
+### Not in Scope
+- Tag hierarchies (not needed for simple tagging)
+- Tag colors/themes (frontend responsibility)
+- Tag templates (not applicable)
+- Tag sharing (frontend responsibility)
+- BatchGetTags (no clear use case identified)
+
 ## Services to Review
 
 The following services need similar analysis and endpoint review:
 
-- [ ] Projects Service
 - [ ] Media Service
-- [ ] Plugins Service
-- [ ] Samples Service
-- [ ] Tags Service
 - [ ] Tasks Service
-- [ ] Search Service
-- [ ] System Service
-- [ ] Scanning Service
 - [ ] Watcher Service
 
 ## Process
