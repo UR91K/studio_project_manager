@@ -47,6 +47,41 @@ This document outlines the required features and endpoints for the Studio Projec
 - Plugin sharing (frontend responsibility)
 - BatchGetPlugins (not needed at this time)
 
+## Projects Service
+
+### High Priority
+- [ ] **Enhanced GetProjects filtering** - Add tempo range, key signature, time signature, Ableton version, date ranges, has_audio_file filters
+- [ ] **GetProjectStatistics** - Get project statistics for dashboards/overviews (counts, distributions, averages)
+
+### Medium Priority
+- [ ] **RescanProject** - Rescan individual project for validation/updates
+
+### Not in Scope
+- Project creation (projects are discovered from .als files)
+- Project import (projects must be created via scanning)
+- Project export (frontend responsibility)
+- Project duplication (would violate scanning-only constraint)
+- Project validation (handled by rescanning)
+- Plugin CRUD operations (would be pointless given scanning architecture)
+
+## Samples Service
+
+### High Priority
+- [ ] **GetSample** - Get individual sample details by ID
+- [ ] **Enhanced GetAllSamples filtering** - Add present_only, missing_only, extension_filter, usage_count range filters
+- [ ] **GetSampleAnalytics** - Get advanced sample statistics for status bars/overviews
+
+### Medium Priority
+- [ ] **GetSampleExtensions** - Get extension statistics for filtering UI and storage analysis
+
+### Not in Scope
+- Sample CRUD operations (samples are discovered from .als files)
+- Sample file management (handled by scanning system)
+- Sample upload/download (frontend responsibility)
+- Sample conversion (frontend responsibility)
+- Sample sharing (frontend responsibility)
+- BatchGetSamples (no clear use case identified)
+
 ## Services to Review
 
 The following services need similar analysis and endpoint review:
