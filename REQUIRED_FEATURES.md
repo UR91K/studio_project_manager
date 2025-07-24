@@ -100,12 +100,42 @@ This document outlines the required features and endpoints for the Studio Projec
 - Tag sharing (frontend responsibility)
 - BatchGetTags (no clear use case identified)
 
+## Media Service
+
+### Low Priority
+- [ ] **ValidateMediaFiles** - Bulk validation of media file integrity and cleanup
+
+### Not in Scope
+- Individual media file management (media files are attachments to projects/collections)
+- Media file search (no standalone media browsing)
+- Media file listing (accessed through parent entities)
+- Media conversion (frontend responsibility)
+- Thumbnail generation (not essential)
+- Audio metadata extraction (not essential)
+- Media sharing (frontend responsibility)
+
+## Tasks Service
+
+### Medium Priority
+- [ ] **SearchTasks** - Search tasks within a specific project
+- [ ] **GetTaskStatistics** - Get task analytics for status bars/overviews
+
+### Not in Scope
+- GetTask (not needed - tasks are always viewed in project context)
+- GetAllTasks (would require a "Tasks View" that doesn't exist)
+- GetTasksByStatus (would require a "Tasks View" that doesn't exist)
+- BatchGetTasks (no clear use case identified)
+- Task hierarchies (not needed for simple task management)
+- Task priorities (frontend responsibility)
+- Task due dates (frontend responsibility)
+- Task assignments (frontend responsibility)
+- Task templates (not applicable)
+- Task sharing (frontend responsibility)
+
 ## Services to Review
 
 The following services need similar analysis and endpoint review:
 
-- [ ] Media Service
-- [ ] Tasks Service
 - [ ] Watcher Service
 
 ## Process
