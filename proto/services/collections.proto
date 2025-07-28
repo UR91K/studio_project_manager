@@ -15,6 +15,8 @@ service CollectionService {
       returns (UpdateCollectionResponse);
   rpc DeleteCollection(DeleteCollectionRequest)
       returns (DeleteCollectionResponse);
+  rpc DuplicateCollection(DuplicateCollectionRequest)
+      returns (DuplicateCollectionResponse);
   rpc AddProjectToCollection(AddProjectToCollectionRequest)
       returns (AddProjectToCollectionResponse);
   rpc RemoveProjectFromCollection(RemoveProjectFromCollectionRequest)
@@ -91,6 +93,17 @@ message DeleteCollectionRequest {
 
 message DeleteCollectionResponse {
   bool success = 1;
+}
+
+message DuplicateCollectionRequest {
+  string collection_id = 1;
+  string new_name = 2;
+  optional string new_description = 3;
+  optional string new_notes = 4;
+}
+
+message DuplicateCollectionResponse {
+  studio_project_manager.common.Collection collection = 1;
 }
 
 message AddProjectToCollectionRequest {

@@ -250,6 +250,13 @@ impl collection_service_server::CollectionService for StudioProjectManagerServer
         self.collections_handler.delete_collection(request).await
     }
 
+    async fn duplicate_collection(
+        &self,
+        request: Request<DuplicateCollectionRequest>,
+    ) -> Result<Response<DuplicateCollectionResponse>, Status> {
+        self.collections_handler.duplicate_collection(request).await
+    }
+
     async fn add_project_to_collection(
         &self,
         request: Request<AddProjectToCollectionRequest>,

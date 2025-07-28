@@ -351,6 +351,85 @@ impl CollectionsHandler {
         }
     }
 
+    pub async fn duplicate_collection(
+        &self,
+        request: Request<DuplicateCollectionRequest>,
+    ) -> Result<Response<DuplicateCollectionResponse>, Status> {
+        debug!("DuplicateCollection request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.duplicate_collection(
+            &req.collection_id,
+            &req.new_name,
+            req.new_description.as_deref(),
+            req.new_notes.as_deref(),
+        ) {
+            Ok(new_collection_id) => {
+                // Get the duplicated collection details to return in response
+                match db.get_collection_by_id(&new_collection_id) {
+                    Ok(Some((
+                        id,
+                        name,
+                        description,
+                        notes,
+                        created_at,
+                        modified_at,
+                        project_ids,
+                        cover_art_id,
+                    ))) => {
+                        // Get collection statistics
+                        let (total_duration_seconds, project_count) =
+                            db.get_collection_statistics(&id).unwrap_or((None, 0));
+
+                        let collection = Collection {
+                            id,
+                            name,
+                            description,
+                            notes,
+                            created_at,
+                            modified_at,
+                            project_ids,
+                            cover_art_id,
+                            total_duration_seconds,
+                            project_count,
+                        };
+
+                        let response = DuplicateCollectionResponse {
+                            collection: Some(collection),
+                        };
+                        Ok(Response::new(response))
+                    }
+                    Ok(None) => {
+                        error!("Collection {} was duplicated but not found", new_collection_id);
+                        Err(Status::new(Code::Internal, "Collection duplication failed"))
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to retrieve duplicated collection {}: {:?}",
+                            new_collection_id, e
+                        );
+                        Err(Status::new(
+                            Code::Internal,
+                            format!("Database error: {}", e),
+                        ))
+                    }
+                }
+            }
+            Err(e) => {
+                error!(
+                    "Failed to duplicate collection '{}': {:?}",
+                    req.collection_id, e
+                );
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
     pub async fn add_project_to_collection(
         &self,
         request: Request<AddProjectToCollectionRequest>,

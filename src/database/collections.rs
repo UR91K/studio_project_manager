@@ -157,6 +157,97 @@ impl LiveSetDatabase {
         Ok(())
     }
 
+    pub fn duplicate_collection(
+        &mut self,
+        collection_id: &str,
+        new_name: &str,
+        new_description: Option<&str>,
+        new_notes: Option<&str>,
+    ) -> Result<String, DatabaseError> {
+        debug!("Duplicating collection: {} with new name: {}", collection_id, new_name);
+        let tx = self.conn.transaction()?;
+        let now = Local::now();
+
+        // Get the original collection data
+        let original_collection: Option<(String, String, Option<String>, Option<String>, i64, i64, Option<String>)> = tx.query_row(
+            "SELECT id, name, description, notes, created_at, modified_at, cover_art_id FROM collections WHERE id = ?",
+            [collection_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
+            },
+        ).optional()?;
+
+        let original_collection = match original_collection {
+            Some(data) => data,
+            None => {
+                return Err(DatabaseError::NotFound(format!(
+                    "Collection {} not found",
+                    collection_id
+                )));
+            }
+        };
+
+        // Create the new collection
+        let new_collection_id = Uuid::new_v4().to_string();
+        let description = new_description.or(original_collection.2.as_deref());
+        let notes = new_notes.or(original_collection.3.as_deref());
+
+        tx.execute(
+            "INSERT INTO collections (id, name, description, notes, created_at, modified_at, cover_art_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            params![
+                new_collection_id,
+                new_name,
+                description,
+                notes,
+                SqlDateTime::from(now),
+                SqlDateTime::from(now),
+                original_collection.6, // cover_art_id (shared reference)
+            ],
+        )?;
+
+        // Get all projects from the original collection with their positions
+        let mut stmt = tx.prepare(
+            "SELECT project_id, position FROM collection_projects WHERE collection_id = ? ORDER BY position"
+        )?;
+        let project_positions: Vec<(String, i32)> = stmt
+            .query_map([collection_id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        drop(stmt); // Explicitly drop the statement to release the borrow
+
+        // Add all projects to the new collection with the same positions
+        for (project_id, position) in &project_positions {
+            tx.execute(
+                "INSERT INTO collection_projects (collection_id, project_id, position, added_at) VALUES (?, ?, ?, ?)",
+                params![
+                    new_collection_id,
+                    project_id,
+                    position,
+                    SqlDateTime::from(now)
+                ],
+            )?;
+        }
+
+        tx.commit()?;
+        debug!(
+            "Successfully duplicated collection: {} -> {} with {} projects",
+            collection_id,
+            new_collection_id,
+            project_positions.len()
+        );
+        Ok(new_collection_id)
+    }
+
     pub fn add_project_to_collection(
         &mut self,
         collection_id: &str,

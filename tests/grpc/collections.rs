@@ -21,6 +21,10 @@ use crate::common::setup;
 use super::*;
 // use crate::common::setup;
 use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
+use studio_project_manager::grpc::StudioProjectManagerServer;
+use studio_project_manager::grpc::projects::project_service_server::ProjectService;
+use studio_project_manager::grpc::scanning::scanning_service_server::ScanningService;
+use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn test_get_collections_empty() {
@@ -983,4 +987,198 @@ async fn test_get_collection_statistics() {
     assert!(empty_stats.average_tempo.is_none());
     assert!(empty_stats.most_common_key.is_none());
     assert!(empty_stats.most_common_time_signature.is_none());
+}
+
+#[tokio::test]
+async fn test_duplicate_collection() {
+    setup("error");
+    let server = create_test_server().await;
+
+    // Create a collection with projects
+    let create_request = Request::new(CreateCollectionRequest {
+        name: "Original Collection".to_string(),
+        description: Some("Original description".to_string()),
+        notes: Some("Original notes".to_string()),
+    });
+
+    let create_response = server.create_collection(create_request).await.unwrap();
+    let original_collection = create_response.into_inner().collection.unwrap();
+
+    // Add some projects to the collection
+    let project1 = create_test_project(&server, "Project 1.als").await;
+    let project2 = create_test_project(&server, "Project 2.als").await;
+    let project3 = create_test_project(&server, "Project 3.als").await;
+
+    server
+        .add_project_to_collection(Request::new(AddProjectToCollectionRequest {
+            collection_id: original_collection.id.clone(),
+            project_id: project1.id.clone(),
+            position: None,
+        }))
+        .await
+        .unwrap();
+
+    server
+        .add_project_to_collection(Request::new(AddProjectToCollectionRequest {
+            collection_id: original_collection.id.clone(),
+            project_id: project2.id.clone(),
+            position: None,
+        }))
+        .await
+        .unwrap();
+
+    server
+        .add_project_to_collection(Request::new(AddProjectToCollectionRequest {
+            collection_id: original_collection.id.clone(),
+            project_id: project3.id.clone(),
+            position: None,
+        }))
+        .await
+        .unwrap();
+
+    // Reorder projects
+    server
+        .reorder_collection(Request::new(ReorderCollectionRequest {
+            collection_id: original_collection.id.clone(),
+            project_ids: vec![project3.id.clone(), project1.id.clone(), project2.id.clone()],
+        }))
+        .await
+        .unwrap();
+
+    // Duplicate the collection
+    let duplicate_request = Request::new(DuplicateCollectionRequest {
+        collection_id: original_collection.id.clone(),
+        new_name: "Duplicated Collection".to_string(),
+        new_description: Some("New description".to_string()),
+        new_notes: None, // Use original notes
+    });
+
+    let duplicate_response = server.duplicate_collection(duplicate_request).await.unwrap();
+    let duplicated_collection = duplicate_response.into_inner().collection.unwrap();
+
+    // Verify the duplicated collection
+    assert_eq!(duplicated_collection.name, "Duplicated Collection");
+    assert_eq!(duplicated_collection.description, Some("New description".to_string()));
+    assert_eq!(duplicated_collection.notes, Some("Original notes".to_string())); // Should inherit original notes
+    assert_ne!(duplicated_collection.id, original_collection.id);
+    assert_eq!(duplicated_collection.project_ids.len(), 3);
+    assert_eq!(duplicated_collection.project_count, 3);
+
+    // Fetch the original collection again to get the updated project_ids
+    let refreshed_original = server
+        .get_collection(Request::new(GetCollectionRequest {
+            collection_id: original_collection.id.clone(),
+        }))
+        .await
+        .unwrap()
+        .into_inner()
+        .collection
+        .unwrap();
+
+    // Verify both collections have the same projects in the same order
+    assert_eq!(refreshed_original.project_ids, duplicated_collection.project_ids);
+
+    // Get both collections to verify project order
+    let original_response = server
+        .get_collection(Request::new(GetCollectionRequest {
+            collection_id: original_collection.id.clone(),
+        }))
+        .await
+        .unwrap();
+    let original_full = original_response.into_inner().collection.unwrap();
+
+    let duplicated_response = server
+        .get_collection(Request::new(GetCollectionRequest {
+            collection_id: duplicated_collection.id.clone(),
+        }))
+        .await
+        .unwrap();
+    let duplicated_full = duplicated_response.into_inner().collection.unwrap();
+
+    // Verify project order is preserved (check that both collections have the same project IDs in the same order)
+    assert_eq!(original_full.project_ids.len(), 3);
+    assert_eq!(duplicated_full.project_ids.len(), 3);
+    assert_eq!(original_full.project_ids, duplicated_full.project_ids);
+}
+
+#[tokio::test]
+async fn test_duplicate_collection_with_all_new_metadata() {
+    setup("error");
+    let server = create_test_server().await;
+
+    // Create a collection
+    let create_request = Request::new(CreateCollectionRequest {
+        name: "Original Collection".to_string(),
+        description: Some("Original description".to_string()),
+        notes: Some("Original notes".to_string()),
+    });
+
+    let create_response = server.create_collection(create_request).await.unwrap();
+    let original_collection = create_response.into_inner().collection.unwrap();
+
+    // Add a project
+    let project = create_test_project(&server, "Test Project.als").await;
+    server
+        .add_project_to_collection(Request::new(AddProjectToCollectionRequest {
+            collection_id: original_collection.id.clone(),
+            project_id: project.id.clone(),
+            position: None,
+        }))
+        .await
+        .unwrap();
+
+    // Duplicate with all new metadata
+    let duplicate_request = Request::new(DuplicateCollectionRequest {
+        collection_id: original_collection.id.clone(),
+        new_name: "Fully New Collection".to_string(),
+        new_description: Some("Completely new description".to_string()),
+        new_notes: Some("Completely new notes".to_string()),
+    });
+
+    let duplicate_response = server.duplicate_collection(duplicate_request).await.unwrap();
+    let duplicated_collection = duplicate_response.into_inner().collection.unwrap();
+
+    // Verify all metadata is new
+    assert_eq!(duplicated_collection.name, "Fully New Collection");
+    assert_eq!(duplicated_collection.description, Some("Completely new description".to_string()));
+    assert_eq!(duplicated_collection.notes, Some("Completely new notes".to_string()));
+    assert_ne!(duplicated_collection.id, original_collection.id);
+    assert_eq!(duplicated_collection.project_ids.len(), 1);
+    assert_eq!(duplicated_collection.project_ids[0], project.id);
+}
+
+#[tokio::test]
+async fn test_duplicate_nonexistent_collection() {
+    setup("error");
+    let server = create_test_server().await;
+
+    let duplicate_request = Request::new(DuplicateCollectionRequest {
+        collection_id: "non-existent-id".to_string(),
+        new_name: "Should Fail".to_string(),
+        new_description: None,
+        new_notes: None,
+    });
+
+    let result = server.duplicate_collection(duplicate_request).await;
+    assert!(result.is_err());
+}
+
+async fn create_test_project(server: &StudioProjectManagerServer, name: &str) -> studio_project_manager::grpc::common::Project {
+    // Create a test project directly in the database
+    let db = server.db();
+    let project_id = create_test_project_in_db(db).await;
+    
+    // Get the project
+    let projects_response = server
+        .get_projects(Request::new(GetProjectsRequest {
+            limit: Some(1000),
+            offset: Some(0),
+            sort_by: None,
+            sort_desc: None,
+        }))
+        .await
+        .unwrap();
+
+    let projects = projects_response.into_inner().projects;
+    projects.into_iter().find(|p| p.id == project_id).expect("Test project not found")
 }
