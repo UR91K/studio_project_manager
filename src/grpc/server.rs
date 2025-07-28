@@ -282,6 +282,13 @@ impl collection_service_server::CollectionService for StudioProjectManagerServer
         self.collections_handler.get_collection_tasks(request).await
     }
 
+    async fn search_collections(
+        &self,
+        request: Request<SearchCollectionsRequest>,
+    ) -> Result<Response<SearchCollectionsResponse>, Status> {
+        self.collections_handler.search_collections(request).await
+    }
+
     async fn batch_add_to_collection(
         &self,
         request: Request<BatchAddToCollectionRequest>,

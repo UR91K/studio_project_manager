@@ -565,6 +565,54 @@ impl LiveSetDatabase {
         Ok(collection_ids)
     }
 
+    /// Search collections by name, description, or notes
+    pub fn search_collections(
+        &mut self,
+        query: &str,
+        limit: Option<i32>,
+        offset: Option<i32>,
+    ) -> Result<(Vec<(String, String, Option<String>)>, i32), DatabaseError> {
+        debug!("Searching collections with query: '{}'", query);
+        
+        let search_pattern = format!("%{}%", query);
+        
+        // Get total count
+        let total_count: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM collections WHERE name LIKE ? OR description LIKE ? OR notes LIKE ?",
+            params![search_pattern, search_pattern, search_pattern],
+            |row| row.get(0),
+        )?;
+
+        // Build query with pagination
+        let query_sql = "SELECT id, name, description FROM collections 
+                        WHERE name LIKE ? OR description LIKE ? OR notes LIKE ? 
+                        ORDER BY name ASC LIMIT ? OFFSET ?";
+
+        let mut stmt = self.conn.prepare(query_sql)?;
+        let collections: Vec<(String, String, Option<String>)> = stmt
+            .query_map(
+                params![
+                    search_pattern,
+                    search_pattern,
+                    search_pattern,
+                    limit.unwrap_or(1000),
+                    offset.unwrap_or(0)
+                ],
+                |row| {
+                    let id: String = row.get(0)?;
+                    let name: String = row.get(1)?;
+                    let description: Option<String> = row.get(2)?;
+                    debug!("Found collection in search: {} ({})", name, id);
+                    Ok((id, name, description))
+                },
+            )?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Search returned {} collections (total: {})", collections.len(), total_count);
+        Ok((collections, total_count))
+    }
+
     /// Get statistics for a specific collection (total duration and project count)
     pub fn get_collection_statistics(
         &mut self,

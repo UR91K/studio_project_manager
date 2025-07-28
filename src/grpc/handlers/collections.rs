@@ -542,6 +542,79 @@ impl CollectionsHandler {
         }
     }
 
+    pub async fn search_collections(
+        &self,
+        request: Request<SearchCollectionsRequest>,
+    ) -> Result<Response<SearchCollectionsResponse>, Status> {
+        debug!("SearchCollections request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.search_collections(&req.query, req.limit, req.offset) {
+            Ok((collections_data, total_count)) => {
+                let mut collections = Vec::new();
+
+                for (id, name, description) in collections_data {
+                    // Get the full collection details including project IDs
+                    match db.get_collection_by_id(&id) {
+                        Ok(Some((
+                            _,
+                            _,
+                            _,
+                            notes,
+                            created_at,
+                            modified_at,
+                            project_ids,
+                            cover_art_id,
+                        ))) => {
+                            // Get collection statistics
+                            let (total_duration_seconds, project_count) =
+                                db.get_collection_statistics(&id).unwrap_or((None, 0));
+
+                            collections.push(Collection {
+                                id: id.clone(),
+                                name: name.clone(),
+                                description,
+                                notes,
+                                created_at,
+                                modified_at,
+                                project_ids,
+                                cover_art_id,
+                                total_duration_seconds,
+                                project_count,
+                            });
+                        }
+                        Ok(None) => {
+                            // Collection was deleted between search and get_collection_by_id
+                            debug!("Collection {} not found during detailed lookup", id);
+                        }
+                        Err(e) => {
+                            error!("Failed to get collection details for {}: {:?}", id, e);
+                            return Err(Status::new(
+                                Code::Internal,
+                                format!("Database error: {}", e),
+                            ));
+                        }
+                    }
+                }
+
+                let response = SearchCollectionsResponse {
+                    collections,
+                    total_count,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to search collections: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
     // Batch Collection Operations
     pub async fn batch_add_to_collection(
         &self,

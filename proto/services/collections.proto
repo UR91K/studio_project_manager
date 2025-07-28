@@ -23,6 +23,8 @@ service CollectionService {
       returns (ReorderCollectionResponse);
   rpc GetCollectionTasks(GetCollectionTasksRequest)
       returns (GetCollectionTasksResponse);
+  rpc SearchCollections(SearchCollectionsRequest)
+      returns (SearchCollectionsResponse);
 
   // Batch Collections
   rpc BatchAddToCollection(BatchAddToCollectionRequest)
@@ -127,6 +129,18 @@ message GetCollectionTasksResponse {
   int32 completed_tasks = 3;
   int32 pending_tasks = 4;
   double completion_rate = 5;
+}
+
+// Collection Search Messages
+message SearchCollectionsRequest {
+  string query = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message SearchCollectionsResponse {
+  repeated studio_project_manager.common.Collection collections = 1;
+  int32 total_count = 2;
 }
 
 // Collection Cover Art Messages

@@ -794,3 +794,119 @@ async fn test_get_collections_pagination() {
     let names: Vec<&str> = collections_response.collections.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(names, vec!["Collection 4", "Collection 3", "Collection 2", "Collection 1", "Collection 0"]);
 }
+
+#[tokio::test]
+async fn test_search_collections() {
+    setup("error");
+    let server = create_test_server().await;
+
+    // Create multiple collections with different names and descriptions
+    let create_requests = vec![
+        CreateCollectionRequest {
+            name: "Electronic Music".to_string(),
+            description: Some("Collection of electronic music projects".to_string()),
+            notes: Some("EDM, techno, house".to_string()),
+        },
+        CreateCollectionRequest {
+            name: "Rock Band Projects".to_string(),
+            description: Some("Rock and alternative music".to_string()),
+            notes: None,
+        },
+        CreateCollectionRequest {
+            name: "Jazz Standards".to_string(),
+            description: Some("Jazz music collection".to_string()),
+            notes: Some("Traditional jazz standards".to_string()),
+        },
+        CreateCollectionRequest {
+            name: "Film Scoring".to_string(),
+            description: Some("Film and video game music".to_string()),
+            notes: Some("Orchestral and cinematic".to_string()),
+        },
+    ];
+
+    for create_request in create_requests {
+        let request = Request::new(create_request);
+        server.create_collection(request).await.unwrap();
+    }
+
+    // Test search by name
+    let search_request = Request::new(SearchCollectionsRequest {
+        query: "Electronic".to_string(),
+        limit: None,
+        offset: None,
+    });
+
+    let response = server.search_collections(search_request).await.unwrap();
+    let search_response = response.into_inner();
+    
+    assert_eq!(search_response.collections.len(), 1);
+    assert_eq!(search_response.total_count, 1);
+    assert_eq!(search_response.collections[0].name, "Electronic Music");
+
+    // Test search by description
+    let search_request = Request::new(SearchCollectionsRequest {
+        query: "jazz".to_string(),
+        limit: None,
+        offset: None,
+    });
+
+    let response = server.search_collections(search_request).await.unwrap();
+    let search_response = response.into_inner();
+    
+    assert_eq!(search_response.collections.len(), 1);
+    assert_eq!(search_response.total_count, 1);
+    assert_eq!(search_response.collections[0].name, "Jazz Standards");
+
+    // Test search by notes
+    let search_request = Request::new(SearchCollectionsRequest {
+        query: "orchestral".to_string(),
+        limit: None,
+        offset: None,
+    });
+
+    let response = server.search_collections(search_request).await.unwrap();
+    let search_response = response.into_inner();
+    
+    assert_eq!(search_response.collections.len(), 1);
+    assert_eq!(search_response.total_count, 1);
+    assert_eq!(search_response.collections[0].name, "Film Scoring");
+
+    // Test search with pagination
+    let search_request = Request::new(SearchCollectionsRequest {
+        query: "music".to_string(),
+        limit: Some(2),
+        offset: None,
+    });
+
+    let response = server.search_collections(search_request).await.unwrap();
+    let search_response = response.into_inner();
+    
+    assert_eq!(search_response.collections.len(), 2);
+    assert_eq!(search_response.total_count, 4); // "Electronic Music", "Rock Band Projects", "Jazz Standards", "Film Scoring"
+
+    // Test search with offset
+    let search_request = Request::new(SearchCollectionsRequest {
+        query: "music".to_string(),
+        limit: Some(1),
+        offset: Some(1),
+    });
+
+    let response = server.search_collections(search_request).await.unwrap();
+    let search_response = response.into_inner();
+    
+    assert_eq!(search_response.collections.len(), 1);
+    assert_eq!(search_response.total_count, 4);
+
+    // Test search with no results
+    let search_request = Request::new(SearchCollectionsRequest {
+        query: "nonexistent".to_string(),
+        limit: None,
+        offset: None,
+    });
+
+    let response = server.search_collections(search_request).await.unwrap();
+    let search_response = response.into_inner();
+    
+    assert_eq!(search_response.collections.len(), 0);
+    assert_eq!(search_response.total_count, 0);
+}
