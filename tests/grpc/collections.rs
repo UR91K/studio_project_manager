@@ -26,7 +26,12 @@ use studio_project_manager::grpc::collections::collection_service_server::Collec
 async fn test_get_collections_empty() {
     setup("error");
     let server = create_test_server().await;
-    let request = Request::new(GetCollectionsRequest {});
+    let request = Request::new(GetCollectionsRequest {
+        limit: None,
+        offset: None,
+        sort_by: None,
+        sort_desc: None,
+    });
 
     let response = server.get_collections(request).await.unwrap();
     let collections = response.into_inner().collections;
@@ -78,7 +83,12 @@ async fn test_get_collections_with_data() {
     let created_collection = create_response.into_inner().collection.unwrap();
 
     // Get all collections
-    let get_request = Request::new(GetCollectionsRequest {});
+    let get_request = Request::new(GetCollectionsRequest {
+        limit: None,
+        offset: None,
+        sort_by: None,
+        sort_desc: None,
+    });
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
 
@@ -207,7 +217,12 @@ async fn test_add_project_to_collection() {
     assert!(add_response.into_inner().success);
 
     // Verify the project was added
-    let get_request = Request::new(GetCollectionsRequest {});
+    let get_request = Request::new(GetCollectionsRequest {
+        limit: None,
+        offset: None,
+        sort_by: None,
+        sort_desc: None,
+    });
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
 
@@ -262,7 +277,12 @@ async fn test_add_multiple_projects_to_collection() {
     assert!(add_response2.into_inner().success);
 
     // Verify both projects were added in order
-    let get_request = Request::new(GetCollectionsRequest {});
+    let get_request = Request::new(GetCollectionsRequest {
+        limit: None,
+        offset: None,
+        sort_by: None,
+        sort_desc: None,
+    });
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
 
@@ -311,7 +331,12 @@ async fn test_remove_project_from_collection() {
     assert!(remove_response.into_inner().success);
 
     // Verify the project was removed
-    let get_request = Request::new(GetCollectionsRequest {});
+    let get_request = Request::new(GetCollectionsRequest {
+        limit: None,
+        offset: None,
+        sort_by: None,
+        sort_desc: None,
+    });
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
 
@@ -361,7 +386,12 @@ async fn test_remove_project_maintains_order() {
         .unwrap();
 
     // Verify the remaining projects maintain their relative order
-    let get_request = Request::new(GetCollectionsRequest {});
+    let get_request = Request::new(GetCollectionsRequest {
+        limit: None,
+        offset: None,
+        sort_by: None,
+        sort_desc: None,
+    });
     let get_response = server.get_collections(get_request).await.unwrap();
     let collections = get_response.into_inner().collections;
 
@@ -701,4 +731,66 @@ async fn test_reorder_collection_nonexistent_collection() {
     let status = reorder_response.unwrap_err();
     assert_eq!(status.code(), tonic::Code::NotFound);
     assert!(status.message().contains("Collection not found"));
+}
+
+#[tokio::test]
+async fn test_get_collections_pagination() {
+    setup("error");
+    let server = create_test_server().await;
+
+    // Create multiple collections
+    for i in 0..5 {
+        let create_request = Request::new(CreateCollectionRequest {
+            name: format!("Collection {}", i),
+            description: Some(format!("Description {}", i)),
+            notes: None,
+        });
+        server.create_collection(create_request).await.unwrap();
+    }
+
+    // Test pagination with limit
+    let request = Request::new(GetCollectionsRequest {
+        limit: Some(3),
+        offset: None,
+        sort_by: None,
+        sort_desc: None,
+    });
+
+    let response = server.get_collections(request).await.unwrap();
+    let collections_response = response.into_inner();
+    
+    assert_eq!(collections_response.collections.len(), 3);
+    assert_eq!(collections_response.total_count, 5);
+
+    // Test pagination with offset
+    let request = Request::new(GetCollectionsRequest {
+        limit: Some(2),
+        offset: Some(2),
+        sort_by: None,
+        sort_desc: None,
+    });
+
+    let response = server.get_collections(request).await.unwrap();
+    let collections_response = response.into_inner();
+    
+    assert_eq!(collections_response.collections.len(), 2);
+    assert_eq!(collections_response.total_count, 5);
+
+    // Test sorting
+    let request = Request::new(GetCollectionsRequest {
+        limit: None,
+        offset: None,
+        sort_by: Some("name".to_string()),
+        sort_desc: Some(true),
+    });
+
+    let response = server.get_collections(request).await.unwrap();
+    let collections_response = response.into_inner();
+    
+    assert_eq!(collections_response.collections.len(), 5);
+    assert_eq!(collections_response.total_count, 5);
+    
+    // Verify descending order by name
+    let names: Vec<&str> = collections_response.collections.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, vec!["Collection 4", "Collection 3", "Collection 2", "Collection 1", "Collection 0"]);
 }

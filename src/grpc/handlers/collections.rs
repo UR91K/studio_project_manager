@@ -40,13 +40,20 @@ impl CollectionsHandler {
 
     pub async fn get_collections(
         &self,
-        _request: Request<GetCollectionsRequest>,
+        request: Request<GetCollectionsRequest>,
     ) -> Result<Response<GetCollectionsResponse>, Status> {
-        debug!("GetCollections request");
+        debug!("GetCollections request: {:?}", request);
 
+        let req = request.into_inner();
         let mut db = self.db.lock().await;
-        match db.list_collections() {
-            Ok(collections_data) => {
+        
+        match db.list_collections(
+            req.limit,
+            req.offset,
+            req.sort_by,
+            req.sort_desc,
+        ) {
+            Ok((collections_data, total_count)) => {
                 let mut collections = Vec::new();
 
                 for (id, name, description) in collections_data {
@@ -93,7 +100,10 @@ impl CollectionsHandler {
                     }
                 }
 
-                let response = GetCollectionsResponse { collections };
+                let response = GetCollectionsResponse { 
+                    collections,
+                    total_count,
+                };
                 Ok(Response::new(response))
             }
             Err(e) => {

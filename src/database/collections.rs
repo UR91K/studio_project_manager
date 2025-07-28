@@ -489,25 +489,57 @@ impl LiveSetDatabase {
 
     pub fn list_collections(
         &mut self,
-    ) -> Result<Vec<(String, String, Option<String>)>, DatabaseError> {
-        debug!("Listing all collections");
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, name, description FROM collections ORDER BY name")?;
+        limit: Option<i32>,
+        offset: Option<i32>,
+        sort_by: Option<String>,
+        sort_desc: Option<bool>,
+    ) -> Result<(Vec<(String, String, Option<String>)>, i32), DatabaseError> {
+        debug!("Listing collections with pagination: limit={:?}, offset={:?}, sort_by={:?}, sort_desc={:?}", 
+               limit, offset, sort_by, sort_desc);
 
-        let collections = stmt
-            .query_map([], |row| {
-                let id: String = row.get(0)?;
-                let name: String = row.get(1)?;
-                let description: Option<String> = row.get(2)?;
-                debug!("Found collection: {} ({})", name, id);
-                Ok((id, name, description))
-            })?
+        let sort_column = match sort_by.as_deref() {
+            Some("name") => "name",
+            Some("description") => "description",
+            Some("created_at") => "created_at",
+            Some("modified_at") => "modified_at",
+            Some("project_count") => "project_count",
+            _ => "name", // default sort
+        };
+
+        let sort_order = if sort_desc.unwrap_or(false) {
+            "DESC"
+        } else {
+            "ASC"
+        };
+
+        // Get total count
+        let total_count: i32 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM collections", [], |row| row.get(0))?;
+
+        // Build query with pagination
+        let query = format!(
+            "SELECT id, name, description FROM collections ORDER BY {} {} LIMIT ? OFFSET ?",
+            sort_column, sort_order
+        );
+
+        let mut stmt = self.conn.prepare(&query)?;
+        let collections: Vec<(String, String, Option<String>)> = stmt
+            .query_map(
+                params![limit.unwrap_or(1000), offset.unwrap_or(0)],
+                |row| {
+                    let id: String = row.get(0)?;
+                    let name: String = row.get(1)?;
+                    let description: Option<String> = row.get(2)?;
+                    debug!("Found collection: {} ({})", name, id);
+                    Ok((id, name, description))
+                },
+            )?
             .filter_map(|r| r.ok())
             .collect();
 
-        debug!("Retrieved all collections");
-        Ok(collections)
+        debug!("Retrieved {} collections (total: {})", collections.len(), total_count);
+        Ok((collections, total_count))
     }
 
     /// Get all collection IDs that contain a specific project

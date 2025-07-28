@@ -54,8 +54,9 @@ fn test_collections() {
         .expect("Failed to create collection");
 
     // Test listing collections
-    let collections = db.list_collections().expect("Failed to list collections");
+    let (collections, total_count) = db.list_collections(None, None, None, None).expect("Failed to list collections");
     assert_eq!(collections.len(), 1);
+    assert_eq!(total_count, 1);
     let (id, name, description) = &collections[0];
     assert_eq!(id, &collection_id);
     assert_eq!(name, "Electronic Music");
@@ -107,8 +108,9 @@ fn test_collections() {
     // Test deleting collection
     db.delete_collection(&collection_id)
         .expect("Failed to delete collection");
-    let collections = db
-        .list_collections()
+    let (collections, total_count) = db
+        .list_collections(None, None, None, None)
         .expect("Failed to list collections after deletion");
     assert_eq!(collections.len(), 0);
+    assert_eq!(total_count, 0);
 }

@@ -40,10 +40,16 @@ service CollectionService {
 }
 
 // Collections
-message GetCollectionsRequest {}
+message GetCollectionsRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string sort_by = 3;
+  optional bool sort_desc = 4;
+}
 
 message GetCollectionsResponse {
   repeated studio_project_manager.common.Collection collections = 1;
+  int32 total_count = 2;
 }
 
 message GetCollectionRequest {
