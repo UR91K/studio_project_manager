@@ -25,6 +25,8 @@ service CollectionService {
       returns (GetCollectionTasksResponse);
   rpc SearchCollections(SearchCollectionsRequest)
       returns (SearchCollectionsResponse);
+  rpc GetCollectionStatistics(GetCollectionStatisticsRequest)
+      returns (GetCollectionStatisticsResponse);
 
   // Batch Collections
   rpc BatchAddToCollection(BatchAddToCollectionRequest)
@@ -141,6 +143,22 @@ message SearchCollectionsRequest {
 message SearchCollectionsResponse {
   repeated studio_project_manager.common.Collection collections = 1;
   int32 total_count = 2;
+}
+
+// Collection Statistics Messages
+message GetCollectionStatisticsRequest {
+  string collection_id = 1;
+}
+
+message GetCollectionStatisticsResponse {
+  int32 project_count = 1;
+  optional double total_duration_seconds = 2;
+  optional double average_tempo = 3;
+  int32 total_plugins = 4;
+  int32 total_samples = 5;
+  int32 total_tags = 6;
+  optional string most_common_key = 7;
+  optional string most_common_time_signature = 8;
 }
 
 // Collection Cover Art Messages

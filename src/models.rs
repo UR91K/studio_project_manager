@@ -1015,3 +1015,24 @@ impl Default for Id {
         Id(0)
     }
 }
+
+/// Statistics for a collection (for status bar display)
+#[derive(Debug, Clone)]
+pub struct CollectionStatistics {
+    /// Number of projects in the collection
+    pub project_count: i32,
+    /// Total duration of all projects in seconds
+    pub total_duration_seconds: Option<f64>,
+    /// Average tempo across all projects
+    pub average_tempo: Option<f64>,
+    /// Total number of unique plugins used across all projects
+    pub total_plugins: i32,
+    /// Total number of unique samples used across all projects
+    pub total_samples: i32,
+    /// Total number of unique tags used across all projects
+    pub total_tags: i32,
+    /// Most common key signature across all projects
+    pub most_common_key: Option<String>,
+    /// Most common time signature across all projects
+    pub most_common_time_signature: Option<String>,
+}

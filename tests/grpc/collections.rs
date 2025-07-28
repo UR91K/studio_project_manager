@@ -910,3 +910,77 @@ async fn test_search_collections() {
     assert_eq!(search_response.collections.len(), 0);
     assert_eq!(search_response.total_count, 0);
 }
+
+#[tokio::test]
+async fn test_get_collection_statistics() {
+    setup("error");
+    let server = create_test_server().await;
+
+    // Create a collection
+    let create_request = Request::new(CreateCollectionRequest {
+        name: "Test Collection".to_string(),
+        description: Some("Test Description".to_string()),
+        notes: None,
+    });
+
+    let create_response = server.create_collection(create_request).await.unwrap();
+    let collection_id = create_response.into_inner().collection.unwrap().id;
+
+    // Create multiple test projects with different characteristics
+    let project_ids = vec![
+        create_test_project_in_db(server.db()).await,
+        create_test_project_in_db(server.db()).await,
+        create_test_project_in_db(server.db()).await,
+    ];
+
+    // Add projects to collection
+    for project_id in &project_ids {
+        let add_request = Request::new(AddProjectToCollectionRequest {
+            collection_id: collection_id.clone(),
+            project_id: project_id.clone(),
+            position: None,
+        });
+        server.add_project_to_collection(add_request).await.unwrap();
+    }
+
+    // Get collection statistics
+    let stats_request = Request::new(GetCollectionStatisticsRequest {
+        collection_id: collection_id.clone(),
+    });
+
+    let response = server.get_collection_statistics(stats_request).await.unwrap();
+    let stats = response.into_inner();
+
+    // Verify basic statistics
+    assert_eq!(stats.project_count, 3);
+    assert!(stats.total_plugins >= 0);
+    assert!(stats.total_samples >= 0);
+    assert!(stats.total_tags >= 0);
+
+    // Test with empty collection
+    let empty_collection_request = Request::new(CreateCollectionRequest {
+        name: "Empty Collection".to_string(),
+        description: None,
+        notes: None,
+    });
+
+    let empty_collection_response = server.create_collection(empty_collection_request).await.unwrap();
+    let empty_collection_id = empty_collection_response.into_inner().collection.unwrap().id;
+
+    let empty_stats_request = Request::new(GetCollectionStatisticsRequest {
+        collection_id: empty_collection_id,
+    });
+
+    let empty_response = server.get_collection_statistics(empty_stats_request).await.unwrap();
+    let empty_stats = empty_response.into_inner();
+
+    // Verify empty collection statistics
+    assert_eq!(empty_stats.project_count, 0);
+    assert_eq!(empty_stats.total_plugins, 0);
+    assert_eq!(empty_stats.total_samples, 0);
+    assert_eq!(empty_stats.total_tags, 0);
+    assert!(empty_stats.total_duration_seconds.is_none());
+    assert!(empty_stats.average_tempo.is_none());
+    assert!(empty_stats.most_common_key.is_none());
+    assert!(empty_stats.most_common_time_signature.is_none());
+}

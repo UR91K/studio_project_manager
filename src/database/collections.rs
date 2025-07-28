@@ -1,7 +1,7 @@
 use crate::database::models::SqlDateTime;
 use crate::error::DatabaseError;
 use crate::live_set::LiveSet;
-use crate::models::{AbletonVersion, KeySignature, Plugin, Sample, TimeSignature};
+use crate::models::{AbletonVersion, CollectionStatistics, KeySignature, Plugin, Sample, TimeSignature};
 use chrono::{Local, TimeZone};
 use log::debug;
 use rusqlite::types::ToSql;
@@ -647,6 +647,118 @@ impl LiveSetDatabase {
             }
             Err(e) => Err(DatabaseError::from(e)),
         }
+    }
+
+    /// Get comprehensive statistics for a collection (for status bar display)
+    pub fn get_collection_detailed_statistics(
+        &mut self,
+        collection_id: &str,
+    ) -> Result<CollectionStatistics, DatabaseError> {
+        debug!("Getting detailed statistics for collection {}", collection_id);
+
+        // Get basic project stats
+        let (total_duration, project_count) = self.get_collection_statistics(collection_id)?;
+
+        // Get average tempo
+        let average_tempo: Option<f64> = self.conn.query_row(
+            r#"
+            SELECT AVG(p.tempo) as avg_tempo
+            FROM collection_projects cp
+            JOIN projects p ON p.id = cp.project_id
+            WHERE cp.collection_id = ?
+            "#,
+            [collection_id],
+            |row| row.get::<_, Option<f64>>(0),
+        ).optional()?.flatten();
+
+        // Get total unique plugins
+        let total_plugins: i32 = self.conn.query_row(
+            r#"
+            SELECT COUNT(DISTINCT pp.plugin_id) as total_plugins
+            FROM collection_projects cp
+            JOIN project_plugins pp ON pp.project_id = cp.project_id
+            WHERE cp.collection_id = ?
+            "#,
+            [collection_id],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        // Get total unique samples
+        let total_samples: i32 = self.conn.query_row(
+            r#"
+            SELECT COUNT(DISTINCT ps.sample_id) as total_samples
+            FROM collection_projects cp
+            JOIN project_samples ps ON ps.project_id = cp.project_id
+            WHERE cp.collection_id = ?
+            "#,
+            [collection_id],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        // Get total unique tags
+        let total_tags: i32 = self.conn.query_row(
+            r#"
+            SELECT COUNT(DISTINCT pt.tag_id) as total_tags
+            FROM collection_projects cp
+            JOIN project_tags pt ON pt.project_id = cp.project_id
+            WHERE cp.collection_id = ?
+            "#,
+            [collection_id],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        // Get most common key signature
+        let most_common_key: Option<String> = self.conn.query_row(
+            r#"
+            SELECT 
+                p.key_signature_tonic || ' ' || p.key_signature_scale as key_sig,
+                COUNT(*) as count
+            FROM collection_projects cp
+            JOIN projects p ON p.id = cp.project_id
+            WHERE cp.collection_id = ? 
+                AND p.key_signature_tonic IS NOT NULL 
+                AND p.key_signature_scale IS NOT NULL
+            GROUP BY key_sig
+            ORDER BY count DESC
+            LIMIT 1
+            "#,
+            [collection_id],
+            |row| row.get(0),
+        ).optional()?;
+
+        // Get most common time signature
+        let most_common_time_signature: Option<String> = self.conn.query_row(
+            r#"
+            SELECT 
+                CAST(p.time_signature_numerator AS TEXT) || '/' || CAST(p.time_signature_denominator AS TEXT) as time_sig,
+                COUNT(*) as count
+            FROM collection_projects cp
+            JOIN projects p ON p.id = cp.project_id
+            WHERE cp.collection_id = ?
+            GROUP BY time_sig
+            ORDER BY count DESC
+            LIMIT 1
+            "#,
+            [collection_id],
+            |row| row.get(0),
+        ).optional()?;
+
+        let stats = CollectionStatistics {
+            project_count,
+            total_duration_seconds: total_duration,
+            average_tempo,
+            total_plugins,
+            total_samples,
+            total_tags,
+            most_common_key,
+            most_common_time_signature,
+        };
+
+        debug!(
+            "Collection detailed statistics: {} projects, {} plugins, {} samples, {} tags",
+            stats.project_count, stats.total_plugins, stats.total_samples, stats.total_tags
+        );
+        Ok(stats)
     }
 
     // Batch Collection Operations

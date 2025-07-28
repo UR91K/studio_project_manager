@@ -615,6 +615,39 @@ impl CollectionsHandler {
         }
     }
 
+    pub async fn get_collection_statistics(
+        &self,
+        request: Request<GetCollectionStatisticsRequest>,
+    ) -> Result<Response<GetCollectionStatisticsResponse>, Status> {
+        debug!("GetCollectionStatistics request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.get_collection_detailed_statistics(&req.collection_id) {
+            Ok(stats) => {
+                let response = GetCollectionStatisticsResponse {
+                    project_count: stats.project_count,
+                    total_duration_seconds: stats.total_duration_seconds,
+                    average_tempo: stats.average_tempo,
+                    total_plugins: stats.total_plugins,
+                    total_samples: stats.total_samples,
+                    total_tags: stats.total_tags,
+                    most_common_key: stats.most_common_key,
+                    most_common_time_signature: stats.most_common_time_signature,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get collection statistics for {}: {:?}", req.collection_id, e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
     // Batch Collection Operations
     pub async fn batch_add_to_collection(
         &self,
