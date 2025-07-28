@@ -132,17 +132,9 @@ This document outlines the required features and endpoints for the Studio Projec
 - Task templates (not applicable)
 - Task sharing (frontend responsibility)
 
-## Services to Review
+## General
 
-The following services need similar analysis and endpoint review:
-
-- [ ] Watcher Service
-
-## Process
-
-For each service:
-1. Analyze existing endpoints in proto files
-2. Identify missing frontend requirements
-3. Review and refine scope based on architectural decisions
-4. Document required features with priority levels
-5. Implement endpoints following established patterns
+### Medium Priority
+- [ ] **First time run setup** - Friendly notification that there arent any paths in the config file, and that the app cant work until paths are added, and then the app is restarted
+- [ ] **Config runtime reloading** - Allow the config to be hot reloaded during runtime - possibly by detecting changes
+- [ ] **Config/settings serivce** - Endpoints for reading and editing the config file through the application.
