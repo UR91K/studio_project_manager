@@ -23,8 +23,6 @@ use super::*;
 use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
 use studio_project_manager::grpc::StudioProjectManagerServer;
 use studio_project_manager::grpc::projects::project_service_server::ProjectService;
-use studio_project_manager::grpc::scanning::scanning_service_server::ScanningService;
-use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn test_get_collections_empty() {
@@ -1163,7 +1161,7 @@ async fn test_duplicate_nonexistent_collection() {
     assert!(result.is_err());
 }
 
-async fn create_test_project(server: &StudioProjectManagerServer, name: &str) -> studio_project_manager::grpc::common::Project {
+async fn create_test_project(server: &StudioProjectManagerServer, _: &str) -> studio_project_manager::grpc::common::Project {
     // Create a test project directly in the database
     let db = server.db();
     let project_id = create_test_project_in_db(db).await;
