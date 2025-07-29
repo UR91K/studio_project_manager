@@ -14,6 +14,9 @@ service PluginService {
       returns (GetProjectsByPluginResponse);
   rpc RefreshPluginInstallationStatus(RefreshPluginInstallationStatusRequest)
       returns (RefreshPluginInstallationStatusResponse);
+  rpc GetPluginVendors(GetPluginVendorsRequest) returns (GetPluginVendorsResponse);
+  rpc GetPluginFormats(GetPluginFormatsRequest) returns (GetPluginFormatsResponse);
+  rpc GetPlugin(GetPluginRequest) returns (GetPluginResponse);
 }
 
 message GetAllPluginsRequest {
@@ -21,6 +24,10 @@ message GetAllPluginsRequest {
   optional int32 offset = 2;
   optional string sort_by = 3;  // name, vendor, installed, usage_count
   optional bool sort_desc = 4;
+  optional string vendor_filter = 5;
+  optional string format_filter = 6;
+  optional bool installed_only = 7;
+  optional int32 min_usage_count = 8;
 }
 
 message GetAllPluginsResponse {
@@ -92,4 +99,61 @@ message RefreshPluginInstallationStatusResponse {
   int32 plugins_unchanged = 4;
   bool success = 5;
   optional string error_message = 6;
+}
+
+// Get Plugin Vendors
+message GetPluginVendorsRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string sort_by = 3;  // vendor, plugin_count, usage_count
+  optional bool sort_desc = 4;
+}
+
+message GetPluginVendorsResponse {
+  repeated VendorInfo vendors = 1;
+  int32 total_count = 2;
+}
+
+message VendorInfo {
+  string vendor = 1;
+  int32 plugin_count = 2;
+  int32 installed_plugins = 3;
+  int32 missing_plugins = 4;
+  int32 total_usage_count = 5;
+  int32 unique_projects_using = 6;
+  map<string, int32> plugins_by_format = 7;  // format -> count
+}
+
+// Get Plugin Formats
+message GetPluginFormatsRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string sort_by = 3;  // format, plugin_count, usage_count
+  optional bool sort_desc = 4;
+}
+
+message GetPluginFormatsResponse {
+  repeated FormatInfo formats = 1;
+  int32 total_count = 2;
+}
+
+message FormatInfo {
+  string format = 1;
+  int32 plugin_count = 2;
+  int32 installed_plugins = 3;
+  int32 missing_plugins = 4;
+  int32 total_usage_count = 5;
+  int32 unique_projects_using = 6;
+  map<string, int32> plugins_by_vendor = 7;  // vendor -> count
+}
+
+// Get Individual Plugin
+message GetPluginRequest {
+  string plugin_id = 1;
+}
+
+message GetPluginResponse {
+  studio_project_manager.common.Plugin plugin = 1;
+  int32 usage_count = 2;
+  int32 project_count = 3;
 }

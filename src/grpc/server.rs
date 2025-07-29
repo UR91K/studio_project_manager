@@ -655,7 +655,26 @@ impl plugin_service_server::PluginService for StudioProjectManagerServer {
         self.plugins_handler.get_plugin_stats(request).await
     }
 
+    async fn get_plugin_vendors(
+        &self,
+        request: Request<GetPluginVendorsRequest>,
+    ) -> Result<Response<GetPluginVendorsResponse>, Status> {
+        self.plugins_handler.get_plugin_vendors(request).await
+    }
 
+    async fn get_plugin_formats(
+        &self,
+        request: Request<GetPluginFormatsRequest>,
+    ) -> Result<Response<GetPluginFormatsResponse>, Status> {
+        self.plugins_handler.get_plugin_formats(request).await
+    }
+
+    async fn get_plugin(
+        &self,
+        request: Request<GetPluginRequest>,
+    ) -> Result<Response<GetPluginResponse>, Status> {
+        self.plugins_handler.get_plugin(request).await
+    }
 
     async fn get_projects_by_plugin(
         &self,
