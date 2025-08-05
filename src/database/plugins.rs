@@ -58,24 +58,25 @@ impl LiveSetDatabase {
             format!("WHERE {}", conditions.join(" AND "))
         };
 
+        let where_prefix = if conditions.is_empty() { "WHERE" } else { "AND" };
+
         // Get total count with filters
         let count_query = if min_usage_count.is_some() {
             format!(
                 r#"
-                SELECT COUNT(*) FROM (
-                    SELECT p.id FROM plugins p
-                    LEFT JOIN (
-                        SELECT 
-                            pp.plugin_id,
-                            COUNT(pp.project_id) as usage_count
-                        FROM project_plugins pp
-                        GROUP BY pp.plugin_id
-                    ) usage_stats ON usage_stats.plugin_id = p.id
-                    {} 
-                    WHERE COALESCE(usage_stats.usage_count, 0) >= ?
-                )
+                SELECT COUNT(*) FROM plugins p
+                LEFT JOIN (
+                    SELECT 
+                        pp.plugin_id,
+                        COUNT(pp.project_id) as usage_count
+                    FROM project_plugins pp
+                    GROUP BY pp.plugin_id
+                ) usage_stats ON usage_stats.plugin_id = p.id
+                {} 
+                {} COALESCE(usage_stats.usage_count, 0) >= ?
                 "#,
-                where_clause
+                where_clause,
+                where_prefix
             )
         } else {
             format!(
@@ -126,10 +127,11 @@ impl LiveSetDatabase {
                     GROUP BY pp.plugin_id
                 ) usage_stats ON usage_stats.plugin_id = p.id
                 {} 
-                WHERE COALESCE(usage_stats.usage_count, 0) >= ?
+                {} COALESCE(usage_stats.usage_count, 0) >= ?
                 ORDER BY {} {} LIMIT ? OFFSET ?
                 "#,
                 where_clause,
+                where_prefix,
                 sort_column, sort_order
             )
         } else {
@@ -155,6 +157,11 @@ impl LiveSetDatabase {
                 sort_column, sort_order
             )
         };
+
+        // Add min_usage_count parameter if needed
+        if let Some(min_usage) = min_usage_count {
+            params.push(Box::new(min_usage));
+        }
 
         // Add pagination parameters
         params.push(Box::new(limit.unwrap_or(1000)));
