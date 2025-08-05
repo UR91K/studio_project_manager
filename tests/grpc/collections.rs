@@ -1173,6 +1173,20 @@ async fn create_test_project(server: &StudioProjectManagerServer, _: &str) -> st
             offset: Some(0),
             sort_by: None,
             sort_desc: None,
+            min_tempo: None,
+            max_tempo: None,
+            key_signature_tonic: None,
+            key_signature_scale: None,
+            time_signature_numerator: None,
+            time_signature_denominator: None,
+            ableton_version_major: None,
+            ableton_version_minor: None,
+            ableton_version_patch: None,
+            created_after: None,
+            created_before: None,
+            modified_after: None,
+            modified_before: None,
+            has_audio_file: None,
         }))
         .await
         .unwrap();

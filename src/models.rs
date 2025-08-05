@@ -932,7 +932,7 @@ impl Sample {
 /// let invalid = TimeSignature { numerator: 4, denominator: 3 }; // 3 is not a power of 2
 /// assert!(!invalid.is_valid());
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TimeSignature {
     /// Number of beats per measure
     pub numerator: u8,

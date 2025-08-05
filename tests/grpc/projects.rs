@@ -644,3 +644,186 @@ async fn test_project_deletion_workflow() {
     let deleted_projects = get_deleted_resp.into_inner().projects;
     assert_eq!(deleted_projects.len(), 0);
 }
+
+#[tokio::test]
+async fn test_get_projects_with_enhanced_filtering() {
+    setup("error");
+
+    let server = create_test_server().await;
+    let db = server.db();
+
+    // Create a test project
+    let project_id = create_test_project_in_db(db).await;
+
+    // Test filtering by tempo range
+    let filter_request = GetProjectsRequest {
+        limit: Some(10),
+        offset: Some(0),
+        sort_by: None,
+        sort_desc: None,
+        min_tempo: Some(80.0),
+        max_tempo: Some(150.0),
+        key_signature_tonic: None,
+        key_signature_scale: None,
+        time_signature_numerator: None,
+        time_signature_denominator: None,
+        ableton_version_major: None,
+        ableton_version_minor: None,
+        ableton_version_patch: None,
+        created_after: None,
+        created_before: None,
+        modified_after: None,
+        modified_before: None,
+        has_audio_file: None,
+    };
+
+    let response = server
+        .get_projects(Request::new(filter_request))
+        .await
+        .unwrap();
+
+    let projects = response.into_inner().projects;
+    
+    // Should find the test project (assuming it has a tempo in the 80-120 range)
+    assert!(!projects.is_empty());
+    
+    // Verify the project ID is in the results
+    let found_project = projects.iter().find(|p| p.id == project_id);
+    assert!(found_project.is_some());
+}
+
+#[tokio::test]
+async fn test_get_project_statistics() {
+    setup("error");
+
+    let server = create_test_server().await;
+    let db = server.db();
+
+    // Create a test project
+    let _project_id = create_test_project_in_db(db).await;
+
+    // Test getting project statistics
+    let stats_request = GetProjectStatisticsRequest {
+        min_tempo: None,
+        max_tempo: None,
+        key_signature_tonic: None,
+        key_signature_scale: None,
+        time_signature_numerator: None,
+        time_signature_denominator: None,
+        ableton_version_major: None,
+        ableton_version_minor: None,
+        ableton_version_patch: None,
+        created_after: None,
+        created_before: None,
+        has_audio_file: None,
+    };
+
+    let response = server
+        .get_project_statistics(Request::new(stats_request))
+        .await
+        .unwrap();
+
+    let stats = response.into_inner();
+    
+    // Should have at least one project
+    assert!(stats.total_projects > 0);
+    
+    // Basic statistics should be present
+    assert!(stats.average_tempo >= 0.0);
+    assert!(stats.min_tempo >= 0.0);
+    assert!(stats.max_tempo >= 0.0);
+    
+    // Complexity statistics should be present
+    assert!(stats.average_plugins_per_project >= 0.0);
+    assert!(stats.average_samples_per_project >= 0.0);
+    assert!(stats.average_tags_per_project >= 0.0);
+}
+
+#[tokio::test]
+async fn test_rescan_project() {
+    setup("error");
+
+    let server = create_test_server().await;
+    let db = server.db();
+
+    // Create a test project first
+    let project_id = create_test_project_in_db(db).await;
+
+    // Test rescanning the project (should fail because file doesn't exist)
+    let request = Request::new(RescanProjectRequest {
+        project_id: project_id.clone(),
+        force_rescan: Some(false),
+    });
+
+    let response = server.rescan_project(request).await;
+
+    assert!(response.is_ok());
+    let response = response.unwrap().into_inner();
+
+    // Should return failure because test project file doesn't exist
+    assert!(!response.success);
+    assert!(response.error_message.is_some());
+    assert!(response.error_message.unwrap().contains("Project file not found"));
+    assert!(!response.was_updated);
+    assert!(response.scan_summary.contains("Project file no longer exists"));
+
+    // Test rescanning with force_rescan = true (should also fail for same reason)
+    let request = Request::new(RescanProjectRequest {
+        project_id: project_id.clone(),
+        force_rescan: Some(true),
+    });
+
+    let response = server.rescan_project(request).await;
+
+    assert!(response.is_ok());
+    let response = response.unwrap().into_inner();
+
+    // Should return failure even with force rescan because file doesn't exist
+    assert!(!response.success);
+    assert!(response.error_message.is_some());
+    assert!(response.error_message.unwrap().contains("Project file not found"));
+    assert!(!response.was_updated);
+    assert!(response.scan_summary.contains("Project file no longer exists"));
+}
+
+#[tokio::test]
+async fn test_rescan_project_not_found() {
+    setup("error");
+
+    let server = create_test_server().await;
+
+    // Test rescanning a non-existent project
+    let request = Request::new(RescanProjectRequest {
+        project_id: "00000000-0000-0000-0000-000000000000".to_string(),
+        force_rescan: Some(false),
+    });
+
+    let response = server.rescan_project(request).await;
+
+    // Should return an error for non-existent project
+    assert!(response.is_err());
+    let status = response.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
+    assert!(status.message().contains("Project not found"));
+}
+
+#[tokio::test]
+async fn test_rescan_project_invalid_id() {
+    setup("error");
+
+    let server = create_test_server().await;
+
+    // Test rescanning with invalid project ID
+    let request = Request::new(RescanProjectRequest {
+        project_id: "invalid-uuid".to_string(),
+        force_rescan: Some(false),
+    });
+
+    let response = server.rescan_project(request).await;
+
+    // Should return an error for invalid project ID
+    assert!(response.is_err());
+    let status = response.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::Internal);
+    assert!(status.message().contains("Project not found"));
+}

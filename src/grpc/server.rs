@@ -199,6 +199,20 @@ impl project_service_server::ProjectService for StudioProjectManagerServer {
     ) -> Result<Response<BatchDeleteProjectsResponse>, Status> {
         self.projects_handler.batch_delete_projects(request).await
     }
+
+    async fn get_project_statistics(
+        &self,
+        request: Request<GetProjectStatisticsRequest>,
+    ) -> Result<Response<GetProjectStatisticsResponse>, Status> {
+        self.projects_handler.get_project_statistics(request).await
+    }
+
+    async fn rescan_project(
+        &self,
+        request: Request<RescanProjectRequest>,
+    ) -> Result<Response<RescanProjectResponse>, Status> {
+        self.projects_handler.rescan_project(request).await
+    }
 }
 
 // Search Service Implementation

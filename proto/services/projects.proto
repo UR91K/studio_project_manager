@@ -22,6 +22,10 @@ service ProjectService {
   rpc PermanentlyDeleteProject(PermanentlyDeleteProjectRequest)
       returns (PermanentlyDeleteProjectResponse);
 
+  // Enhanced Project Features
+  rpc GetProjectStatistics(GetProjectStatisticsRequest) returns (GetProjectStatisticsResponse);
+  rpc RescanProject(RescanProjectRequest) returns (RescanProjectResponse);
+
   // Batch Project Management
   rpc BatchMarkProjectsAsArchived(BatchMarkProjectsAsArchivedRequest)
       returns (BatchMarkProjectsAsArchivedResponse);
@@ -38,6 +42,22 @@ message GetProjectsRequest {
   optional int32 offset = 2;
   optional string sort_by = 3;
   optional bool sort_desc = 4;
+  
+  // Enhanced filtering options
+  optional double min_tempo = 5;
+  optional double max_tempo = 6;
+  optional string key_signature_tonic = 7;
+  optional string key_signature_scale = 8;
+  optional int32 time_signature_numerator = 9;
+  optional int32 time_signature_denominator = 10;
+  optional int32 ableton_version_major = 11;
+  optional int32 ableton_version_minor = 12;
+  optional int32 ableton_version_patch = 13;
+  optional int64 created_after = 14;
+  optional int64 created_before = 15;
+  optional int64 modified_after = 16;
+  optional int64 modified_before = 17;
+  optional bool has_audio_file = 18;
 }
 
 message GetProjectsResponse {
@@ -126,4 +146,110 @@ message BatchDeleteProjectsResponse {
   repeated studio_project_manager.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
+}
+
+// Enhanced Project Features
+message GetProjectStatisticsRequest {
+  // Optional filters to apply to statistics
+  optional double min_tempo = 1;
+  optional double max_tempo = 2;
+  optional string key_signature_tonic = 3;
+  optional string key_signature_scale = 4;
+  optional int32 time_signature_numerator = 5;
+  optional int32 time_signature_denominator = 6;
+  optional int32 ableton_version_major = 7;
+  optional int32 ableton_version_minor = 8;
+  optional int32 ableton_version_patch = 9;
+  optional int64 created_after = 10;
+  optional int64 created_before = 11;
+  optional bool has_audio_file = 12;
+}
+
+message GetProjectStatisticsResponse {
+  // Basic counts
+  int32 total_projects = 1;
+  int32 projects_with_audio_files = 2;
+  int32 projects_without_audio_files = 3;
+  
+  // Musical statistics
+  double average_tempo = 4;
+  double min_tempo = 5;
+  double max_tempo = 6;
+  repeated TempoRangeStatistic tempo_distribution = 7;
+  repeated KeySignatureStatistic key_signature_distribution = 8;
+  repeated TimeSignatureStatistic time_signature_distribution = 9;
+  
+  // Version statistics
+  repeated AbletonVersionStatistic ableton_version_distribution = 10;
+  
+  // Duration statistics
+  double average_duration_seconds = 11;
+  double min_duration_seconds = 12;
+  double max_duration_seconds = 13;
+  
+  // Complexity statistics
+  double average_plugins_per_project = 14;
+  double average_samples_per_project = 15;
+  double average_tags_per_project = 16;
+  
+  // Date statistics
+  repeated YearStatistic projects_per_year = 17;
+  repeated MonthStatistic projects_per_month = 18;
+  
+  // Most complex projects
+  repeated ProjectComplexityStatistic most_complex_projects = 19;
+}
+
+message TempoRangeStatistic {
+  string range = 1;  // e.g., "80-90 BPM", "90-100 BPM"
+  int32 count = 2;
+}
+
+message KeySignatureStatistic {
+  string key_signature = 1;  // e.g., "C Major", "F# Minor"
+  int32 count = 2;
+}
+
+message TimeSignatureStatistic {
+  int32 numerator = 1;
+  int32 denominator = 2;
+  int32 count = 3;
+}
+
+message AbletonVersionStatistic {
+  string version = 1;  // e.g., "11.0.0", "12.0.1"
+  int32 count = 2;
+}
+
+message YearStatistic {
+  int32 year = 1;
+  int32 count = 2;
+}
+
+message MonthStatistic {
+  int32 year = 1;
+  int32 month = 2;
+  int32 count = 3;
+}
+
+message ProjectComplexityStatistic {
+  string project_id = 1;
+  string project_name = 2;
+  int32 plugin_count = 3;
+  int32 sample_count = 4;
+  int32 tag_count = 5;
+  double complexity_score = 6;
+}
+
+message RescanProjectRequest {
+  string project_id = 1;
+  optional bool force_rescan = 2;  // Ignore file hash check
+}
+
+message RescanProjectResponse {
+  bool success = 1;
+  optional studio_project_manager.common.Project updated_project = 2;
+  optional string error_message = 3;
+  bool was_updated = 4;  // Whether the project actually changed
+  string scan_summary = 5;  // Human-readable summary of changes
 }

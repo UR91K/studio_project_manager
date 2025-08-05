@@ -45,42 +45,92 @@ impl ProjectsHandler {
 
         let req = request.into_inner();
         let mut db = self.db.lock().await;
-        match db.get_all_projects_with_status(None) {
-            Ok(projects) => {
-                let total_count = projects.len() as i32;
-                let projects_iter = projects.into_iter().skip(req.offset.unwrap_or(0) as usize);
-                let mut proto_projects = Vec::new();
 
-                let projects_to_convert: Vec<LiveSet> = if let Some(limit) = req.limit {
-                    projects_iter.take(limit as usize).collect()
-                } else {
-                    projects_iter.collect()
-                };
-
-                for project in projects_to_convert {
-                    match convert_live_set_to_proto(project, &mut *db) {
-                        Ok(proto_project) => proto_projects.push(proto_project),
-                        Err(e) => {
-                            error!("Failed to convert project to proto: {:?}", e);
-                            return Err(Status::internal(format!("Database error: {}", e)));
-                        }
-                    }
+        // Use the new filtering method if any filters are specified
+        let (projects, total_count) = if req.min_tempo.is_some()
+            || req.max_tempo.is_some()
+            || req.key_signature_tonic.is_some()
+            || req.key_signature_scale.is_some()
+            || req.time_signature_numerator.is_some()
+            || req.time_signature_denominator.is_some()
+            || req.ableton_version_major.is_some()
+            || req.ableton_version_minor.is_some()
+            || req.ableton_version_patch.is_some()
+            || req.created_after.is_some()
+            || req.created_before.is_some()
+            || req.modified_after.is_some()
+            || req.modified_before.is_some()
+            || req.has_audio_file.is_some()
+        {
+            match db.get_projects_with_filters(
+                req.limit,
+                req.offset,
+                req.sort_by,
+                req.sort_desc,
+                req.min_tempo,
+                req.max_tempo,
+                req.key_signature_tonic,
+                req.key_signature_scale,
+                req.time_signature_numerator,
+                req.time_signature_denominator,
+                req.ableton_version_major,
+                req.ableton_version_minor,
+                req.ableton_version_patch,
+                req.created_after,
+                req.created_before,
+                req.modified_after,
+                req.modified_before,
+                req.has_audio_file,
+            ) {
+                Ok(result) => result,
+                Err(e) => {
+                    error!("Failed to get projects with filters: {:?}", e);
+                    return Err(Status::new(
+                        Code::Internal,
+                        format!("Database error: {}", e),
+                    ));
                 }
-
-                let response = GetProjectsResponse {
-                    projects: proto_projects,
-                    total_count,
-                };
-                Ok(Response::new(response))
             }
-            Err(e) => {
-                error!("Failed to get projects: {:?}", e);
-                Err(Status::new(
-                    Code::Internal,
-                    format!("Database error: {}", e),
-                ))
+        } else {
+            // Use the original method for backward compatibility
+            match db.get_all_projects_with_status(None) {
+                Ok(projects) => {
+                    let total_count = projects.len() as i32;
+                    let projects_iter = projects.into_iter().skip(req.offset.unwrap_or(0) as usize);
+                    let projects_to_convert: Vec<LiveSet> = if let Some(limit) = req.limit {
+                        projects_iter.take(limit as usize).collect()
+                    } else {
+                        projects_iter.collect()
+                    };
+                    (projects_to_convert, total_count)
+                }
+                Err(e) => {
+                    error!("Failed to get projects: {:?}", e);
+                    return Err(Status::new(
+                        Code::Internal,
+                        format!("Database error: {}", e),
+                    ));
+                }
+            }
+        };
+
+        // Convert projects to proto format
+        let mut proto_projects = Vec::new();
+        for project in projects {
+            match convert_live_set_to_proto(project, &mut *db) {
+                Ok(proto_project) => proto_projects.push(proto_project),
+                Err(e) => {
+                    error!("Failed to convert project to proto: {:?}", e);
+                    return Err(Status::internal(format!("Database error: {}", e)));
+                }
             }
         }
+
+        let response = GetProjectsResponse {
+            projects: proto_projects,
+            total_count,
+        };
+        Ok(Response::new(response))
     }
 
     pub async fn get_project(
@@ -464,6 +514,163 @@ impl ProjectsHandler {
             }
             Err(e) => {
                 error!("Failed to batch delete projects: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
+    pub async fn get_project_statistics(
+        &self,
+        request: Request<GetProjectStatisticsRequest>,
+    ) -> Result<Response<GetProjectStatisticsResponse>, Status> {
+        debug!("GetProjectStatistics request: {:?}", request);
+
+        let req = request.into_inner();
+        let db = self.db.lock().await;
+
+        match db.get_project_statistics(
+            req.min_tempo,
+            req.max_tempo,
+            req.key_signature_tonic,
+            req.key_signature_scale,
+            req.time_signature_numerator,
+            req.time_signature_denominator,
+            req.ableton_version_major,
+            req.ableton_version_minor,
+            req.ableton_version_patch,
+            req.created_after,
+            req.created_before,
+            req.has_audio_file,
+        ) {
+            Ok(stats) => {
+                // Convert statistics to proto format
+                let tempo_distribution = stats
+                    .tempo_distribution
+                    .into_iter()
+                    .map(|(range, count)| TempoRangeStatistic { range, count })
+                    .collect();
+
+                let key_signature_distribution = stats
+                    .key_signature_distribution
+                    .into_iter()
+                    .map(|(key_signature, count)| KeySignatureStatistic { key_signature, count })
+                    .collect();
+
+                let time_signature_distribution = stats
+                    .time_signature_distribution
+                    .into_iter()
+                    .map(|(numerator, denominator, count)| TimeSignatureStatistic {
+                        numerator,
+                        denominator,
+                        count,
+                    })
+                    .collect();
+
+                let ableton_version_distribution = stats
+                    .ableton_version_distribution
+                    .into_iter()
+                    .map(|(version, count)| AbletonVersionStatistic { version, count })
+                    .collect();
+
+                let projects_per_year = stats
+                    .projects_per_year
+                    .into_iter()
+                    .map(|(year, count)| YearStatistic { year, count })
+                    .collect();
+
+                let projects_per_month = stats
+                    .projects_per_month
+                    .into_iter()
+                    .map(|(year, month, count)| MonthStatistic { year, month, count })
+                    .collect();
+
+                let most_complex_projects = stats
+                    .most_complex_projects
+                    .into_iter()
+                    .map(|(project_id, project_name, plugin_count, sample_count, tag_count, complexity_score)| {
+                        ProjectComplexityStatistic {
+                            project_id,
+                            project_name,
+                            plugin_count,
+                            sample_count,
+                            tag_count,
+                            complexity_score,
+                        }
+                    })
+                    .collect();
+
+                let response = GetProjectStatisticsResponse {
+                    total_projects: stats.total_projects,
+                    projects_with_audio_files: stats.projects_with_audio_files,
+                    projects_without_audio_files: stats.projects_without_audio_files,
+                    average_tempo: stats.average_tempo,
+                    min_tempo: stats.min_tempo,
+                    max_tempo: stats.max_tempo,
+                    tempo_distribution,
+                    key_signature_distribution,
+                    time_signature_distribution,
+                    ableton_version_distribution,
+                    average_duration_seconds: stats.average_duration_seconds,
+                    min_duration_seconds: stats.min_duration_seconds,
+                    max_duration_seconds: stats.max_duration_seconds,
+                    average_plugins_per_project: stats.average_plugins_per_project,
+                    average_samples_per_project: stats.average_samples_per_project,
+                    average_tags_per_project: stats.average_tags_per_project,
+                    projects_per_year,
+                    projects_per_month,
+                    most_complex_projects,
+                };
+
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get project statistics: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
+    pub async fn rescan_project(
+        &self,
+        request: Request<RescanProjectRequest>,
+    ) -> Result<Response<RescanProjectResponse>, Status> {
+        debug!("RescanProject request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.rescan_project(&req.project_id, req.force_rescan.unwrap_or(false)) {
+            Ok(result) => {
+                let updated_project = if let Some(project) = result.updated_project {
+                    match convert_live_set_to_proto(project, &mut *db) {
+                        Ok(proto_project) => Some(proto_project),
+                        Err(e) => {
+                            error!("Failed to convert updated project to proto: {:?}", e);
+                            return Err(Status::internal(format!("Database error: {}", e)));
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                let response = RescanProjectResponse {
+                    success: result.success,
+                    updated_project,
+                    error_message: result.error_message,
+                    was_updated: result.was_updated,
+                    scan_summary: result.scan_summary,
+                };
+
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to rescan project {}: {:?}", req.project_id, e);
                 Err(Status::new(
                     Code::Internal,
                     format!("Database error: {}", e),
