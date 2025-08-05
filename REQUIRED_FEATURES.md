@@ -5,10 +5,10 @@ This document outlines the required features and endpoints for the Studio Projec
 ## Collections Service
 
 ### High Priority
-- [ ] **SearchCollections** - Search collections by name, description, or notes
-- [ ] **Pagination support** for GetCollections (limit, offset, sort_by, sort_desc)
-- [ ] **GetCollectionStatistics** - Get detailed statistics for status bars/overviews
-- [ ] **DuplicateCollection** - Create a copy of an existing collection
+- [*] **SearchCollections** - Search collections by name, description, or notes
+- [*] **Pagination support** for GetCollections (limit, offset, sort_by, sort_desc)
+- [*] **GetCollectionStatistics** - Get detailed statistics for status bars/overviews
+- [*] **DuplicateCollection** - Create a copy of an existing collection
 - [ ] **MergeCollections** - Merge two collections with configurable dominant collection
 
 ### Medium Priority
@@ -30,13 +30,13 @@ This document outlines the required features and endpoints for the Studio Projec
 ## Plugins Service
 
 ### High Priority
-- [ ] **GetPlugin** - Get individual plugin details by ID
-- [ ] **GetPluginAnalytics** - Get advanced plugin statistics for status bars/overviews
+- [*] **GetPlugin** - Get individual plugin details by ID
+- [*] **GetPluginAnalytics** - Get advanced plugin statistics for status bars/overviews
 
 ### Medium Priority
-- [ ] **Enhanced GetAllPlugins filtering** - Add vendor_filter, format_filter, installed_only, min_usage_count to existing endpoint
-- [ ] **GetPluginVendors** - Get list of all vendors with statistics (if dedicated vendor management UI needed)
-- [ ] **GetPluginFormats** - Get list of all formats with statistics (if dedicated format management UI needed)
+- [*] **Enhanced GetAllPlugins filtering** - Add vendor_filter, format_filter, installed_only, min_usage_count to existing endpoint
+- [*] **GetPluginVendors** - Get list of all vendors with statistics (if dedicated vendor management UI needed)
+- [*] **GetPluginFormats** - Get list of all formats with statistics (if dedicated format management UI needed)
 
 ### Not in Scope
 - Plugin CRUD operations (plugins are discovered from .als files)
