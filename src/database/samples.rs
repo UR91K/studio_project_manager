@@ -421,6 +421,266 @@ impl LiveSetDatabase {
             samples_unchanged: unchanged,
         })
     }
+
+    /// Get comprehensive sample analytics
+    pub fn get_sample_analytics(&self) -> Result<SampleAnalytics, DatabaseError> {
+        // Get usage distribution
+        let usage_distribution = self.get_usage_distribution()?;
+        
+        // Get extension analytics
+        let extensions = self.get_extension_analytics()?;
+        
+        // Get missing vs present percentages
+        let (missing_percentage, present_percentage) = self.get_presence_percentages()?;
+        
+        // Get storage usage
+        let (total_storage, present_storage, missing_storage) = self.get_storage_usage()?;
+        
+        // Get top used samples
+        let top_used_samples = self.get_top_used_samples(10)?;
+        
+        // Get recently added samples (last 30 days)
+        let recently_added = self.get_recently_added_samples()?;
+
+        Ok(SampleAnalytics {
+            most_used_samples_count: usage_distribution.most_used,
+            moderately_used_samples_count: usage_distribution.moderately_used,
+            rarely_used_samples_count: usage_distribution.rarely_used,
+            unused_samples_count: usage_distribution.unused,
+            extensions,
+            missing_samples_percentage: missing_percentage,
+            present_samples_percentage: present_percentage,
+            total_storage_bytes: total_storage,
+            present_storage_bytes: present_storage,
+            missing_storage_bytes: missing_storage,
+            top_used_samples,
+            recently_added_samples: recently_added,
+        })
+    }
+
+    /// Get usage distribution statistics
+    fn get_usage_distribution(&self) -> Result<UsageDistribution, DatabaseError> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT 
+                CASE 
+                    WHEN usage_count >= 5 THEN 'most_used'
+                    WHEN usage_count >= 2 THEN 'moderately_used'
+                    WHEN usage_count = 1 THEN 'rarely_used'
+                    ELSE 'unused'
+                END as usage_category,
+                COUNT(*) as count
+            FROM (
+                SELECT s.id, COALESCE(usage_stats.usage_count, 0) as usage_count
+                FROM samples s
+                LEFT JOIN (
+                    SELECT sample_id, COUNT(*) as usage_count
+                    FROM project_samples
+                    GROUP BY sample_id
+                ) usage_stats ON s.id = usage_stats.sample_id
+            )
+            GROUP BY usage_category
+            "#,
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+        })?;
+
+        let mut distribution = UsageDistribution {
+            most_used: 0,
+            moderately_used: 0,
+            rarely_used: 0,
+            unused: 0,
+        };
+
+        for row in rows {
+            let (category, count) = row?;
+            match category.as_str() {
+                "most_used" => distribution.most_used = count,
+                "moderately_used" => distribution.moderately_used = count,
+                "rarely_used" => distribution.rarely_used = count,
+                "unused" => distribution.unused = count,
+                _ => {}
+            }
+        }
+
+        Ok(distribution)
+    }
+
+    /// Get extension analytics with detailed statistics
+    fn get_extension_analytics(&self) -> Result<std::collections::HashMap<String, ExtensionAnalytics>, DatabaseError> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT 
+                CASE 
+                    WHEN path LIKE '%.wav' THEN 'wav'
+                    WHEN path LIKE '%.aif' OR path LIKE '%.aiff' THEN 'aiff'
+                    WHEN path LIKE '%.mp3' THEN 'mp3'
+                    WHEN path LIKE '%.flac' THEN 'flac'
+                    WHEN path LIKE '%.ogg' THEN 'ogg'
+                    WHEN path LIKE '%.m4a' THEN 'm4a'
+                    ELSE 'other'
+                END as extension,
+                COUNT(*) as count,
+                SUM(CASE WHEN is_present THEN 1 ELSE 0 END) as present_count,
+                SUM(CASE WHEN NOT is_present THEN 1 ELSE 0 END) as missing_count,
+                AVG(COALESCE(usage_count, 0)) as avg_usage_count,
+                SUM(
+                    CASE 
+                        WHEN path LIKE '%.wav' THEN 5000000  -- ~5MB avg for WAV
+                        WHEN path LIKE '%.aif' OR path LIKE '%.aiff' THEN 5000000  -- ~5MB avg for AIFF
+                        WHEN path LIKE '%.mp3' THEN 500000   -- ~500KB avg for MP3
+                        WHEN path LIKE '%.flac' THEN 2500000 -- ~2.5MB avg for FLAC
+                        WHEN path LIKE '%.ogg' THEN 500000   -- ~500KB avg for OGG
+                        WHEN path LIKE '%.m4a' THEN 500000   -- ~500KB avg for M4A
+                        ELSE 1000000  -- ~1MB for other formats
+                    END
+                ) as total_size_bytes
+            FROM (
+                SELECT s.*, COALESCE(usage_stats.usage_count, 0) as usage_count
+                FROM samples s
+                LEFT JOIN (
+                    SELECT sample_id, COUNT(*) as usage_count
+                    FROM project_samples
+                    GROUP BY sample_id
+                ) usage_stats ON s.id = usage_stats.sample_id
+            )
+            GROUP BY extension
+            "#,
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, i32>(2)?,
+                row.get::<_, i32>(3)?,
+                row.get::<_, f64>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })?;
+
+        let mut extensions = std::collections::HashMap::new();
+        for row in rows {
+            let (extension, count, present_count, missing_count, avg_usage_count, total_size_bytes) = row?;
+            extensions.insert(extension, ExtensionAnalytics {
+                count,
+                total_size_bytes,
+                present_count,
+                missing_count,
+                average_usage_count: avg_usage_count,
+            });
+        }
+
+        Ok(extensions)
+    }
+
+    /// Get missing vs present percentages
+    fn get_presence_percentages(&self) -> Result<(i32, i32), DatabaseError> {
+        let total_samples: i32 = self.conn.query_row("SELECT COUNT(*) FROM samples", [], |row| row.get(0))?;
+        let present_samples: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM samples WHERE is_present = true",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let missing_samples = total_samples - present_samples;
+        let missing_percentage = if total_samples > 0 {
+            ((missing_samples as f64 / total_samples as f64) * 100.0) as i32
+        } else {
+            0
+        };
+        let present_percentage = if total_samples > 0 {
+            ((present_samples as f64 / total_samples as f64) * 100.0) as i32
+        } else {
+            0
+        };
+
+        Ok((missing_percentage, present_percentage))
+    }
+
+    /// Get storage usage statistics
+    fn get_storage_usage(&self) -> Result<(i64, i64, i64), DatabaseError> {
+        let (total_storage, present_storage) = self.conn.query_row(
+            r#"
+            SELECT 
+                SUM(
+                    CASE 
+                        WHEN path LIKE '%.wav' THEN 5000000  -- ~5MB avg for WAV
+                        WHEN path LIKE '%.aif' OR path LIKE '%.aiff' THEN 5000000  -- ~5MB avg for AIFF
+                        WHEN path LIKE '%.mp3' THEN 500000   -- ~500KB avg for MP3
+                        WHEN path LIKE '%.flac' THEN 2500000 -- ~2.5MB avg for FLAC
+                        WHEN path LIKE '%.ogg' THEN 500000   -- ~500KB avg for OGG
+                        WHEN path LIKE '%.m4a' THEN 500000   -- ~500KB avg for M4A
+                        ELSE 1000000  -- ~1MB for other formats
+                    END
+                ) as total_storage,
+                SUM(
+                    CASE 
+                        WHEN is_present THEN
+                            CASE 
+                                WHEN path LIKE '%.wav' THEN 5000000
+                                WHEN path LIKE '%.aif' OR path LIKE '%.aiff' THEN 5000000
+                                WHEN path LIKE '%.mp3' THEN 500000
+                                WHEN path LIKE '%.flac' THEN 2500000
+                                WHEN path LIKE '%.ogg' THEN 500000
+                                WHEN path LIKE '%.m4a' THEN 500000
+                                ELSE 1000000
+                            END
+                        ELSE 0
+                    END
+                ) as present_storage
+            FROM samples
+            "#,
+            [],
+            |row| Ok((row.get::<_, Option<i64>>(0)?.unwrap_or(0), row.get::<_, Option<i64>>(1)?.unwrap_or(0))),
+        )?;
+
+        let missing_storage = total_storage - present_storage;
+        Ok((total_storage, present_storage, missing_storage))
+    }
+
+    /// Get top used samples
+    fn get_top_used_samples(&self, limit: i32) -> Result<Vec<SampleUsageInfo>, DatabaseError> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT 
+                s.id,
+                s.name,
+                s.path,
+                COUNT(ps.project_id) as usage_count,
+                COUNT(DISTINCT ps.project_id) as project_count
+            FROM samples s
+            LEFT JOIN project_samples ps ON ps.sample_id = s.id
+            GROUP BY s.id, s.name, s.path
+            ORDER BY usage_count DESC
+            LIMIT ?
+            "#,
+        )?;
+
+        let rows = stmt.query_map([limit], |row| {
+            Ok(SampleUsageInfo {
+                sample_id: row.get("id")?,
+                name: row.get("name")?,
+                path: row.get("path")?,
+                usage_count: row.get("usage_count")?,
+                project_count: row.get("project_count")?,
+            })
+        })?;
+
+        let usage_info: Result<Vec<SampleUsageInfo>, _> = rows.collect();
+        Ok(usage_info?)
+    }
+
+    /// Get recently added samples (last 30 days)
+    fn get_recently_added_samples(&self) -> Result<i32, DatabaseError> {
+        // Since we don't have a created_at field in samples table, we'll estimate
+        // based on the assumption that samples are added when projects are scanned
+        // For now, we'll return 0 as a placeholder
+        // TODO: Add created_at field to samples table in future migration
+        Ok(0)
+    }
 }
 
 pub struct SampleStats {
@@ -445,4 +705,34 @@ pub struct SampleRefreshResult {
     pub samples_now_present: i32,
     pub samples_now_missing: i32,
     pub samples_unchanged: i32,
+}
+
+pub struct SampleAnalytics {
+    pub most_used_samples_count: i32,
+    pub moderately_used_samples_count: i32,
+    pub rarely_used_samples_count: i32,
+    pub unused_samples_count: i32,
+    pub extensions: std::collections::HashMap<String, ExtensionAnalytics>,
+    pub missing_samples_percentage: i32,
+    pub present_samples_percentage: i32,
+    pub total_storage_bytes: i64,
+    pub present_storage_bytes: i64,
+    pub missing_storage_bytes: i64,
+    pub top_used_samples: Vec<SampleUsageInfo>,
+    pub recently_added_samples: i32,
+}
+
+pub struct UsageDistribution {
+    pub most_used: i32,
+    pub moderately_used: i32,
+    pub rarely_used: i32,
+    pub unused: i32,
+}
+
+pub struct ExtensionAnalytics {
+    pub count: i32,
+    pub total_size_bytes: i64,
+    pub present_count: i32,
+    pub missing_count: i32,
+    pub average_usage_count: f64,
 }

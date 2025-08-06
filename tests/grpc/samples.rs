@@ -85,6 +85,137 @@ async fn test_refresh_sample_presence_status() {
 }
 
 #[tokio::test]
+async fn test_get_sample_analytics() {
+    crate::common::setup("trace");
+
+    let server = create_test_server().await;
+    let db = server.db();
+    
+    // Create test samples with different properties
+    let sample1_id = uuid::Uuid::new_v4().to_string();
+    let sample2_id = uuid::Uuid::new_v4().to_string();
+    let sample3_id = uuid::Uuid::new_v4().to_string();
+    
+    // Insert test samples and projects
+    {
+        let db_lock = db.lock().await;
+        
+        // Insert samples with different usage patterns
+        db_lock.conn.execute(
+            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            rusqlite::params![sample1_id, "kick.wav", "/samples/kick.wav", true],
+        ).unwrap();
+        
+        db_lock.conn.execute(
+            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            rusqlite::params![sample2_id, "snare.mp3", "/samples/snare.mp3", false],
+        ).unwrap();
+        
+        db_lock.conn.execute(
+            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            rusqlite::params![sample3_id, "hihat.aiff", "/samples/hihat.aiff", true],
+        ).unwrap();
+        
+        // Create multiple projects to simulate high usage for sample1
+        for i in 0..5 {
+            let project_id = uuid::Uuid::new_v4().to_string();
+            db_lock.conn.execute(
+                "INSERT INTO projects (id, name, path, hash, created_at, modified_at, last_parsed_at, tempo, time_signature_numerator, time_signature_denominator, ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rusqlite::params![
+                    project_id,
+                    format!("Test Project {}", i),
+                    format!("/path/to/test/project{}.als", i),
+                    format!("test_hash_{}", i),
+                    chrono::Utc::now().timestamp(),
+                    chrono::Utc::now().timestamp(),
+                    chrono::Utc::now().timestamp(),
+                    120.0,
+                    4,
+                    4,
+                    11,
+                    0,
+                    0,
+                    false
+                ],
+            ).unwrap();
+            
+            // Link sample1 to this project (high usage)
+            db_lock.conn.execute(
+                "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+                rusqlite::params![project_id, sample1_id],
+            ).unwrap();
+        }
+        
+        // Create one more project for sample3 (moderate usage)
+        let project_id = uuid::Uuid::new_v4().to_string();
+        db_lock.conn.execute(
+            "INSERT INTO projects (id, name, path, hash, created_at, modified_at, last_parsed_at, tempo, time_signature_numerator, time_signature_denominator, ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                project_id,
+                "Test Project for Sample3",
+                "/path/to/test/project_sample3.als",
+                "test_hash_sample3",
+                chrono::Utc::now().timestamp(),
+                chrono::Utc::now().timestamp(),
+                chrono::Utc::now().timestamp(),
+                120.0,
+                4,
+                4,
+                11,
+                0,
+                0,
+                false
+            ],
+        ).unwrap();
+        
+        // Link sample3 to project once (moderate usage)
+        db_lock.conn.execute(
+            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+            rusqlite::params![project_id, sample3_id],
+        ).unwrap();
+    }
+    
+    // Test the GetSampleAnalytics endpoint
+    let request = Request::new(GetSampleAnalyticsRequest {});
+    let response = server.get_sample_analytics(request).await;
+    
+    assert!(response.is_ok());
+    let response = response.unwrap().into_inner();
+    
+    // Should return analytics
+    assert!(response.analytics.is_some());
+    let analytics = response.analytics.unwrap();
+    
+    // Check usage distribution
+    assert_eq!(analytics.most_used_samples_count, 1); // sample1 (5+ usages)
+    assert_eq!(analytics.moderately_used_samples_count, 0); // no samples with 2-4 usages
+    assert_eq!(analytics.rarely_used_samples_count, 1); // sample3 (1 usage)
+    assert_eq!(analytics.unused_samples_count, 1); // sample2 (0 usages)
+    
+    // Check extensions
+    assert!(analytics.extensions.contains_key("wav"));
+    assert!(analytics.extensions.contains_key("mp3"));
+    assert!(analytics.extensions.contains_key("aiff"));
+    
+    // Check presence percentages (accounting for rounding)
+    assert_eq!(analytics.present_samples_percentage, 66); // 2 out of 3 samples present (66.67% rounded down)
+    assert_eq!(analytics.missing_samples_percentage, 33); // 1 out of 3 samples missing (33.33% rounded down)
+    
+    // Check storage usage
+    assert!(analytics.total_storage_bytes > 0);
+    assert!(analytics.present_storage_bytes > 0);
+    assert!(analytics.missing_storage_bytes > 0);
+    
+    // Check top used samples
+    assert_eq!(analytics.top_used_samples.len(), 3);
+    assert_eq!(analytics.top_used_samples[0].usage_count, 5); // sample1 should be first
+    assert_eq!(analytics.top_used_samples[0].sample_id, sample1_id);
+    
+    // Check recently added samples (should be 0 for now since we don't track creation dates)
+    assert_eq!(analytics.recently_added_samples, 0);
+}
+
+#[tokio::test]
 async fn test_get_all_samples_with_filters() {
     crate::common::setup("trace");
     

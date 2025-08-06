@@ -323,4 +323,70 @@ impl SamplesHandler {
             }
         }
     }
+
+    pub async fn get_sample_analytics(
+        &self,
+        _request: Request<GetSampleAnalyticsRequest>,
+    ) -> Result<Response<GetSampleAnalyticsResponse>, Status> {
+        debug!("GetSampleAnalytics request");
+
+        let db = self.db.lock().await;
+
+        match db.get_sample_analytics() {
+            Ok(analytics) => {
+                // Convert top_used_samples to proto format
+                let top_used_samples = analytics.top_used_samples
+                    .into_iter()
+                    .map(|info| SampleUsage {
+                        sample_id: info.sample_id,
+                        name: info.name,
+                        path: info.path,
+                        usage_count: info.usage_count,
+                        project_count: info.project_count,
+                    })
+                    .collect();
+
+                // Convert extensions to proto format
+                let extensions = analytics.extensions
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (key, super::super::samples::ExtensionAnalytics {
+                            count: value.count,
+                            total_size_bytes: value.total_size_bytes,
+                            present_count: value.present_count,
+                            missing_count: value.missing_count,
+                            average_usage_count: value.average_usage_count,
+                        })
+                    })
+                    .collect();
+
+                let proto_analytics = super::super::samples::SampleAnalytics {
+                    most_used_samples_count: analytics.most_used_samples_count,
+                    moderately_used_samples_count: analytics.moderately_used_samples_count,
+                    rarely_used_samples_count: analytics.rarely_used_samples_count,
+                    unused_samples_count: analytics.unused_samples_count,
+                    extensions,
+                    missing_samples_percentage: analytics.missing_samples_percentage,
+                    present_samples_percentage: analytics.present_samples_percentage,
+                    total_storage_bytes: analytics.total_storage_bytes,
+                    present_storage_bytes: analytics.present_storage_bytes,
+                    missing_storage_bytes: analytics.missing_storage_bytes,
+                    top_used_samples,
+                    recently_added_samples: analytics.recently_added_samples,
+                };
+
+                let response = GetSampleAnalyticsResponse {
+                    analytics: Some(proto_analytics),
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get sample analytics: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
 }

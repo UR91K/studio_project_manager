@@ -14,6 +14,7 @@ service SampleService {
   rpc GetSampleStats(GetSampleStatsRequest) returns (GetSampleStatsResponse);
   rpc GetAllSampleUsageNumbers(GetAllSampleUsageNumbersRequest)
       returns (GetAllSampleUsageNumbersResponse);
+  rpc GetSampleAnalytics(GetSampleAnalyticsRequest) returns (GetSampleAnalyticsResponse);
 
   // Reverse Lookup - Projects by Plugin/Sample
   rpc GetProjectsBySample(GetProjectsBySampleRequest)
@@ -96,6 +97,47 @@ message SampleUsage {
 
 message GetAllSampleUsageNumbersResponse {
   repeated SampleUsage sample_usages = 1;
+}
+
+// Sample Analytics
+message GetSampleAnalyticsRequest {}
+
+message SampleAnalytics {
+  // Usage distribution
+  int32 most_used_samples_count = 1;  // Samples used in 5+ projects
+  int32 moderately_used_samples_count = 2;  // Samples used in 2-4 projects
+  int32 rarely_used_samples_count = 3;  // Samples used in 1 project
+  int32 unused_samples_count = 4;  // Samples used in 0 projects
+  
+  // Extension breakdown with file sizes
+  map<string, ExtensionAnalytics> extensions = 5;
+  
+  // Missing vs present trends
+  int32 missing_samples_percentage = 6;  // Percentage of missing samples
+  int32 present_samples_percentage = 7;  // Percentage of present samples
+  
+  // Storage usage
+  int64 total_storage_bytes = 8;
+  int64 present_storage_bytes = 9;
+  int64 missing_storage_bytes = 10;
+  
+  // Top used samples (top 10)
+  repeated SampleUsage top_used_samples = 11;
+  
+  // Recent activity (samples added in last 30 days)
+  int32 recently_added_samples = 12;
+}
+
+message ExtensionAnalytics {
+  int32 count = 1;
+  int64 total_size_bytes = 2;
+  int32 present_count = 3;
+  int32 missing_count = 4;
+  double average_usage_count = 5;
+}
+
+message GetSampleAnalyticsResponse {
+  SampleAnalytics analytics = 1;
 }
 
 // Reverse Lookup Messages
