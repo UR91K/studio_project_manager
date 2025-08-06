@@ -27,6 +27,11 @@ message GetAllSamplesRequest {
   optional int32 offset = 2;
   optional string sort_by = 3;  // name, path, present, usage_count
   optional bool sort_desc = 4;
+  optional bool present_only = 5;      // Filter to only present samples
+  optional bool missing_only = 6;      // Filter to only missing samples
+  optional string extension_filter = 7; // Filter by file extension (e.g., "wav", "mp3")
+  optional int32 min_usage_count = 8;  // Minimum usage count filter
+  optional int32 max_usage_count = 9;  // Maximum usage count filter
 }
 
 message GetAllSamplesResponse {

@@ -27,7 +27,17 @@ impl SamplesHandler {
         let req = request.into_inner();
         let db = self.db.lock().await;
 
-        match db.get_all_samples(req.limit, req.offset, req.sort_by, req.sort_desc) {
+        match db.get_all_samples(
+            req.limit,
+            req.offset,
+            req.sort_by,
+            req.sort_desc,
+            req.present_only,
+            req.missing_only,
+            req.extension_filter,
+            req.min_usage_count,
+            req.max_usage_count,
+        ) {
             Ok((samples, total_count)) => {
                 let proto_samples = samples
                     .into_iter()
