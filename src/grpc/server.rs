@@ -715,6 +715,13 @@ impl sample_service_server::SampleService for StudioProjectManagerServer {
         self.samples_handler.get_all_samples(request).await
     }
 
+    async fn get_sample(
+        &self,
+        request: Request<GetSampleRequest>,
+    ) -> Result<Response<GetSampleResponse>, Status> {
+        self.samples_handler.get_sample(request).await
+    }
+
     async fn get_sample_by_presence(
         &self,
         request: Request<GetSampleByPresenceRequest>,

@@ -7,6 +7,7 @@ import "common.proto";
 // Sample Management Service
 service SampleService {
   rpc GetAllSamples(GetAllSamplesRequest) returns (GetAllSamplesResponse);
+  rpc GetSample(GetSampleRequest) returns (GetSampleResponse);
   rpc GetSampleByPresence(GetSampleByPresenceRequest)
       returns (GetSampleByPresenceResponse);
   rpc SearchSamples(SearchSamplesRequest) returns (SearchSamplesResponse);
@@ -31,6 +32,14 @@ message GetAllSamplesRequest {
 message GetAllSamplesResponse {
   repeated studio_project_manager.common.Sample samples = 1;
   int32 total_count = 2;
+}
+
+message GetSampleRequest {
+  string sample_id = 1;
+}
+
+message GetSampleResponse {
+  optional studio_project_manager.common.Sample sample = 1;
 }
 
 message GetSampleByPresenceRequest {

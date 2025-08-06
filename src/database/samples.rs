@@ -41,8 +41,9 @@ impl LiveSetDatabase {
 
         let mut stmt = self.conn.prepare(&query)?;
         let rows = stmt.query_map(params![limit.unwrap_or(1000), offset.unwrap_or(0)], |row| {
+            let id_str: String = row.get("id")?;
             Ok(Sample {
-                id: Uuid::new_v4(),
+                id: Uuid::parse_str(&id_str).map_err(|_e| rusqlite::Error::InvalidColumnType(0, "id".to_string(), rusqlite::types::Type::Text))?,
                 name: row.get("name")?,
                 path: PathBuf::from(row.get::<_, String>("path")?),
                 is_present: row.get("is_present")?,
@@ -51,6 +52,26 @@ impl LiveSetDatabase {
 
         let samples: Result<Vec<Sample>, _> = rows.collect();
         Ok((samples?, total_count))
+    }
+
+    /// Get a single sample by ID
+    pub fn get_sample_by_id(&self, sample_id: &str) -> Result<Option<Sample>, DatabaseError> {
+        let mut stmt = self.conn.prepare("SELECT * FROM samples WHERE id = ?")?;
+        let result = stmt.query_row(params![sample_id], |row| {
+            let id_str: String = row.get("id")?;
+            Ok(Sample {
+                id: Uuid::parse_str(&id_str).map_err(|_e| rusqlite::Error::InvalidColumnType(0, "id".to_string(), rusqlite::types::Type::Text))?,
+                name: row.get("name")?,
+                path: PathBuf::from(row.get::<_, String>("path")?),
+                is_present: row.get("is_present")?,
+            })
+        });
+
+        match result {
+            Ok(sample) => Ok(Some(sample)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(DatabaseError::from(e)),
+        }
     }
 
     /// Get samples filtered by presence status
@@ -92,8 +113,9 @@ impl LiveSetDatabase {
         let rows = stmt.query_map(
             params![is_present, limit.unwrap_or(1000), offset.unwrap_or(0)],
             |row| {
+                let id_str: String = row.get("id")?;
                 Ok(Sample {
-                    id: Uuid::new_v4(),
+                    id: Uuid::parse_str(&id_str).map_err(|_e| rusqlite::Error::InvalidColumnType(0, "id".to_string(), rusqlite::types::Type::Text))?,
                     name: row.get("name")?,
                     path: PathBuf::from(row.get::<_, String>("path")?),
                     is_present: row.get("is_present")?,
@@ -150,8 +172,9 @@ impl LiveSetDatabase {
         let mut stmt = self.conn.prepare(&main_query)?;
         let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            let id_str: String = row.get("id")?;
             Ok(Sample {
-                id: Uuid::new_v4(),
+                id: Uuid::parse_str(&id_str).map_err(|_e| rusqlite::Error::InvalidColumnType(0, "id".to_string(), rusqlite::types::Type::Text))?,
                 name: row.get("name")?,
                 path: PathBuf::from(row.get::<_, String>("path")?),
                 is_present: row.get("is_present")?,

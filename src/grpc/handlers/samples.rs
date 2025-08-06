@@ -55,6 +55,46 @@ impl SamplesHandler {
         }
     }
 
+    pub async fn get_sample(
+        &self,
+        request: Request<GetSampleRequest>,
+    ) -> Result<Response<GetSampleResponse>, Status> {
+        debug!("GetSample request: {:?}", request);
+
+        let req = request.into_inner();
+        let db = self.db.lock().await;
+
+        match db.get_sample_by_id(&req.sample_id) {
+            Ok(Some(sample)) => {
+                let proto_sample = Sample {
+                    id: sample.id.to_string(),
+                    name: sample.name,
+                    path: sample.path.to_string_lossy().to_string(),
+                    is_present: sample.is_present,
+                };
+
+                let response = GetSampleResponse {
+                    sample: Some(proto_sample),
+                };
+                Ok(Response::new(response))
+            }
+            Ok(None) => {
+                debug!("Sample not found with ID: {}", req.sample_id);
+                Err(Status::new(
+                    Code::NotFound,
+                    format!("Sample not found with ID: {}", req.sample_id),
+                ))
+            }
+            Err(e) => {
+                error!("Failed to get sample: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
     pub async fn get_sample_by_presence(
         &self,
         request: Request<GetSampleByPresenceRequest>,

@@ -50,11 +50,11 @@ This document outlines the required features and endpoints for the Studio Projec
 ## Projects Service
 
 ### High Priority
-- [ ] **Enhanced GetProjects filtering** - Add tempo range, key signature, time signature, Ableton version, date ranges, has_audio_file filters
-- [ ] **GetProjectStatistics** - Get project statistics for dashboards/overviews (counts, distributions, averages)
+- [*] **Enhanced GetProjects filtering** - Add tempo range, key signature, time signature, Ableton version, date ranges, has_audio_file filters
+- [*] **GetProjectStatistics** - Get project statistics for dashboards/overviews (counts, distributions, averages)
 
 ### Medium Priority
-- [ ] **RescanProject** - Rescan individual project for validation/updates
+- [*] **RescanProject** - Rescan individual project for validation/updates
 
 ### Not in Scope
 - Project creation (projects are discovered from .als files)
