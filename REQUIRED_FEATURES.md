@@ -117,8 +117,8 @@ This document outlines the required features and endpoints for the Studio Projec
 ## Tasks Service
 
 ### Medium Priority
-- [ ] **SearchTasks** - Search tasks within a specific project
-- [ ] **GetTaskStatistics** - Get task analytics for status bars/overviews
+- [*] **SearchTasks** - Search tasks within a specific project
+- [*] **GetTaskStatistics** - Get task analytics for status bars/overviews
 
 ### Not in Scope
 - GetTask (not needed - tasks are always viewed in project context)

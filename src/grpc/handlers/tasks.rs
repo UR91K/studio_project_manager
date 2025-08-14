@@ -302,4 +302,98 @@ impl TasksHandler {
             Err(e) => Err(Status::internal(format!("Database error: {}", e))),
         }
     }
+
+    pub async fn search_tasks(
+        &self,
+        request: Request<SearchTasksRequest>,
+    ) -> Result<Response<SearchTasksResponse>, Status> {
+        debug!("SearchTasks request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.search_tasks(
+            &req.project_id,
+            &req.query,
+            req.limit,
+            req.offset,
+            req.completed_only,
+            req.pending_only,
+        ) {
+            Ok((task_data, total_count)) => {
+                let tasks = task_data
+                    .into_iter()
+                    .map(|(id, description, completed, created_at)| Task {
+                        id,
+                        project_id: req.project_id.clone(),
+                        description,
+                        completed,
+                        created_at,
+                    })
+                    .collect();
+
+                let response = SearchTasksResponse { tasks, total_count };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to search tasks: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
+    pub async fn get_task_statistics(
+        &self,
+        request: Request<GetTaskStatisticsRequest>,
+    ) -> Result<Response<GetTaskStatisticsResponse>, Status> {
+        debug!("GetTaskStatistics request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.get_task_analytics(req.project_id.as_deref()) {
+            Ok(stats) => {
+                // Convert monthly trends to proto format
+                let monthly_trends = stats.monthly_trends
+                    .into_iter()
+                    .map(|(year, month, completed_tasks, total_tasks, completion_rate)| {
+                        super::super::tasks::TaskTrend {
+                            year,
+                            month,
+                            completed_tasks,
+                            total_tasks,
+                            completion_rate: completion_rate * 100.0, // Convert to percentage
+                        }
+                    })
+                    .collect();
+
+                let proto_stats = super::super::tasks::TaskStatistics {
+                    total_tasks: stats.total_tasks,
+                    completed_tasks: stats.completed_tasks,
+                    pending_tasks: stats.pending_tasks,
+                    completion_rate: stats.completion_rate,
+                    tasks_created_this_week: stats.tasks_created_this_week,
+                    tasks_completed_this_week: stats.tasks_completed_this_week,
+                    tasks_created_this_month: stats.tasks_created_this_month,
+                    tasks_completed_this_month: stats.tasks_completed_this_month,
+                    monthly_trends,
+                };
+
+                let response = GetTaskStatisticsResponse {
+                    statistics: Some(proto_stats),
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get task statistics: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
 }

@@ -17,6 +17,10 @@ service TaskService {
       returns (BatchUpdateTaskStatusResponse);
   rpc BatchDeleteTasks(BatchDeleteTasksRequest)
       returns (BatchDeleteTasksResponse);
+
+  // Search and Analytics
+  rpc SearchTasks(SearchTasksRequest) returns (SearchTasksResponse);
+  rpc GetTaskStatistics(GetTaskStatisticsRequest) returns (GetTaskStatisticsResponse);
 }
 
 message GetProjectTasksRequest {
@@ -74,4 +78,48 @@ message BatchDeleteTasksResponse {
   repeated studio_project_manager.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
+}
+
+// Search Tasks
+message SearchTasksRequest {
+  string project_id = 1;
+  string query = 2;
+  optional int32 limit = 3;
+  optional int32 offset = 4;
+  optional bool completed_only = 5;
+  optional bool pending_only = 6;
+}
+
+message SearchTasksResponse {
+  repeated studio_project_manager.common.Task tasks = 1;
+  int32 total_count = 2;
+}
+
+// Task Statistics
+message GetTaskStatisticsRequest {
+  optional string project_id = 1; // If not provided, get stats for all projects
+}
+
+message TaskStatistics {
+  int32 total_tasks = 1;
+  int32 completed_tasks = 2;
+  int32 pending_tasks = 3;
+  double completion_rate = 4; // Percentage (0-100)
+  int32 tasks_created_this_week = 5;
+  int32 tasks_completed_this_week = 6;
+  int32 tasks_created_this_month = 7;
+  int32 tasks_completed_this_month = 8;
+  repeated TaskTrend monthly_trends = 9; // Last 12 months
+}
+
+message TaskTrend {
+  int32 year = 1;
+  int32 month = 2;
+  int32 completed_tasks = 3;
+  int32 total_tasks = 4;
+  double completion_rate = 5; // Percentage (0-100)
+}
+
+message GetTaskStatisticsResponse {
+  TaskStatistics statistics = 1;
 }

@@ -14,6 +14,7 @@ pub mod search;
 pub mod server_setup;
 pub mod stats;
 pub mod tags;
+pub mod tasks;
 
 // Common imports for gRPC tests
 use studio_project_manager::database::LiveSetDatabase;

@@ -465,6 +465,20 @@ impl task_service_server::TaskService for StudioProjectManagerServer {
     ) -> Result<Response<BatchDeleteTasksResponse>, Status> {
         self.tasks_handler.batch_delete_tasks(request).await
     }
+
+    async fn search_tasks(
+        &self,
+        request: Request<SearchTasksRequest>,
+    ) -> Result<Response<SearchTasksResponse>, Status> {
+        self.tasks_handler.search_tasks(request).await
+    }
+
+    async fn get_task_statistics(
+        &self,
+        request: Request<GetTaskStatisticsRequest>,
+    ) -> Result<Response<GetTaskStatisticsResponse>, Status> {
+        self.tasks_handler.get_task_statistics(request).await
+    }
 }
 
 // Media Service Implementation

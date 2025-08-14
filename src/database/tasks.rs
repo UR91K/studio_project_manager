@@ -304,4 +304,199 @@ impl LiveSetDatabase {
         );
         Ok(results)
     }
+
+    /// Search tasks within a specific project
+    pub fn search_tasks(
+        &mut self,
+        project_id: &str,
+        query: &str,
+        limit: Option<i32>,
+        offset: Option<i32>,
+        completed_only: Option<bool>,
+        pending_only: Option<bool>,
+    ) -> Result<(Vec<(String, String, bool, i64)>, i32), DatabaseError> {
+        debug!("Searching tasks in project {} with query: {}", project_id, query);
+
+        // Build WHERE conditions
+        let mut conditions = vec!["project_id = ?"];
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(project_id.to_string())];
+
+        // Add text search condition
+        conditions.push("description LIKE ?");
+        params.push(Box::new(format!("%{}%", query)));
+
+        // Add completion status filters
+        if let Some(completed) = completed_only {
+            if completed {
+                conditions.push("completed = 1");
+            }
+        } else if let Some(pending) = pending_only {
+            if pending {
+                conditions.push("completed = 0");
+            }
+        }
+
+        let where_clause = conditions.join(" AND ");
+
+        // Get total count
+        let count_query = format!("SELECT COUNT(*) FROM project_tasks WHERE {}", where_clause);
+        let mut count_stmt = self.conn.prepare(&count_query)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let total_count: i32 = count_stmt.query_row(param_refs.as_slice(), |row| row.get(0))?;
+
+        // Build main query with pagination
+        let main_query = format!(
+            "SELECT id, description, completed, created_at FROM project_tasks WHERE {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            where_clause
+        );
+
+        // Add pagination parameters
+        let limit_val = limit.unwrap_or(50);
+        let offset_val = offset.unwrap_or(0);
+        params.push(Box::new(limit_val));
+        params.push(Box::new(offset_val));
+
+        let mut stmt = self.conn.prepare(&main_query)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let tasks: Vec<(String, String, bool, i64)> = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                let id: String = row.get(0)?;
+                let description: String = row.get(1)?;
+                let completed: bool = row.get(2)?;
+                let created_at: i64 = row.get(3)?;
+                Ok((id, description, completed, created_at))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Found {} tasks matching search criteria", tasks.len());
+        Ok((tasks, total_count))
+    }
+
+    /// Get detailed task analytics for status bars/overviews
+    pub fn get_task_analytics(&mut self, project_id: Option<&str>) -> Result<TaskAnalytics, DatabaseError> {
+        debug!("Getting task statistics for project: {:?}", project_id);
+
+        let (where_clause, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(pid) = project_id {
+            ("WHERE project_id = ?".to_string(), vec![Box::new(pid.to_string())])
+        } else {
+            ("".to_string(), vec![])
+        };
+
+        // Get basic counts
+        let query = format!("SELECT COUNT(*), COUNT(CASE WHEN completed = 1 THEN 1 END) FROM project_tasks {}", where_clause);
+        let mut stmt = self.conn.prepare(&query)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        
+        let (total_tasks, completed_tasks): (i32, i32) = stmt.query_row(param_refs.as_slice(), |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+
+        let pending_tasks = total_tasks - completed_tasks;
+        let completion_rate = if total_tasks > 0 {
+            (completed_tasks as f64 / total_tasks as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        // Get weekly stats
+        let weekly_query = if where_clause.is_empty() {
+            "SELECT COUNT(*), COUNT(CASE WHEN completed = 1 THEN 1 END) FROM project_tasks WHERE created_at >= strftime('%s', 'now', '-7 days')".to_string()
+        } else {
+            format!("SELECT COUNT(*), COUNT(CASE WHEN completed = 1 THEN 1 END) FROM project_tasks {} AND created_at >= strftime('%s', 'now', '-7 days')", where_clause)
+        };
+        let mut weekly_stmt = self.conn.prepare(&weekly_query)?;
+        let (tasks_created_this_week, tasks_completed_this_week): (i32, i32) = weekly_stmt.query_row(param_refs.as_slice(), |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+
+        // Get monthly stats  
+        let monthly_query = if where_clause.is_empty() {
+            "SELECT COUNT(*), COUNT(CASE WHEN completed = 1 THEN 1 END) FROM project_tasks WHERE created_at >= strftime('%s', 'now', '-30 days')".to_string()
+        } else {
+            format!("SELECT COUNT(*), COUNT(CASE WHEN completed = 1 THEN 1 END) FROM project_tasks {} AND created_at >= strftime('%s', 'now', '-30 days')", where_clause)
+        };
+        let mut monthly_stmt = self.conn.prepare(&monthly_query)?;
+        let (tasks_created_this_month, tasks_completed_this_month): (i32, i32) = monthly_stmt.query_row(param_refs.as_slice(), |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+
+        // Get monthly trends (reuse existing method) - we'll do this separately to avoid borrowing issues
+        drop(stmt); // Drop the statement to release the borrow
+        drop(weekly_stmt);
+        drop(monthly_stmt);
+        
+        let monthly_trends = if let Some(pid) = project_id {
+            // For specific project, we need a different query
+            self.get_project_task_trends(pid, 12)?
+        } else {
+            self.get_task_completion_trends(12)?
+        };
+
+        Ok(TaskAnalytics {
+            total_tasks,
+            completed_tasks,
+            pending_tasks,
+            completion_rate,
+            tasks_created_this_week,
+            tasks_completed_this_week,
+            tasks_created_this_month,
+            tasks_completed_this_month,
+            monthly_trends,
+        })
+    }
+
+    /// Get task completion trends for a specific project
+    fn get_project_task_trends(
+        &mut self,
+        project_id: &str,
+        months: i32,
+    ) -> Result<Vec<(i32, i32, i32, i32, f64)>, DatabaseError> {
+        debug!("Getting task completion trends for project {} over last {} months", project_id, months);
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT 
+                strftime('%Y', datetime(created_at, 'unixepoch')) as year,
+                strftime('%m', datetime(created_at, 'unixepoch')) as month,
+                COUNT(CASE WHEN completed = 1 THEN 1 END) as completed_tasks,
+                COUNT(*) as total_tasks,
+                CAST(COUNT(CASE WHEN completed = 1 THEN 1 END) AS REAL) / COUNT(*) as completion_rate
+            FROM project_tasks
+            WHERE project_id = ? AND created_at IS NOT NULL AND datetime(created_at, 'unixepoch') >= datetime('now', '-' || ? || ' months')
+            GROUP BY year, month
+            ORDER BY year, month
+            "#
+        )?;
+
+        let trends = stmt
+            .query_map([project_id, &months.to_string()], |row| {
+                let year_str: Option<String> = row.get(0)?;
+                let month_str: Option<String> = row.get(1)?;
+                let year: i32 = year_str.unwrap_or_default().parse().unwrap_or(0);
+                let month: i32 = month_str.unwrap_or_default().parse().unwrap_or(0);
+                let completed_tasks: i32 = row.get(2)?;
+                let total_tasks: i32 = row.get(3)?;
+                let completion_rate: f64 = row.get(4)?;
+                Ok((year, month, completed_tasks, total_tasks, completion_rate))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Successfully retrieved project task completion trends");
+        Ok(trends)
+    }
+}
+
+// Task Analytics struct for the database layer
+pub struct TaskAnalytics {
+    pub total_tasks: i32,
+    pub completed_tasks: i32,
+    pub pending_tasks: i32,
+    pub completion_rate: f64,
+    pub tasks_created_this_week: i32,
+    pub tasks_completed_this_week: i32,
+    pub tasks_created_this_month: i32,
+    pub tasks_completed_this_month: i32,
+    pub monthly_trends: Vec<(i32, i32, i32, i32, f64)>, // (year, month, completed, total, rate)
 }
