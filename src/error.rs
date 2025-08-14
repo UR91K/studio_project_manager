@@ -227,6 +227,7 @@ pub enum DatabaseError {
 pub enum ConfigError {
     IoError(io::Error),
     ParseError(toml::de::Error),
+    SerializeError(toml::ser::Error),
     HomeDirError,
     PathNotFound(String),
     InvalidDirectory(String),
@@ -244,6 +245,7 @@ impl std::fmt::Display for ConfigError {
         match self {
             ConfigError::IoError(e) => write!(f, "IO error in config: {}", e),
             ConfigError::ParseError(e) => write!(f, "Failed to parse config file: {}", e),
+            ConfigError::SerializeError(e) => write!(f, "Failed to serialize config: {}", e),
             ConfigError::HomeDirError => write!(f, "Failed to get home directory"),
             ConfigError::PathNotFound(path) => write!(f, "Path not found: {}", path),
             ConfigError::InvalidDirectory(path) => write!(f, "Invalid directory: {}", path),
@@ -268,6 +270,10 @@ impl Clone for ConfigError {
             }
             ConfigError::ParseError(e) => {
                 ConfigError::ParseError(toml::de::Error::custom(e.to_string()))
+            }
+            ConfigError::SerializeError(_e) => {
+                // Since toml::ser::Error doesn't have custom(), create a new one with the string
+                ConfigError::InvalidValue(format!("Serialization error: {}", _e))
             }
             ConfigError::HomeDirError => ConfigError::HomeDirError,
             ConfigError::PathNotFound(path) => ConfigError::PathNotFound(path.clone()),

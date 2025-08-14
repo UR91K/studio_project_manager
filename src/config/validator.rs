@@ -7,10 +7,9 @@ impl Config {
     pub fn validate(&self) -> Result<Vec<String>, ConfigError> {
         let mut warnings = Vec::new();
 
+        // Allow empty paths but issue a warning - this enables "setup required" mode
         if self.paths.is_empty() {
-            return Err(ConfigError::InvalidValue(
-                "At least one path must be specified".into(),
-            ));
+            warnings.push("No project paths configured - application will run in setup mode".to_string());
         }
 
         // Validate gRPC port range (u16 is already limited to 0-65535, so just check for 0)

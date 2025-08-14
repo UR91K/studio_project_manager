@@ -50,4 +50,8 @@ pub mod watcher {
     tonic::include_proto!("studio_project_manager.watcher");
 }
 
+pub mod config {
+    tonic::include_proto!("studio_project_manager.config");
+}
+
 pub use server::StudioProjectManagerServer;

@@ -9,11 +9,11 @@ This document outlines the required features and endpoints for the Studio Projec
 - [*] **Pagination support** for GetCollections (limit, offset, sort_by, sort_desc)
 - [*] **GetCollectionStatistics** - Get detailed statistics for status bars/overviews
 - [*] **DuplicateCollection** - Create a copy of an existing collection
-- [ ] **MergeCollections** - Merge two collections with configurable dominant collection
+- [NOT_IMPLEMENTING] **MergeCollections** - Merge two collections with configurable dominant collection
 
 ### Medium Priority
-- [ ] **CreateCollectionFromData** - Create collection with pre-populated project list (for import scenarios)
-- [ ] **RollbackLastOperation** - Rollback the last operation on a collection (if undo system is implemented)
+- [NOT_IMPLEMENTING] **CreateCollectionFromData** - Create collection with pre-populated project list (for import scenarios)
+- [NOT_IMPLEMENTING] **RollbackLastOperation** - Rollback the last operation on a collection (if undo system is implemented)
 
 ### Not in Scope
 - FilterCollections (frontend responsibility)
@@ -103,7 +103,7 @@ This document outlines the required features and endpoints for the Studio Projec
 ## Media Service
 
 ### Low Priority
-- [ ] **ValidateMediaFiles** - Bulk validation of media file integrity and cleanup
+- [NOT_IMPLEMENTING] **ValidateMediaFiles** - Bulk validation of media file integrity and cleanup
 
 ### Not in Scope
 - Individual media file management (media files are attachments to projects/collections)
@@ -135,6 +135,6 @@ This document outlines the required features and endpoints for the Studio Projec
 ## General
 
 ### Medium Priority
-- [ ] **First time run setup** - Friendly notification that there arent any paths in the config file, and that the app cant work until paths are added, and then the app is restarted
-- [ ] **Config runtime reloading** - Allow the config to be hot reloaded during runtime - possibly by detecting changes
-- [ ] **Config/settings serivce** - Endpoints for reading and editing the config file through the application.
+- [*] **First time run setup** - Friendly notification that there arent any paths in the config file, and that the app cant work until paths are added, and then the app is restarted
+- [*] **Config runtime reloading** - Allow the config to be hot reloaded during runtime - possibly by detecting changes
+- [*] **Config/settings serivce** - Endpoints for reading and editing the config file through the application.

@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package studio_project_manager.config;
+
+import "common.proto";
+
+// Configuration Management Service
+service ConfigService {
+  // Get current configuration
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  
+  // Get configuration status (whether setup is needed)
+  rpc GetConfigStatus(GetConfigStatusRequest) returns (GetConfigStatusResponse);
+  
+  // Update project paths
+  rpc UpdatePaths(UpdatePathsRequest) returns (UpdatePathsResponse);
+  
+  // Add a single path to the configuration
+  rpc AddPath(AddPathRequest) returns (AddPathResponse);
+  
+  // Remove a path from the configuration
+  rpc RemovePath(RemovePathRequest) returns (RemovePathResponse);
+  
+  // Update other configuration settings
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+  
+  // Reload configuration from file (hot reload)
+  rpc ReloadConfig(ReloadConfigRequest) returns (ReloadConfigResponse);
+  
+  // Validate configuration
+  rpc ValidateConfig(ValidateConfigRequest) returns (ValidateConfigResponse);
+}
+
+// Get Config
+message GetConfigRequest {}
+
+message ConfigData {
+  repeated string paths = 1;
+  optional string database_path = 2;
+  string live_database_dir = 3;
+  uint32 grpc_port = 4;
+  string log_level = 5;
+  string media_storage_dir = 6;
+  optional uint32 max_cover_art_size_mb = 7;
+  optional uint32 max_audio_file_size_mb = 8;
+  bool needs_setup = 9;
+  string status_message = 10;
+}
+
+message GetConfigResponse {
+  ConfigData config = 1;
+}
+
+// Get Config Status
+message GetConfigStatusRequest {}
+
+message GetConfigStatusResponse {
+  bool needs_setup = 1;
+  bool is_ready_for_operation = 2;
+  string status_message = 3;
+  int32 configured_paths_count = 4;
+}
+
+// Update Paths
+message UpdatePathsRequest {
+  repeated string paths = 1;
+}
+
+message UpdatePathsResponse {
+  bool success = 1;
+  optional string error_message = 2;
+  repeated string validation_warnings = 3;
+}
+
+// Add Path
+message AddPathRequest {
+  string path = 1;
+}
+
+message AddPathResponse {
+  bool success = 1;
+  optional string error_message = 2;
+  repeated string validation_warnings = 3;
+}
+
+// Remove Path
+message RemovePathRequest {
+  string path = 1;
+}
+
+message RemovePathResponse {
+  bool success = 1;
+  optional string error_message = 2;
+  int32 remaining_paths_count = 3;
+}
+
+// Update Settings
+message UpdateSettingsRequest {
+  optional string database_path = 1;
+  optional string live_database_dir = 2;
+  optional uint32 grpc_port = 3;
+  optional string log_level = 4;
+  optional string media_storage_dir = 5;
+  optional uint32 max_cover_art_size_mb = 6;
+  optional uint32 max_audio_file_size_mb = 7;
+}
+
+message UpdateSettingsResponse {
+  bool success = 1;
+  optional string error_message = 2;
+  repeated string validation_warnings = 3;
+}
+
+// Reload Config
+message ReloadConfigRequest {}
+
+message ReloadConfigResponse {
+  bool success = 1;
+  optional string error_message = 2;
+  repeated string validation_warnings = 3;
+  ConfigData config = 4;
+}
+
+// Validate Config
+message ValidateConfigRequest {}
+
+message ValidateConfigResponse {
+  bool is_valid = 1;
+  repeated string warnings = 2;
+  repeated string errors = 3;
+  bool needs_setup = 4;
+}

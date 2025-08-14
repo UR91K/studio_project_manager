@@ -22,6 +22,7 @@ use super::plugins::*;
 use super::samples::*;
 use super::scanning::*;
 use super::watcher::*;
+use super::config::*;
 
 #[derive(Clone)]
 pub struct StudioProjectManagerServer {
@@ -34,6 +35,7 @@ pub struct StudioProjectManagerServer {
     pub system_handler: SystemHandler,
     pub plugins_handler: PluginsHandler,
     pub samples_handler: SamplesHandler,
+    pub config_handler: ConfigHandler,
 }
 
 impl StudioProjectManagerServer {
@@ -80,6 +82,7 @@ impl StudioProjectManagerServer {
             ),
             plugins_handler: PluginsHandler::new(Arc::clone(&db)),
             samples_handler: SamplesHandler::new(Arc::clone(&db)),
+            config_handler: ConfigHandler::new(Arc::clone(&db)),
         })
     }
 
@@ -109,6 +112,7 @@ impl StudioProjectManagerServer {
             ),
             plugins_handler: PluginsHandler::new(Arc::clone(&db)),
             samples_handler: SamplesHandler::new(Arc::clone(&db)),
+            config_handler: ConfigHandler::new(Arc::clone(&db)),
         }
     }
 
@@ -827,5 +831,65 @@ impl sample_service_server::SampleService for StudioProjectManagerServer {
         request: Request<GetSampleExtensionsRequest>,
     ) -> Result<Response<GetSampleExtensionsResponse>, Status> {
         self.samples_handler.get_sample_extensions(request).await
+    }
+}
+
+// Config Service Implementation
+#[tonic::async_trait]
+impl config_service_server::ConfigService for StudioProjectManagerServer {
+    async fn get_config(
+        &self,
+        request: Request<GetConfigRequest>,
+    ) -> Result<Response<GetConfigResponse>, Status> {
+        self.config_handler.get_config(request).await
+    }
+
+    async fn get_config_status(
+        &self,
+        request: Request<GetConfigStatusRequest>,
+    ) -> Result<Response<GetConfigStatusResponse>, Status> {
+        self.config_handler.get_config_status(request).await
+    }
+
+    async fn update_paths(
+        &self,
+        request: Request<UpdatePathsRequest>,
+    ) -> Result<Response<UpdatePathsResponse>, Status> {
+        self.config_handler.update_paths(request).await
+    }
+
+    async fn add_path(
+        &self,
+        request: Request<AddPathRequest>,
+    ) -> Result<Response<AddPathResponse>, Status> {
+        self.config_handler.add_path(request).await
+    }
+
+    async fn remove_path(
+        &self,
+        request: Request<RemovePathRequest>,
+    ) -> Result<Response<RemovePathResponse>, Status> {
+        self.config_handler.remove_path(request).await
+    }
+
+    async fn update_settings(
+        &self,
+        request: Request<UpdateSettingsRequest>,
+    ) -> Result<Response<UpdateSettingsResponse>, Status> {
+        self.config_handler.update_settings(request).await
+    }
+
+    async fn reload_config(
+        &self,
+        request: Request<ReloadConfigRequest>,
+    ) -> Result<Response<ReloadConfigResponse>, Status> {
+        self.config_handler.reload_config(request).await
+    }
+
+    async fn validate_config(
+        &self,
+        request: Request<ValidateConfigRequest>,
+    ) -> Result<Response<ValidateConfigResponse>, Status> {
+        self.config_handler.validate_config(request).await
     }
 }

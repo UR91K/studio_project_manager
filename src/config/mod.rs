@@ -6,7 +6,7 @@ pub mod defaults;
 
 use crate::error::ConfigError;
 use once_cell::sync::Lazy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 // Re-export constants from submodules for backward compatibility
 pub use defaults::{
@@ -44,7 +44,7 @@ pub use loader::MAX_DIRECTORY_TRAVERSAL_DEPTH;
 /// # max_cover_art_size_mb = 10
 /// # max_audio_file_size_mb = 50
 /// ```
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
     /// List of paths to scan for music projects
     pub paths: Vec<String>,
@@ -88,6 +88,114 @@ impl Config {
         std::env::var("STUDIO_PROJECT_MANAGER_DATABASE_PATH")
             .ok()
             .or(self.database_path.clone())
+    }
+
+    /// Returns true if the application needs initial setup (no paths configured)
+    pub fn needs_setup(&self) -> bool {
+        self.paths.is_empty()
+    }
+
+    /// Returns true if the application is ready for normal operation
+    pub fn is_ready_for_operation(&self) -> bool {
+        !self.paths.is_empty()
+    }
+
+    /// Returns a user-friendly status message about the configuration state
+    pub fn get_status_message(&self) -> String {
+        if self.needs_setup() {
+            "Configuration incomplete: No project paths specified. Please add paths to begin scanning projects.".to_string()
+        } else {
+            format!("Configuration ready: {} project path(s) configured", self.paths.len())
+        }
+    }
+
+    /// Updates the project paths and saves to config file
+    pub fn update_paths(&mut self, new_paths: Vec<String>) -> Result<Vec<String>, ConfigError> {
+        self.paths = new_paths;
+        let warnings = self.validate()?;
+        self.save_to_file()?;
+        Ok(warnings)
+    }
+
+    /// Adds a path to the configuration and saves to config file
+    pub fn add_path(&mut self, path: String) -> Result<Vec<String>, ConfigError> {
+        if !self.paths.contains(&path) {
+            self.paths.push(path);
+            let warnings = self.validate()?;
+            self.save_to_file()?;
+            Ok(warnings)
+        } else {
+            Ok(vec!["Path already exists in configuration".to_string()])
+        }
+    }
+
+    /// Removes a path from the configuration and saves to config file
+    pub fn remove_path(&mut self, path: &str) -> Result<(), ConfigError> {
+        self.paths.retain(|p| p != path);
+        self.validate()?; // This will now allow empty paths
+        self.save_to_file()?;
+        Ok(())
+    }
+
+    /// Updates configuration settings and saves to config file
+    pub fn update_settings(
+        &mut self,
+        database_path: Option<String>,
+        live_database_dir: Option<String>,
+        grpc_port: Option<u16>,
+        log_level: Option<String>,
+        media_storage_dir: Option<String>,
+        max_cover_art_size_mb: Option<Option<u32>>,
+        max_audio_file_size_mb: Option<Option<u32>>,
+    ) -> Result<Vec<String>, ConfigError> {
+        if let Some(db_path) = database_path {
+            self.database_path = Some(db_path);
+        }
+        if let Some(live_db_dir) = live_database_dir {
+            self.live_database_dir = live_db_dir;
+        }
+        if let Some(port) = grpc_port {
+            self.grpc_port = port;
+        }
+        if let Some(level) = log_level {
+            self.log_level = level;
+        }
+        if let Some(media_dir) = media_storage_dir {
+            self.media_storage_dir = media_dir;
+        }
+        if let Some(cover_size) = max_cover_art_size_mb {
+            self.max_cover_art_size_mb = cover_size;
+        }
+        if let Some(audio_size) = max_audio_file_size_mb {
+            self.max_audio_file_size_mb = audio_size;
+        }
+
+        let warnings = self.validate()?;
+        self.save_to_file()?;
+        Ok(warnings)
+    }
+
+    /// Saves the current configuration to the config file
+    pub fn save_to_file(&self) -> Result<(), ConfigError> {
+        let config_path = loader::find_config_file()?;
+        let config_content = self.to_toml_string()?;
+        std::fs::write(&config_path, config_content).map_err(|e| ConfigError::IoError(e))?;
+        Ok(())
+    }
+
+    /// Converts the configuration to TOML string format
+    pub fn to_toml_string(&self) -> Result<String, ConfigError> {
+        // Create a simplified structure for TOML serialization
+        let config_toml = toml::to_string(self).map_err(|e| ConfigError::SerializeError(e))?;
+        Ok(config_toml)
+    }
+
+    /// Reloads configuration from file
+    pub fn reload() -> Result<(Self, Vec<String>), ConfigError> {
+        let new_config = Config::new()?;
+        // The warnings are already logged during Config::new(), but we return them too
+        let warnings = new_config.validate()?;
+        Ok((new_config, warnings))
     }
 }
 

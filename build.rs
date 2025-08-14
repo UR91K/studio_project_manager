@@ -24,7 +24,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "plugins",
         "samples",
         "scanning",
-        "watcher"
+        "watcher",
+        "config"
     ];
 
     for service in &services {

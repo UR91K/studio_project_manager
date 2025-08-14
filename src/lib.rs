@@ -287,6 +287,13 @@ where
     let scanner = ProjectPathScanner::new()?;
     let mut found_projects = HashSet::new();
 
+    // Check if configuration is ready for scanning
+    if config.needs_setup() {
+        info!("Configuration needs setup - no project paths configured");
+        progress!(1, 1, 1.0, "Setup required: No project paths configured".to_string(), "completed");
+        return Ok(());
+    }
+
     // Scan all configured directories
     for path in &config.paths {
         let path = PathBuf::from(path);

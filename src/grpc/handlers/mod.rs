@@ -1,4 +1,5 @@
 pub mod collections;
+pub mod config;
 pub mod media;
 pub mod plugins;
 pub mod projects;
@@ -10,6 +11,7 @@ pub mod tasks;
 pub mod utils;
 
 pub use collections::CollectionsHandler;
+pub use config::ConfigHandler;
 pub use media::MediaHandler;
 pub use plugins::PluginsHandler;
 pub use projects::ProjectsHandler;
