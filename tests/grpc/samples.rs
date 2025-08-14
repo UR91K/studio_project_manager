@@ -1,6 +1,7 @@
 //! Sample service tests
 
 use crate::grpc::*;
+use crate::grpc::server_setup::{setup_test_server, create_test_project, create_test_sample, add_sample_to_project, create_sample_struct};
 
 #[tokio::test]
 async fn test_get_sample_success() {
@@ -473,80 +474,24 @@ async fn test_get_all_samples_sorting() {
 
 #[tokio::test]
 async fn test_get_sample_extensions() {
-    let server = create_test_server().await;
-    let db = server.db();
+    let (server, _db) = setup_test_server().await;
 
-    // Create test projects directly in database
-    let project1_id = uuid::Uuid::new_v4().to_string();
-    let project2_id = uuid::Uuid::new_v4().to_string();
-    
-    // Create test samples with different extensions directly in database
-    let sample1_id = uuid::Uuid::new_v4().to_string();
-    let sample2_id = uuid::Uuid::new_v4().to_string();
-    let sample3_id = uuid::Uuid::new_v4().to_string();
-    let sample4_id = uuid::Uuid::new_v4().to_string();
+    // Create test projects with samples of different extensions
+    let project1_id = create_test_project(&server, "Test Project 1", "/path/to/project1.als").await;
+    let project2_id = create_test_project(&server, "Test Project 2", "/path/to/project2.als").await;
 
-    {
-        let db_lock = db.lock().await;
-        
-        // Insert projects with all required fields
-        db_lock.conn.execute(
-            "INSERT INTO projects (
-                id, name, path, hash, created_at, modified_at, last_parsed_at,
-                tempo, time_signature_numerator, time_signature_denominator,
-                ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta
-            ) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'), ?, ?, ?, ?, ?, ?, ?)",
-            rusqlite::params![project1_id, "Test Project 1", "/path/to/project1.als", "test_hash_1", 120.0, 4, 4, 11, 0, 0, false],
-        ).unwrap();
-        db_lock.conn.execute(
-            "INSERT INTO projects (
-                id, name, path, hash, created_at, modified_at, last_parsed_at,
-                tempo, time_signature_numerator, time_signature_denominator,
-                ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta
-            ) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'), ?, ?, ?, ?, ?, ?, ?)",
-            rusqlite::params![project2_id, "Test Project 2", "/path/to/project2.als", "test_hash_2", 140.0, 4, 4, 11, 0, 0, false],
-        ).unwrap();
+    // Add samples with different extensions
+    let sample1_id = create_test_sample(&server, "test_wav.wav", "/path/to/test_wav.wav", true).await;
+    let sample2_id = create_test_sample(&server, "test_aiff.aiff", "/path/to/test_aiff.aiff", true).await;
+    let sample3_id = create_test_sample(&server, "test_mp3.mp3", "/path/to/test_mp3.mp3", false).await;
+    let sample4_id = create_test_sample(&server, "test_flac.flac", "/path/to/test_flac.flac", true).await;
 
-        // Insert samples with different extensions
-        db_lock.conn.execute(
-            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
-            rusqlite::params![sample1_id, "test_wav.wav", "/path/to/test_wav.wav", true],
-        ).unwrap();
-        db_lock.conn.execute(
-            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
-            rusqlite::params![sample2_id, "test_aiff.aiff", "/path/to/test_aiff.aiff", true],
-        ).unwrap();
-        db_lock.conn.execute(
-            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
-            rusqlite::params![sample3_id, "test_mp3.mp3", "/path/to/test_mp3.mp3", false],
-        ).unwrap();
-        db_lock.conn.execute(
-            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
-            rusqlite::params![sample4_id, "test_flac.flac", "/path/to/test_flac.flac", true],
-        ).unwrap();
-
-        // Link samples to projects (to create usage data)
-        db_lock.conn.execute(
-            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
-            rusqlite::params![project1_id, sample1_id],
-        ).unwrap();
-        db_lock.conn.execute(
-            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
-            rusqlite::params![project1_id, sample2_id],
-        ).unwrap();
-        db_lock.conn.execute(
-            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
-            rusqlite::params![project2_id, sample1_id], // wav sample used in 2 projects
-        ).unwrap();
-        db_lock.conn.execute(
-            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
-            rusqlite::params![project2_id, sample3_id],
-        ).unwrap();
-        db_lock.conn.execute(
-            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
-            rusqlite::params![project2_id, sample4_id],
-        ).unwrap();
-    }
+    // Add samples to projects
+    add_sample_to_project(&server, &project1_id, &sample1_id).await;
+    add_sample_to_project(&server, &project1_id, &sample2_id).await;
+    add_sample_to_project(&server, &project2_id, &sample1_id).await; // wav sample used in 2 projects
+    add_sample_to_project(&server, &project2_id, &sample3_id).await;
+    add_sample_to_project(&server, &project2_id, &sample4_id).await;
 
     // Test GetSampleExtensions
     let request = Request::new(GetSampleExtensionsRequest {});
@@ -576,4 +521,62 @@ async fn test_get_sample_extensions() {
     // Check that total_size_bytes is reasonable (estimated sizes)
     assert!(wav_stats.total_size_bytes > 0);
     assert!(mp3_stats.total_size_bytes > 0);
+}
+
+#[tokio::test]
+async fn test_liveset_add_sample_method() {
+    use studio_project_manager::live_set::LiveSet;
+    use std::path::PathBuf;
+    use std::collections::HashSet;
+    use uuid::Uuid;
+    use chrono::Local;
+    
+    // Create a minimal LiveSet for testing
+    let mut live_set = LiveSet {
+        is_active: true,
+        id: Uuid::new_v4(),
+        file_path: PathBuf::from("/test/path.als"),
+        name: "Test Project".to_string(),
+        file_hash: "test_hash".to_string(),
+        created_time: Local::now(),
+        modified_time: Local::now(),
+        last_parsed_timestamp: Local::now(),
+        ableton_version: studio_project_manager::models::AbletonVersion {
+            major: 11,
+            minor: 0,
+            patch: 0,
+            beta: false,
+        },
+        key_signature: None,
+        tempo: 120.0,
+        time_signature: studio_project_manager::models::TimeSignature {
+            numerator: 4,
+            denominator: 4,
+        },
+        furthest_bar: None,
+        plugins: HashSet::new(),
+        samples: HashSet::new(),
+        tags: HashSet::new(),
+        estimated_duration: None,
+    };
+
+    // Initially no samples
+    assert_eq!(live_set.samples.len(), 0);
+
+    // Create test samples using the helper function
+    let sample1 = create_sample_struct("kick.wav", "/samples/kick.wav", true);
+    let sample2 = create_sample_struct("snare.wav", "/samples/snare.wav", false);
+
+    // Add samples using the new method
+    live_set.add_sample(sample1.clone());
+    live_set.add_sample(sample2.clone());
+
+    // Verify samples were added
+    assert_eq!(live_set.samples.len(), 2);
+    assert!(live_set.samples.contains(&sample1));
+    assert!(live_set.samples.contains(&sample2));
+
+    // Test that adding the same sample again doesn't duplicate (HashSet behavior)
+    live_set.add_sample(sample1.clone());
+    assert_eq!(live_set.samples.len(), 2);
 } 

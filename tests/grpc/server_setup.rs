@@ -69,6 +69,76 @@ pub async fn create_test_project_in_db(db: &Arc<Mutex<LiveSetDatabase>>) -> Stri
     project_id
 }
 
+/// Setup test server and return both server and database reference
+pub async fn setup_test_server() -> (StudioProjectManagerServer, Arc<Mutex<LiveSetDatabase>>) {
+    let server = create_test_server().await;
+    let db = server.db().clone();
+    (server, db)
+}
+
+/// Create a test project with the given name and path
+pub async fn create_test_project(server: &StudioProjectManagerServer, name: &str, path: &str) -> String {
+    let db = server.db();
+    let project_id = uuid::Uuid::new_v4().to_string();
+    
+    {
+        let db_lock = db.lock().await;
+        db_lock.conn.execute(
+            "INSERT INTO projects (
+                id, name, path, hash, created_at, modified_at, last_parsed_at,
+                tempo, time_signature_numerator, time_signature_denominator,
+                ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta
+            ) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'), ?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![project_id, name, path, format!("test_hash_{}", project_id), 120.0, 4, 4, 11, 0, 0, false],
+        ).expect("Failed to insert test project");
+    }
+    
+    project_id
+}
+
+/// Create a test sample with the given parameters
+pub async fn create_test_sample(server: &StudioProjectManagerServer, name: &str, path: &str, is_present: bool) -> String {
+    let db = server.db();
+    let sample_id = uuid::Uuid::new_v4().to_string();
+    
+    {
+        let db_lock = db.lock().await;
+        db_lock.conn.execute(
+            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            rusqlite::params![sample_id, name, path, is_present],
+        ).expect("Failed to insert test sample");
+    }
+    
+    sample_id
+}
+
+/// Link a sample to a project (create usage relationship)
+pub async fn add_sample_to_project(server: &StudioProjectManagerServer, project_id: &str, sample_id: &str) {
+    let db = server.db();
+    
+    {
+        let db_lock = db.lock().await;
+        db_lock.conn.execute(
+            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+            rusqlite::params![project_id, sample_id],
+        ).expect("Failed to link sample to project");
+    }
+}
+
+/// Create a Sample struct for testing (type-safe alternative to raw database insertion)
+pub fn create_sample_struct(name: &str, path: &str, is_present: bool) -> studio_project_manager::models::Sample {
+    use studio_project_manager::models::Sample;
+    use std::path::PathBuf;
+    use uuid::Uuid;
+    
+    Sample {
+        id: Uuid::new_v4(),
+        name: name.to_string(),
+        path: PathBuf::from(path),
+        is_present,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

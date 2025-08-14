@@ -119,6 +119,16 @@ impl LiveSet {
         Ok(())
     }
 
+    /// Add a sample to this LiveSet
+    pub fn add_sample(&mut self, sample: Sample) {
+        self.samples.insert(sample);
+    }
+
+    /// Add a plugin to this LiveSet
+    pub fn add_plugin(&mut self, plugin: Plugin) {
+        self.plugins.insert(plugin);
+    }
+
     #[allow(dead_code)]
     pub fn reparse_plugins(&mut self) -> Result<(), LiveSetError> {
         let config = CONFIG
