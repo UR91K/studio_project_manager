@@ -318,4 +318,221 @@ impl TagsHandler {
             Err(e) => Err(Status::internal(format!("Database error: {}", e))),
         }
     }
+
+    pub async fn get_tag(
+        &self,
+        request: Request<GetTagRequest>,
+    ) -> Result<Response<GetTagResponse>, Status> {
+        debug!("GetTag request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.get_tag_by_id(&req.tag_id) {
+            Ok(Some((id, name, created_at))) => {
+                let tag = Tag {
+                    id,
+                    name,
+                    created_at,
+                };
+
+                let response = GetTagResponse { tag: Some(tag) };
+                Ok(Response::new(response))
+            }
+            Ok(None) => {
+                debug!("Tag not found: {}", req.tag_id);
+                let response = GetTagResponse { tag: None };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get tag {}: {:?}", req.tag_id, e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
+    pub async fn search_tags(
+        &self,
+        request: Request<SearchTagsRequest>,
+    ) -> Result<Response<SearchTagsResponse>, Status> {
+        debug!("SearchTags request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.search_tags(&req.query, req.limit, req.offset) {
+            Ok((tag_data, total_count)) => {
+                let tags = tag_data
+                    .into_iter()
+                    .map(|(id, name, created_at)| Tag {
+                        id,
+                        name,
+                        created_at,
+                    })
+                    .collect();
+
+                let response = SearchTagsResponse { tags, total_count };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to search tags: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
+    pub async fn get_projects_by_tag(
+        &self,
+        request: Request<GetProjectsByTagRequest>,
+    ) -> Result<Response<GetProjectsByTagResponse>, Status> {
+        debug!("GetProjectsByTag request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.get_projects_by_tag(&req.tag_id) {
+            Ok(live_sets) => {
+                // Convert LiveSets to proto Projects
+                let mut projects = Vec::new();
+                for live_set in live_sets {
+                    match super::utils::convert_live_set_to_proto(live_set, &mut db) {
+                        Ok(project) => projects.push(project),
+                        Err(e) => {
+                            error!("Failed to convert LiveSet to proto: {:?}", e);
+                            // Skip this project rather than failing the entire request
+                            continue;
+                        }
+                    }
+                }
+
+                // Apply pagination if requested
+                let total_count = projects.len() as i32;
+                let offset = req.offset.unwrap_or(0) as usize;
+                let limit = req.limit.map(|l| l as usize);
+                
+                let paginated_projects = if let Some(limit_val) = limit {
+                    projects.into_iter().skip(offset).take(limit_val).collect()
+                } else {
+                    projects.into_iter().skip(offset).collect()
+                };
+
+                let response = GetProjectsByTagResponse {
+                    projects: paginated_projects,
+                    total_count,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get projects by tag {}: {:?}", req.tag_id, e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
+    pub async fn get_tag_statistics(
+        &self,
+        _request: Request<GetTagStatisticsRequest>,
+    ) -> Result<Response<GetTagStatisticsResponse>, Status> {
+        debug!("GetTagStatistics request");
+
+        let mut db = self.db.lock().await;
+
+        match db.get_tag_statistics() {
+            Ok(stats) => {
+                // Convert most used tags to proto format
+                let most_used_tags = stats.most_used_tags
+                    .into_iter()
+                    .map(|info| super::super::tags::TagUsageInfo {
+                        tag_id: info.tag_id,
+                        name: info.name,
+                        project_count: info.project_count,
+                        usage_percentage: info.usage_percentage,
+                    })
+                    .collect();
+
+                // Convert least used tags to proto format
+                let least_used_tags = stats.least_used_tags
+                    .into_iter()
+                    .map(|info| super::super::tags::TagUsageInfo {
+                        tag_id: info.tag_id,
+                        name: info.name,
+                        project_count: info.project_count,
+                        usage_percentage: info.usage_percentage,
+                    })
+                    .collect();
+
+                let proto_stats = super::super::tags::TagStatistics {
+                    total_tags: stats.total_tags,
+                    tags_in_use: stats.tags_in_use,
+                    unused_tags: stats.unused_tags,
+                    average_tags_per_project: stats.average_tags_per_project,
+                    most_used_tags,
+                    least_used_tags,
+                    projects_with_no_tags: stats.projects_with_no_tags,
+                    projects_with_tags: stats.projects_with_tags,
+                };
+
+                let response = GetTagStatisticsResponse {
+                    statistics: Some(proto_stats),
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get tag statistics: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
+
+    pub async fn get_all_tags_with_usage(
+        &self,
+        request: Request<GetAllTagsWithUsageRequest>,
+    ) -> Result<Response<GetAllTagsWithUsageResponse>, Status> {
+        debug!("GetAllTagsWithUsage request: {:?}", request);
+
+        let req = request.into_inner();
+        let mut db = self.db.lock().await;
+
+        match db.get_all_tags_with_usage(
+            req.limit,
+            req.offset,
+            req.sort_by,
+            req.sort_desc,
+            req.min_usage_count,
+        ) {
+            Ok((tag_data, total_count)) => {
+                let tags = tag_data
+                    .into_iter()
+                    .map(|info| super::super::tags::TagUsageInfo {
+                        tag_id: info.tag_id,
+                        name: info.name,
+                        project_count: info.project_count,
+                        usage_percentage: info.usage_percentage,
+                    })
+                    .collect();
+
+                let response = GetAllTagsWithUsageResponse { tags, total_count };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get all tags with usage: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
 }

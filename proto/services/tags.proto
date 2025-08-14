@@ -19,6 +19,13 @@ service TagService {
       returns (BatchTagProjectsResponse);
   rpc BatchUntagProjects(BatchUntagProjectsRequest)
       returns (BatchUntagProjectsResponse);
+
+  // Missing endpoints from REQUIRED_FEATURES.md
+  rpc GetTag(GetTagRequest) returns (GetTagResponse);
+  rpc SearchTags(SearchTagsRequest) returns (SearchTagsResponse);
+  rpc GetProjectsByTag(GetProjectsByTagRequest) returns (GetProjectsByTagResponse);
+  rpc GetTagStatistics(GetTagStatisticsRequest) returns (GetTagStatisticsResponse);
+  rpc GetAllTagsWithUsage(GetAllTagsWithUsageRequest) returns (GetAllTagsWithUsageResponse);
 }
 
 message GetTagsRequest {}
@@ -91,4 +98,76 @@ message BatchUntagProjectsResponse {
   repeated studio_project_manager.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
+}
+
+// Get Tag
+message GetTagRequest {
+  string tag_id = 1;
+}
+
+message GetTagResponse {
+  optional studio_project_manager.common.Tag tag = 1;
+}
+
+// Search Tags
+message SearchTagsRequest {
+  string query = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message SearchTagsResponse {
+  repeated studio_project_manager.common.Tag tags = 1;
+  int32 total_count = 2;
+}
+
+// Get Projects By Tag
+message GetProjectsByTagRequest {
+  string tag_id = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message GetProjectsByTagResponse {
+  repeated studio_project_manager.common.Project projects = 1;
+  int32 total_count = 2;
+}
+
+// Tag Statistics
+message GetTagStatisticsRequest {}
+
+message TagUsageInfo {
+  string tag_id = 1;
+  string name = 2;
+  int32 project_count = 3;
+  double usage_percentage = 4; // Percentage of projects using this tag
+}
+
+message TagStatistics {
+  int32 total_tags = 1;
+  int32 tags_in_use = 2;
+  int32 unused_tags = 3;
+  double average_tags_per_project = 4;
+  repeated TagUsageInfo most_used_tags = 5; // Top 10 most used tags
+  repeated TagUsageInfo least_used_tags = 6; // Bottom 10 least used tags
+  int32 projects_with_no_tags = 7;
+  int32 projects_with_tags = 8;
+}
+
+message GetTagStatisticsResponse {
+  TagStatistics statistics = 1;
+}
+
+// Get All Tags With Usage
+message GetAllTagsWithUsageRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string sort_by = 3; // "name", "usage_count", "created_at"
+  optional bool sort_desc = 4;
+  optional int32 min_usage_count = 5; // Filter tags with at least this many projects
+}
+
+message GetAllTagsWithUsageResponse {
+  repeated TagUsageInfo tags = 1;
+  int32 total_count = 2;
 }

@@ -426,6 +426,236 @@ impl LiveSetDatabase {
         Ok(tag)
     }
 
+    /// Search tags by name
+    pub fn search_tags(
+        &mut self,
+        query: &str,
+        limit: Option<i32>,
+        offset: Option<i32>,
+    ) -> Result<(Vec<(String, String, i64)>, i32), DatabaseError> {
+        debug!("Searching tags with query: {}", query);
+
+        // Get total count
+        let count_query = "SELECT COUNT(*) FROM tags WHERE name LIKE ?";
+        let mut count_stmt = self.conn.prepare(count_query)?;
+        let search_param = format!("%{}%", query);
+        let total_count: i32 = count_stmt.query_row([&search_param], |row| row.get(0))?;
+
+        // Get results with pagination
+        let main_query = "SELECT id, name, created_at FROM tags WHERE name LIKE ? ORDER BY name LIMIT ? OFFSET ?";
+        let mut stmt = self.conn.prepare(main_query)?;
+        
+        let limit_val = limit.unwrap_or(50);
+        let offset_val = offset.unwrap_or(0);
+        
+        let tags: Vec<(String, String, i64)> = stmt
+            .query_map([&search_param, &limit_val.to_string(), &offset_val.to_string()], |row| {
+                let id: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                let created_at: i64 = row.get(2)?;
+                Ok((id, name, created_at))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Found {} tags matching search criteria", tags.len());
+        Ok((tags, total_count))
+    }
+
+    /// Get tag statistics for analytics
+    pub fn get_tag_statistics(&mut self) -> Result<TagStatistics, DatabaseError> {
+        debug!("Getting tag statistics");
+
+        // Get basic counts
+        let total_tags: i32 = self.conn.query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))?;
+        
+        let tags_in_use: i32 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT tag_id) FROM project_tags", 
+            [], 
+            |row| row.get(0)
+        )?;
+        
+        let unused_tags = total_tags - tags_in_use;
+
+        // Get projects with/without tags
+        let projects_with_tags: i32 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT project_id) FROM project_tags", 
+            [], 
+            |row| row.get(0)
+        )?;
+        
+        let total_projects: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM projects WHERE is_active = true", 
+            [], 
+            |row| row.get(0)
+        )?;
+        
+        let projects_with_no_tags = total_projects - projects_with_tags;
+
+        // Calculate average tags per project
+        let total_tag_associations: i32 = self.conn.query_row(
+            "SELECT COUNT(*) FROM project_tags", 
+            [], 
+            |row| row.get(0)
+        )?;
+        
+        let average_tags_per_project = if total_projects > 0 {
+            total_tag_associations as f64 / total_projects as f64
+        } else {
+            0.0
+        };
+
+        // Get most used tags (top 10)
+        let most_used_tags = self.get_tag_usage_ranking(10, false)?;
+        
+        // Get least used tags (bottom 10, but only those that are actually used)
+        let least_used_tags = self.get_tag_usage_ranking(10, true)?;
+
+        Ok(TagStatistics {
+            total_tags,
+            tags_in_use,
+            unused_tags,
+            average_tags_per_project,
+            most_used_tags,
+            least_used_tags,
+            projects_with_no_tags,
+            projects_with_tags,
+        })
+    }
+
+    /// Get tag usage ranking for statistics
+    fn get_tag_usage_ranking(&mut self, limit: i32, least_used: bool) -> Result<Vec<TagUsageInfo>, DatabaseError> {
+        let order = if least_used { "ASC" } else { "DESC" };
+        let query = format!(
+            r#"
+            SELECT t.id, t.name, COUNT(pt.project_id) as usage_count,
+                   CAST(COUNT(pt.project_id) AS REAL) / (SELECT COUNT(*) FROM projects WHERE is_active = true) * 100.0 as usage_percentage
+            FROM tags t
+            LEFT JOIN project_tags pt ON pt.tag_id = t.id
+            GROUP BY t.id, t.name
+            HAVING usage_count > 0
+            ORDER BY usage_count {} 
+            LIMIT ?
+            "#,
+            order
+        );
+
+        let mut stmt = self.conn.prepare(&query)?;
+        let tags = stmt
+            .query_map([limit], |row| {
+                let tag_id: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                let project_count: i32 = row.get(2)?;
+                let usage_percentage: f64 = row.get(3)?;
+                Ok(TagUsageInfo {
+                    tag_id,
+                    name,
+                    project_count,
+                    usage_percentage,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(tags)
+    }
+
+    /// Get all tags with usage information
+    pub fn get_all_tags_with_usage(
+        &mut self,
+        limit: Option<i32>,
+        offset: Option<i32>,
+        sort_by: Option<String>,
+        sort_desc: Option<bool>,
+        min_usage_count: Option<i32>,
+    ) -> Result<(Vec<TagUsageInfo>, i32), DatabaseError> {
+        debug!("Getting all tags with usage information");
+
+        // Build WHERE clause for filtering
+        let mut conditions = Vec::new();
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(min_usage) = min_usage_count {
+            conditions.push("usage_count >= ?");
+            params.push(Box::new(min_usage));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("HAVING {}", conditions.join(" AND "))
+        };
+
+        // Determine sort column and order
+        let sort_column = match sort_by.as_deref() {
+            Some("name") => "t.name",
+            Some("usage_count") => "usage_count",
+            Some("created_at") => "t.created_at",
+            _ => "t.name", // default sort
+        };
+
+        let sort_order = if sort_desc.unwrap_or(false) { "DESC" } else { "ASC" };
+
+        // Get total count
+        let count_query = format!(
+            r#"
+            SELECT COUNT(*) FROM (
+                SELECT t.id
+                FROM tags t
+                LEFT JOIN project_tags pt ON pt.tag_id = t.id
+                GROUP BY t.id, t.name
+                {}
+            )
+            "#,
+            where_clause
+        );
+        let mut count_stmt = self.conn.prepare(&count_query)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let total_count: i32 = count_stmt.query_row(param_refs.as_slice(), |row| row.get(0))?;
+
+        // Get results with pagination
+        let main_query = format!(
+            r#"
+            SELECT t.id, t.name, COUNT(pt.project_id) as usage_count,
+                   CAST(COUNT(pt.project_id) AS REAL) / (SELECT COUNT(*) FROM projects WHERE is_active = true) * 100.0 as usage_percentage
+            FROM tags t
+            LEFT JOIN project_tags pt ON pt.tag_id = t.id
+            GROUP BY t.id, t.name
+            {}
+            ORDER BY {} {}
+            LIMIT ? OFFSET ?
+            "#,
+            where_clause, sort_column, sort_order
+        );
+
+        let limit_val = limit.unwrap_or(50);
+        let offset_val = offset.unwrap_or(0);
+        params.push(Box::new(limit_val));
+        params.push(Box::new(offset_val));
+
+        let mut stmt = self.conn.prepare(&main_query)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        
+        let tags: Vec<TagUsageInfo> = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                let tag_id: String = row.get(0)?;
+                let name: String = row.get(1)?;
+                let project_count: i32 = row.get(2)?;
+                let usage_percentage: f64 = row.get(3)?;
+                Ok(TagUsageInfo {
+                    tag_id,
+                    name,
+                    project_count,
+                    usage_percentage,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        debug!("Retrieved {} tags with usage information", tags.len());
+        Ok((tags, total_count))
+    }
+
     // Batch Tag Operations
     pub fn batch_tag_projects(
         &mut self,
@@ -527,4 +757,23 @@ impl LiveSetDatabase {
         );
         Ok(results)
     }
+}
+
+// Database structs for tag analytics
+pub struct TagStatistics {
+    pub total_tags: i32,
+    pub tags_in_use: i32,
+    pub unused_tags: i32,
+    pub average_tags_per_project: f64,
+    pub most_used_tags: Vec<TagUsageInfo>,
+    pub least_used_tags: Vec<TagUsageInfo>,
+    pub projects_with_no_tags: i32,
+    pub projects_with_tags: i32,
+}
+
+pub struct TagUsageInfo {
+    pub tag_id: String,
+    pub name: String,
+    pub project_count: i32,
+    pub usage_percentage: f64,
 }

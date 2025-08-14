@@ -85,13 +85,13 @@ This document outlines the required features and endpoints for the Studio Projec
 ## Tags Service
 
 ### High Priority
-- [ ] **GetTag** - Get individual tag details by ID
-- [ ] **SearchTags** - Search tags by name
-- [ ] **GetProjectsByTag** - Get projects that have a specific tag
+- [*] **GetTag** - Get individual tag details by ID
+- [*] **SearchTags** - Search tags by name
+- [*] **GetProjectsByTag** - Get projects that have a specific tag
 
 ### Medium Priority
-- [ ] **GetTagStatistics** - Get tag analytics and usage statistics
-- [ ] **GetAllTagsWithUsage** - Enhanced tag listing with usage counts and project counts
+- [*] **GetTagStatistics** - Get tag analytics and usage statistics
+- [*] **GetAllTagsWithUsage** - Enhanced tag listing with usage counts and project counts
 
 ### Not in Scope
 - Tag hierarchies (not needed for simple tagging)

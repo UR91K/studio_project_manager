@@ -419,6 +419,41 @@ impl tag_service_server::TagService for StudioProjectManagerServer {
     ) -> Result<Response<BatchUntagProjectsResponse>, Status> {
         self.tags_handler.batch_untag_projects(request).await
     }
+
+    async fn get_tag(
+        &self,
+        request: Request<GetTagRequest>,
+    ) -> Result<Response<GetTagResponse>, Status> {
+        self.tags_handler.get_tag(request).await
+    }
+
+    async fn search_tags(
+        &self,
+        request: Request<SearchTagsRequest>,
+    ) -> Result<Response<SearchTagsResponse>, Status> {
+        self.tags_handler.search_tags(request).await
+    }
+
+    async fn get_projects_by_tag(
+        &self,
+        request: Request<GetProjectsByTagRequest>,
+    ) -> Result<Response<GetProjectsByTagResponse>, Status> {
+        self.tags_handler.get_projects_by_tag(request).await
+    }
+
+    async fn get_tag_statistics(
+        &self,
+        request: Request<GetTagStatisticsRequest>,
+    ) -> Result<Response<GetTagStatisticsResponse>, Status> {
+        self.tags_handler.get_tag_statistics(request).await
+    }
+
+    async fn get_all_tags_with_usage(
+        &self,
+        request: Request<GetAllTagsWithUsageRequest>,
+    ) -> Result<Response<GetAllTagsWithUsageResponse>, Status> {
+        self.tags_handler.get_all_tags_with_usage(request).await
+    }
 }
 
 // Task Service Implementation
