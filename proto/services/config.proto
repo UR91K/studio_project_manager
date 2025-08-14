@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.config;
+package seula.config;
 
 import "common.proto";
 

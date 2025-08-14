@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.samples;
+package seula.samples;
 
 import "common.proto";
 
@@ -37,7 +37,7 @@ message GetAllSamplesRequest {
 }
 
 message GetAllSamplesResponse {
-  repeated studio_project_manager.common.Sample samples = 1;
+  repeated seula.common.Sample samples = 1;
   int32 total_count = 2;
 }
 
@@ -46,7 +46,7 @@ message GetSampleRequest {
 }
 
 message GetSampleResponse {
-  optional studio_project_manager.common.Sample sample = 1;
+  optional seula.common.Sample sample = 1;
 }
 
 message GetSampleByPresenceRequest {
@@ -58,7 +58,7 @@ message GetSampleByPresenceRequest {
 }
 
 message GetSampleByPresenceResponse {
-  repeated studio_project_manager.common.Sample samples = 1;
+  repeated seula.common.Sample samples = 1;
   int32 total_count = 2;
 }
 
@@ -71,7 +71,7 @@ message SearchSamplesRequest {
 }
 
 message SearchSamplesResponse {
-  repeated studio_project_manager.common.Sample samples = 1;
+  repeated seula.common.Sample samples = 1;
   int32 total_count = 2;
 }
 
@@ -157,7 +157,7 @@ message GetProjectsBySampleRequest {
 }
 
 message GetProjectsBySampleResponse {
-  repeated studio_project_manager.common.Project projects = 1;
+  repeated seula.common.Project projects = 1;
   int32 total_count = 2;
 }
 

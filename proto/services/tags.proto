@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.tags;
+package seula.tags;
 
 import "common.proto";
 
@@ -31,7 +31,7 @@ service TagService {
 message GetTagsRequest {}
 
 message GetTagsResponse {
-  repeated studio_project_manager.common.Tag tags = 1;
+  repeated seula.common.Tag tags = 1;
 }
 
 message CreateTagRequest {
@@ -39,7 +39,7 @@ message CreateTagRequest {
 }
 
 message CreateTagResponse {
-  studio_project_manager.common.Tag tag = 1;
+  seula.common.Tag tag = 1;
 }
 
 message UpdateTagRequest {
@@ -48,7 +48,7 @@ message UpdateTagRequest {
 }
 
 message UpdateTagResponse {
-  studio_project_manager.common.Tag tag = 1;
+  seula.common.Tag tag = 1;
 }
 
 message DeleteTagRequest {
@@ -84,7 +84,7 @@ message BatchTagProjectsRequest {
 }
 
 message BatchTagProjectsResponse {
-  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  repeated seula.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
 }
@@ -95,7 +95,7 @@ message BatchUntagProjectsRequest {
 }
 
 message BatchUntagProjectsResponse {
-  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  repeated seula.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
 }
@@ -106,7 +106,7 @@ message GetTagRequest {
 }
 
 message GetTagResponse {
-  optional studio_project_manager.common.Tag tag = 1;
+  optional seula.common.Tag tag = 1;
 }
 
 // Search Tags
@@ -117,7 +117,7 @@ message SearchTagsRequest {
 }
 
 message SearchTagsResponse {
-  repeated studio_project_manager.common.Tag tags = 1;
+  repeated seula.common.Tag tags = 1;
   int32 total_count = 2;
 }
 
@@ -129,7 +129,7 @@ message GetProjectsByTagRequest {
 }
 
 message GetProjectsByTagResponse {
-  repeated studio_project_manager.common.Project projects = 1;
+  repeated seula.common.Project projects = 1;
   int32 total_count = 2;
 }
 

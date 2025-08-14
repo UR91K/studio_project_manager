@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use super::*;
 use crate::common::{setup, LiveSetBuilder};
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
-use studio_project_manager::database::search::{MatchReason, SearchQuery};
+use seula::database::search::{MatchReason, SearchQuery};
 use uuid::Uuid;
 
 fn setup_test_projects() -> (

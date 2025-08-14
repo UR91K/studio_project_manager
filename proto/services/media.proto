@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.media;
+package seula.media;
 
 import "common.proto";
 
@@ -32,7 +32,7 @@ service MediaService {
 }
 
 // Copy these request/response messages from your original
-// studio_project_manager.proto:
+// seula.proto:
 
 message UploadAudioFileRequest {
   oneof data {
@@ -54,7 +54,7 @@ message DownloadMediaRequest {
 
 message DownloadMediaResponse {
   oneof data {
-    studio_project_manager.common.MediaFile metadata = 1;
+    seula.common.MediaFile metadata = 1;
     bytes chunk = 2;
   }
 }
@@ -95,7 +95,7 @@ message ListMediaFilesRequest {
 }
 
 message ListMediaFilesResponse {
-  repeated studio_project_manager.common.MediaFile media_files = 1;
+  repeated seula.common.MediaFile media_files = 1;
   int32 total_count = 2;
 }
 
@@ -106,7 +106,7 @@ message GetMediaFilesByTypeRequest {
 }
 
 message GetMediaFilesByTypeResponse {
-  repeated studio_project_manager.common.MediaFile media_files = 1;
+  repeated seula.common.MediaFile media_files = 1;
   int32 total_count = 2;
 }
 
@@ -116,7 +116,7 @@ message GetOrphanedMediaFilesRequest {
 }
 
 message GetOrphanedMediaFilesResponse {
-  repeated studio_project_manager.common.MediaFile orphaned_files = 1;
+  repeated seula.common.MediaFile orphaned_files = 1;
   int32 total_count = 2;
 }
 

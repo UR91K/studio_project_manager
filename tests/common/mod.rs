@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Once};
 use uuid::Uuid;
 
-use studio_project_manager::live_set::LiveSet;
-use studio_project_manager::models::{
+use seula::live_set::LiveSet;
+use seula::models::{
     AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, TimeSignature,
 };
-use studio_project_manager::scan::parser::ParseResult;
+use seula::scan::parser::ParseResult;
 
 pub mod builders;
 pub mod helpers;

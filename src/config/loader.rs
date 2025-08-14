@@ -80,7 +80,7 @@ fn set_default_database_path(config: &mut Config) -> Result<(), ConfigError> {
     {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| ConfigError::InvalidPath("Could not get data directory".into()))?;
-        let app_data_dir = data_dir.join("StudioProjectManager");
+        let app_data_dir = data_dir.join("Seula");
         std::fs::create_dir_all(&app_data_dir).map_err(|e| ConfigError::IoError(e))?;
 
         config.database_path = Some(
@@ -114,7 +114,7 @@ pub fn find_config_file() -> Result<PathBuf, ConfigError> {
     // Check AppData directory first (primary location for deployed apps)
     let config_dir = dirs::config_dir()
         .ok_or_else(|| ConfigError::InvalidPath("Could not get config directory".into()))?;
-    let app_config_dir = config_dir.join("StudioProjectManager");
+    let app_config_dir = config_dir.join("Seula");
     let appdata_config_path = app_config_dir.join("config.toml");
 
     if appdata_config_path.exists() {

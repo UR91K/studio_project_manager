@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.scanning;
+package seula.scanning;
 
 import "common.proto";
 
@@ -25,13 +25,13 @@ message ScanProgressResponse {
   uint32 total = 2;
   float progress = 3;
   string message = 4;
-  studio_project_manager.common.ScanStatus status = 5;
+  seula.common.ScanStatus status = 5;
 }
 
 message GetScanStatusRequest {}
 
 message GetScanStatusResponse {
-  studio_project_manager.common.ScanStatus status = 1;
+  seula.common.ScanStatus status = 1;
   optional ScanProgressResponse current_progress = 2;
 }
 
@@ -41,7 +41,7 @@ message AddSingleProjectRequest {
 
 message AddSingleProjectResponse {
   bool success = 1;
-  optional studio_project_manager.common.Project project = 2;
+  optional seula.common.Project project = 2;
   optional string error_message = 3;
 }
 
@@ -51,7 +51,7 @@ message AddMultipleProjectsRequest {
 
 message AddMultipleProjectsResponse {
   bool success = 1;
-  repeated studio_project_manager.common.Project projects = 2;
+  repeated seula.common.Project projects = 2;
   repeated string failed_paths = 3;
   repeated string error_messages = 4;
   int32 total_requested = 5;

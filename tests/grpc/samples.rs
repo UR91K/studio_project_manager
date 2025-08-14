@@ -525,7 +525,7 @@ async fn test_get_sample_extensions() {
 
 #[tokio::test]
 async fn test_liveset_add_sample_method() {
-    use studio_project_manager::live_set::LiveSet;
+    use seula::live_set::LiveSet;
     use std::path::PathBuf;
     use std::collections::HashSet;
     use uuid::Uuid;
@@ -541,7 +541,7 @@ async fn test_liveset_add_sample_method() {
         created_time: Local::now(),
         modified_time: Local::now(),
         last_parsed_timestamp: Local::now(),
-        ableton_version: studio_project_manager::models::AbletonVersion {
+        ableton_version: seula::models::AbletonVersion {
             major: 11,
             minor: 0,
             patch: 0,
@@ -549,7 +549,7 @@ async fn test_liveset_add_sample_method() {
         },
         key_signature: None,
         tempo: 120.0,
-        time_signature: studio_project_manager::models::TimeSignature {
+        time_signature: seula::models::TimeSignature {
             numerator: 4,
             denominator: 4,
         },

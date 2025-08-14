@@ -9,8 +9,8 @@
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use studio_project_manager::database::LiveSetDatabase;
-use studio_project_manager::media::{MediaFile, MediaType};
+use seula::database::LiveSetDatabase;
+use seula::media::{MediaFile, MediaType};
 
 use crate::common::setup;
 use crate::database::core::create_test_live_set;

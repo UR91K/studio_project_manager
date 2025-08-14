@@ -1,13 +1,13 @@
 //! Batch operations gRPC tests
 
-use studio_project_manager::grpc::projects::*;
-use studio_project_manager::grpc::collections::*;
-use studio_project_manager::grpc::tags::*;
-use studio_project_manager::grpc::tasks::*;
-use studio_project_manager::grpc::projects::project_service_server::ProjectService;
-use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
-use studio_project_manager::grpc::tags::tag_service_server::TagService;
-use studio_project_manager::grpc::tasks::task_service_server::TaskService;
+use seula::grpc::projects::*;
+use seula::grpc::collections::*;
+use seula::grpc::tags::*;
+use seula::grpc::tasks::*;
+use seula::grpc::projects::project_service_server::ProjectService;
+use seula::grpc::collections::collection_service_server::CollectionService;
+use seula::grpc::tags::tag_service_server::TagService;
+use seula::grpc::tasks::task_service_server::TaskService;
 
 use super::*;
 use crate::common::setup;

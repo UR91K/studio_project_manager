@@ -3,7 +3,7 @@
 use super::*;
 use crate::common::{generate_test_live_sets_arc, setup};
 use std::collections::HashSet;
-use studio_project_manager::database::batch::BatchInsertManager;
+use seula::database::batch::BatchInsertManager;
 use tempfile::tempdir;
 
 #[test]

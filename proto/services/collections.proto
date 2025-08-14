@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.collections;
+package seula.collections;
 
 import "common.proto";
 
@@ -54,7 +54,7 @@ message GetCollectionsRequest {
 }
 
 message GetCollectionsResponse {
-  repeated studio_project_manager.common.Collection collections = 1;
+  repeated seula.common.Collection collections = 1;
   int32 total_count = 2;
 }
 
@@ -63,7 +63,7 @@ message GetCollectionRequest {
 }
 
 message GetCollectionResponse {
-  optional studio_project_manager.common.Collection collection = 1;
+  optional seula.common.Collection collection = 1;
 }
 
 message CreateCollectionRequest {
@@ -73,7 +73,7 @@ message CreateCollectionRequest {
 }
 
 message CreateCollectionResponse {
-  studio_project_manager.common.Collection collection = 1;
+  seula.common.Collection collection = 1;
 }
 
 message UpdateCollectionRequest {
@@ -84,7 +84,7 @@ message UpdateCollectionRequest {
 }
 
 message UpdateCollectionResponse {
-  studio_project_manager.common.Collection collection = 1;
+  seula.common.Collection collection = 1;
 }
 
 message DeleteCollectionRequest {
@@ -103,7 +103,7 @@ message DuplicateCollectionRequest {
 }
 
 message DuplicateCollectionResponse {
-  studio_project_manager.common.Collection collection = 1;
+  seula.common.Collection collection = 1;
 }
 
 message AddProjectToCollectionRequest {
@@ -139,7 +139,7 @@ message GetCollectionTasksRequest {
 }
 
 message GetCollectionTasksResponse {
-  repeated studio_project_manager.common.Task tasks = 1;
+  repeated seula.common.Task tasks = 1;
   int32 total_tasks = 2;
   int32 completed_tasks = 3;
   int32 pending_tasks = 4;
@@ -154,7 +154,7 @@ message SearchCollectionsRequest {
 }
 
 message SearchCollectionsResponse {
-  repeated studio_project_manager.common.Collection collections = 1;
+  repeated seula.common.Collection collections = 1;
   int32 total_count = 2;
 }
 
@@ -201,7 +201,7 @@ message BatchAddToCollectionRequest {
 }
 
 message BatchAddToCollectionResponse {
-  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  repeated seula.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
 }
@@ -212,7 +212,7 @@ message BatchRemoveFromCollectionRequest {
 }
 
 message BatchRemoveFromCollectionResponse {
-  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  repeated seula.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
 }
@@ -225,8 +225,8 @@ message BatchCreateCollectionFromRequest {
 }
 
 message BatchCreateCollectionFromResponse {
-  studio_project_manager.common.Collection collection = 1;
-  repeated studio_project_manager.common.BatchOperationResult results = 2;
+  seula.common.Collection collection = 1;
+  repeated seula.common.BatchOperationResult results = 2;
   int32 successful_count = 3;
   int32 failed_count = 4;
 }

@@ -315,7 +315,7 @@ fn test_plugin_with_non_empty_xml_name_but_empty_db_name() {
 fn test_psp_springbox_xml_parsing() {
     use crate::scan::parser::basic::{create_test_scanner, process_xml};
     use crate::scan::parser::ParseResult;
-    use studio_project_manager::models::PluginFormat;
+    use seula::models::PluginFormat;
     
     setup("error");
     let mut scanner = create_test_scanner();
@@ -408,9 +408,9 @@ fn test_psp_springbox_xml_parsing() {
 fn test_psp_springbox_plugin_from_real_project() {
     use std::path::PathBuf;
     use std::collections::HashSet;
-    use studio_project_manager::database::LiveSetDatabase;
-    use studio_project_manager::scan::project_scanner::ProjectPathScanner;
-    use studio_project_manager::database::batch::BatchInsertManager;
+    use seula::database::LiveSetDatabase;
+    use seula::scan::project_scanner::ProjectPathScanner;
+    use seula::database::batch::BatchInsertManager;
     use std::sync::Arc;
     
     setup("error");
@@ -448,7 +448,7 @@ fn test_psp_springbox_plugin_from_real_project() {
     // 2. Preprocess projects (same as library)
     let mut preprocessed = Vec::new();
     for path in found_projects {
-        match studio_project_manager::live_set::LiveSetPreprocessed::new(path.clone()) {
+        match seula::live_set::LiveSetPreprocessed::new(path.clone()) {
             Ok(metadata) => {
                 println!("Successfully preprocessed: {}", metadata.name);
                 preprocessed.push(metadata);
@@ -467,7 +467,7 @@ fn test_psp_springbox_plugin_from_real_project() {
     // 3. Parse projects (same as library)
     let mut successful_live_sets = Vec::new();
     for preprocessed_project in preprocessed {
-        match studio_project_manager::live_set::LiveSet::from_preprocessed(preprocessed_project) {
+        match seula::live_set::LiveSet::from_preprocessed(preprocessed_project) {
             Ok(live_set) => {
                 println!("Successfully parsed: {}", live_set.name);
                 

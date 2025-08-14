@@ -3,8 +3,8 @@
 use super::*;
 use crate::common::{setup, LiveSetBuilder};
 use std::path::PathBuf;
-use studio_project_manager::grpc::StudioProjectManagerServer;
-use studio_project_manager::media::{MediaConfig, MediaStorageManager};
+use seula::grpc::StudioProjectManagerServer;
+use seula::media::{MediaConfig, MediaStorageManager};
 
 pub async fn create_test_server() -> StudioProjectManagerServer {
     setup("error");
@@ -17,7 +17,7 @@ pub async fn create_test_server() -> StudioProjectManagerServer {
     let media_config = MediaConfig::default();
 
     // Create temporary directory for test media storage
-    let temp_dir = std::env::temp_dir().join("studio_project_manager_test_media");
+    let temp_dir = std::env::temp_dir().join("seula_test_media");
     let media_storage = MediaStorageManager::new(temp_dir, media_config)
         .expect("Failed to create test media storage");
 
@@ -30,9 +30,9 @@ pub async fn create_test_project_in_db(db: &Arc<Mutex<LiveSetDatabase>>) -> Stri
         .with_sample("kick.wav")
         .with_tempo(140.0)
         .with_time_signature(4, 4)
-        .with_key_signature(studio_project_manager::models::KeySignature {
-            tonic: studio_project_manager::models::Tonic::C,
-            scale: studio_project_manager::models::Scale::Major,
+        .with_key_signature(seula::models::KeySignature {
+            tonic: seula::models::Tonic::C,
+            scale: seula::models::Scale::Major,
         })
         .with_version(11, 0, 0, false)
         .build();
@@ -40,7 +40,7 @@ pub async fn create_test_project_in_db(db: &Arc<Mutex<LiveSetDatabase>>) -> Stri
     let unique_id = uuid::Uuid::new_v4();
     let unique_name = format!("Test Project {}.als", unique_id);
 
-    let test_live_set = studio_project_manager::live_set::LiveSet {
+    let test_live_set = seula::live_set::LiveSet {
         is_active: true,
         id: unique_id,
         file_path: PathBuf::from(&unique_name),
@@ -126,8 +126,8 @@ pub async fn add_sample_to_project(server: &StudioProjectManagerServer, project_
 }
 
 /// Create a Sample struct for testing (type-safe alternative to raw database insertion)
-pub fn create_sample_struct(name: &str, path: &str, is_present: bool) -> studio_project_manager::models::Sample {
-    use studio_project_manager::models::Sample;
+pub fn create_sample_struct(name: &str, path: &str, is_present: bool) -> seula::models::Sample {
+    use seula::models::Sample;
     use std::path::PathBuf;
     use uuid::Uuid;
     
@@ -142,8 +142,8 @@ pub fn create_sample_struct(name: &str, path: &str, is_present: bool) -> studio_
 #[cfg(test)]
 mod tests {
     use super::*;
-    use studio_project_manager::grpc::scanning::*;
-    use studio_project_manager::grpc::common::*;
+    use seula::grpc::scanning::*;
+    use seula::grpc::common::*;
     use tonic::Request;
 
     #[tokio::test]

@@ -2,7 +2,7 @@
 
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
-use studio_project_manager::scan::project_scanner::ProjectPathScanner;
+use seula::scan::project_scanner::ProjectPathScanner;
 use tempfile::TempDir;
 
 use crate::common::setup;

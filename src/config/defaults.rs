@@ -21,7 +21,7 @@ pub fn generate_default_config() -> Result<String, ConfigError> {
         .ok_or_else(|| ConfigError::InvalidPath("Could not get roaming data directory".into()))?;
 
     let live_database_path = local_data_dir.join("Ableton").join("Live Database");
-    let media_storage_path = roaming_data_dir.join("StudioProjectManager").join("media");
+    let media_storage_path = roaming_data_dir.join("Seula").join("media");
 
     let config_content = format!(
         r#"# config.toml

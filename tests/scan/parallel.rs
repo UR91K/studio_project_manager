@@ -6,9 +6,9 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
-use studio_project_manager::scan::project_scanner::ProjectPathScanner;
-use studio_project_manager::scan::ParallelParser;
-use studio_project_manager::{AbletonVersion, LiveSet, CONFIG};
+use seula::scan::project_scanner::ProjectPathScanner;
+use seula::scan::ParallelParser;
+use seula::{AbletonVersion, LiveSet, CONFIG};
 use tempfile::tempdir;
 
 use crate::common::setup;

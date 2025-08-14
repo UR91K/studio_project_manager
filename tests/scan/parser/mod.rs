@@ -13,6 +13,6 @@ pub mod unicode_encoding;
 // Common imports for parser tests
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use studio_project_manager::error::LiveSetError;
-use studio_project_manager::models::*;
-use studio_project_manager::scan::parser::*;
+use seula::error::LiveSetError;
+use seula::models::*;
+use seula::scan::parser::*;

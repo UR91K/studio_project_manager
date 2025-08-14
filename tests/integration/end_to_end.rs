@@ -4,8 +4,8 @@ use crate::common::setup;
 use colored::*;
 use std::path::Path;
 use std::time::Instant;
-use studio_project_manager::live_set::LiveSet;
-use studio_project_manager::utils::decompress_gzip_file;
+use seula::live_set::LiveSet;
+use seula::utils::decompress_gzip_file;
 
 // TODO: Consider creating comprehensive end-to-end tests here
 // TODO: These would test the complete workflow: scan -> parse -> database -> gRPC

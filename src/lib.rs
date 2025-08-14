@@ -1,4 +1,4 @@
-//! # Studio Project Manager Library
+//! # Seula Library
 //!
 //! A high-performance library for scanning, parsing, and managing Ableton Live project files.
 //! This library provides the core functionality for indexing Ableton Live projects, extracting
@@ -17,7 +17,7 @@
 //! ## Quick Start
 //!
 //! ```rust,ignore
-//! use studio_project_manager::process_projects;
+//! use seula::process_projects;
 //!
 //! // Process all projects configured in config.toml
 //! process_projects().expect("Failed to process projects");
@@ -60,7 +60,7 @@ pub mod watcher;
 /// # Examples
 ///
 /// ```rust,ignore
-/// use studio_project_manager::CONFIG;
+/// use seula::CONFIG;
 ///
 /// let config = CONFIG.as_ref().expect("Config should be loaded");
 /// println!("gRPC port: {}", config.grpc_port);
@@ -75,7 +75,7 @@ pub use config::CONFIG;
 /// # Examples
 ///
 /// ```rust,ignore
-/// use studio_project_manager::LiveSetDatabase;
+/// use seula::LiveSetDatabase;
 /// use std::path::PathBuf;
 ///
 /// let db = LiveSetDatabase::new(PathBuf::from("projects.db"))
@@ -92,7 +92,7 @@ pub use database::LiveSetDatabase;
 /// # Examples
 ///
 /// ```rust,ignore
-/// use studio_project_manager::LiveSet;
+/// use seula::LiveSet;
 /// use std::path::PathBuf;
 ///
 /// let project_path = PathBuf::from("project.als");
@@ -162,7 +162,7 @@ use std::time::Duration;
 /// # Examples
 ///
 /// ```rust,ignore
-/// use studio_project_manager::process_projects;
+/// use seula::process_projects;
 ///
 /// // Process all projects - this will scan configured directories,
 /// // parse any new or modified projects, and update the database
@@ -215,7 +215,7 @@ pub fn process_projects() -> Result<(), LiveSetError> {
 /// # Examples
 ///
 /// ```rust,ignore
-/// use studio_project_manager::process_projects_with_progress;
+/// use seula::process_projects_with_progress;
 ///
 /// // Process with progress callback
 /// let result = process_projects_with_progress(Some(|completed, total, progress, message, phase| {

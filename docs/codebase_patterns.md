@@ -1,6 +1,6 @@
 # Codebase Patterns
 
-This document outlines common patterns and best practices used throughout the Studio Project Manager codebase.
+This document outlines common patterns and best practices used throughout the Seula codebase.
 
 ## Testing Patterns
 
@@ -73,7 +73,7 @@ fn test_scenario_2_impl() {
 ```protobuf
 syntax = "proto3";
 
-package studio_project_manager.{service_name};
+package seula.{service_name};
 
 import "common.proto";
 
@@ -89,7 +89,7 @@ message GetItemRequest {
 }
 
 message GetItemResponse {
-  optional studio_project_manager.common.Item item = 1;
+  optional seula.common.Item item = 1;
 }
 
 // ... other message definitions
@@ -217,7 +217,7 @@ pub use {service_name}::{ServiceName}Handler;  // Export your handler
 
 ```rust
 pub mod {service_name} {
-    tonic::include_proto!("studio_project_manager.{service_name}");
+    tonic::include_proto!("seula.{service_name}");
 }
 ```
 
@@ -266,8 +266,8 @@ impl {service_name}_service_server::{ServiceName}Service for StudioProjectManage
 ```rust
 use crate::grpc::*;
 use crate::grpc::server_setup::{setup_test_server, create_test_project};
-use studio_project_manager::grpc::{service_name}::*;
-use studio_project_manager::grpc::{service_name}::{service_name}_service_server::{ServiceName}Service;
+use seula::grpc::{service_name}::*;
+use seula::grpc::{service_name}::{service_name}_service_server::{ServiceName}Service;
 
 #[tokio::test]
 async fn test_get_item() {

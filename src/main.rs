@@ -1,18 +1,18 @@
 use log::info;
 use std::env;
-use studio_project_manager::config::CONFIG;
-use studio_project_manager::{grpc, tray};
-use studio_project_manager::grpc::projects::project_service_server;
-use studio_project_manager::grpc::search::search_service_server;
-use studio_project_manager::grpc::collections::collection_service_server;
-use studio_project_manager::grpc::tags::tag_service_server;
-use studio_project_manager::grpc::tasks::task_service_server;
-use studio_project_manager::grpc::media::media_service_server;
-use studio_project_manager::grpc::system::system_service_server;
-use studio_project_manager::grpc::plugins::plugin_service_server;
-use studio_project_manager::grpc::samples::sample_service_server;
-use studio_project_manager::grpc::scanning::scanning_service_server;
-use studio_project_manager::grpc::watcher::watcher_service_server;
+use seula::config::CONFIG;
+use seula::{grpc, tray};
+use seula::grpc::projects::project_service_server;
+use seula::grpc::search::search_service_server;
+use seula::grpc::collections::collection_service_server;
+use seula::grpc::tags::tag_service_server;
+use seula::grpc::tasks::task_service_server;
+use seula::grpc::media::media_service_server;
+use seula::grpc::system::system_service_server;
+use seula::grpc::plugins::plugin_service_server;
+use seula::grpc::samples::sample_service_server;
+use seula::grpc::scanning::scanning_service_server;
+use seula::grpc::watcher::watcher_service_server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -43,17 +43,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_cli_mode() -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting Studio Project Manager gRPC Server (CLI mode)");
+    info!("Starting Seula gRPC Server (CLI mode)");
     start_grpc_server().await
 }
 
 async fn run_server_mode() -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting Studio Project Manager gRPC Server (server-only mode)");
+    info!("Starting Seula gRPC Server (server-only mode)");
     start_grpc_server().await
 }
 
 async fn run_tray_mode() -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting Studio Project Manager gRPC Server (tray mode)");
+    info!("Starting Seula gRPC Server (tray mode)");
 
     // Start the gRPC server in a background task
     let server_handle = tokio::spawn(async {

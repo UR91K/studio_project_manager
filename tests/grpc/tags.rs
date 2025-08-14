@@ -1,6 +1,6 @@
 //! Tags-related gRPC tests
 
-use studio_project_manager::grpc::tags::tag_service_server::TagService;
+use seula::grpc::tags::tag_service_server::TagService;
 
 use super::*;
 use crate::common::setup;

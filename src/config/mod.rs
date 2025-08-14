@@ -15,7 +15,7 @@ pub use defaults::{
 pub use paths::MAX_PATH_LENGTH;
 pub use loader::MAX_DIRECTORY_TRAVERSAL_DEPTH;
 
-/// Configuration for the Studio Project Manager application
+/// Configuration for the Seula application
 ///
 /// # Example Configuration File
 /// ```toml
@@ -26,7 +26,7 @@ pub use loader::MAX_DIRECTORY_TRAVERSAL_DEPTH;
 /// ]
 ///
 /// # Database file path (optional, defaults to user data directory)
-/// # database_path = "C:\\Users\\username\\AppData\\Roaming\\StudioProjectManager\\ableton_live_sets.db"
+/// # database_path = "C:\\Users\\username\\AppData\\Roaming\\Seula\\ableton_live_sets.db"
 ///
 /// # Directory containing Ableton Live database files
 /// live_database_dir = "C:\\Users\\username\\AppData\\Local\\Ableton\\Live Database"
@@ -38,7 +38,7 @@ pub use loader::MAX_DIRECTORY_TRAVERSAL_DEPTH;
 /// log_level = "info"
 ///
 /// # Directory for storing media files
-/// media_storage_dir = "C:\\Users\\username\\AppData\\Roaming\\StudioProjectManager\\media"
+/// media_storage_dir = "C:\\Users\\username\\AppData\\Roaming\\Seula\\media"
 ///
 /// # Media file size limits (optional, 0 = no limit, omit to use defaults)
 /// # max_cover_art_size_mb = 10

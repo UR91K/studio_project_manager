@@ -3,55 +3,55 @@ pub mod server;
 
 // Include the generated protobuf code for each service
 pub mod common {
-    tonic::include_proto!("studio_project_manager.common");
+    tonic::include_proto!("seula.common");
 }
 
 pub mod projects {
-    tonic::include_proto!("studio_project_manager.projects");
+    tonic::include_proto!("seula.projects");
 }
 
 pub mod collections {
-    tonic::include_proto!("studio_project_manager.collections");
+    tonic::include_proto!("seula.collections");
 }
 
 pub mod tasks {
-    tonic::include_proto!("studio_project_manager.tasks");
+    tonic::include_proto!("seula.tasks");
 }
 
 pub mod search {
-    tonic::include_proto!("studio_project_manager.search");
+    tonic::include_proto!("seula.search");
 }
 
 pub mod tags {
-    tonic::include_proto!("studio_project_manager.tags");
+    tonic::include_proto!("seula.tags");
 }
 
 pub mod media {
-    tonic::include_proto!("studio_project_manager.media");
+    tonic::include_proto!("seula.media");
 }
 
 pub mod system {
-    tonic::include_proto!("studio_project_manager.system");
+    tonic::include_proto!("seula.system");
 }
 
 pub mod plugins {
-    tonic::include_proto!("studio_project_manager.plugins");
+    tonic::include_proto!("seula.plugins");
 }
 
 pub mod samples {
-    tonic::include_proto!("studio_project_manager.samples");
+    tonic::include_proto!("seula.samples");
 }
 
 pub mod scanning {
-    tonic::include_proto!("studio_project_manager.scanning");
+    tonic::include_proto!("seula.scanning");
 }
 
 pub mod watcher {
-    tonic::include_proto!("studio_project_manager.watcher");
+    tonic::include_proto!("seula.watcher");
 }
 
 pub mod config {
-    tonic::include_proto!("studio_project_manager.config");
+    tonic::include_proto!("seula.config");
 }
 
 pub use server::StudioProjectManagerServer;

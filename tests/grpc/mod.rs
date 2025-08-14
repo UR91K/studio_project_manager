@@ -17,23 +17,23 @@ pub mod tags;
 pub mod tasks;
 
 // Common imports for gRPC tests
-use studio_project_manager::database::LiveSetDatabase;
-use studio_project_manager::grpc::projects::*;
-use studio_project_manager::grpc::collections::*;
-use studio_project_manager::grpc::tags::*;
-use studio_project_manager::grpc::search::*;
-use studio_project_manager::grpc::media::*;
-use studio_project_manager::grpc::system::*;
-use studio_project_manager::grpc::plugins::*;
-use studio_project_manager::grpc::samples::*;
-use studio_project_manager::grpc::scanning::*;
+use seula::database::LiveSetDatabase;
+use seula::grpc::projects::*;
+use seula::grpc::collections::*;
+use seula::grpc::tags::*;
+use seula::grpc::search::*;
+use seula::grpc::media::*;
+use seula::grpc::system::*;
+use seula::grpc::plugins::*;
+use seula::grpc::samples::*;
+use seula::grpc::scanning::*;
 
 // Import all service traits
-use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
-use studio_project_manager::grpc::tags::tag_service_server::TagService;
-use studio_project_manager::grpc::scanning::scanning_service_server::ScanningService;
-use studio_project_manager::grpc::plugins::plugin_service_server::PluginService;
-use studio_project_manager::grpc::samples::sample_service_server::SampleService;
+use seula::grpc::collections::collection_service_server::CollectionService;
+use seula::grpc::tags::tag_service_server::TagService;
+use seula::grpc::scanning::scanning_service_server::ScanningService;
+use seula::grpc::plugins::plugin_service_server::PluginService;
+use seula::grpc::samples::sample_service_server::SampleService;
 // use crate::common;
 use std::sync::Arc;
 use tokio::sync::Mutex;

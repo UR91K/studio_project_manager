@@ -20,9 +20,9 @@ use crate::common::setup;
 
 use super::*;
 // use crate::common::setup;
-use studio_project_manager::grpc::collections::collection_service_server::CollectionService;
-use studio_project_manager::grpc::StudioProjectManagerServer;
-use studio_project_manager::grpc::projects::project_service_server::ProjectService;
+use seula::grpc::collections::collection_service_server::CollectionService;
+use seula::grpc::StudioProjectManagerServer;
+use seula::grpc::projects::project_service_server::ProjectService;
 
 #[tokio::test]
 async fn test_get_collections_empty() {
@@ -1161,7 +1161,7 @@ async fn test_duplicate_nonexistent_collection() {
     assert!(result.is_err());
 }
 
-async fn create_test_project(server: &StudioProjectManagerServer, _: &str) -> studio_project_manager::grpc::common::Project {
+async fn create_test_project(server: &StudioProjectManagerServer, _: &str) -> seula::grpc::common::Project {
     // Create a test project directly in the database
     let db = server.db();
     let project_id = create_test_project_in_db(db).await;

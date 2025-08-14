@@ -1,6 +1,6 @@
 //! # Core Data Models
 //!
-//! This module contains all the core data structures used throughout the Studio Project Manager.
+//! This module contains all the core data structures used throughout the Seula.
 //! These models represent the various entities found in Ableton Live projects, including projects
 //! themselves, plugins, samples, musical metadata, and more.
 //!
@@ -54,7 +54,7 @@ pub struct Id(u64);
 /// # Examples
 ///
 /// ```rust
-/// use studio_project_manager::models::AbletonVersion;
+/// use seula::models::AbletonVersion;
 ///
 /// let v11_2_0 = AbletonVersion {
 ///     major: 11,
@@ -247,7 +247,7 @@ pub enum Scale {
 /// # Examples
 ///
 /// ```rust
-/// use studio_project_manager::models::Tonic;
+/// use seula::models::Tonic;
 ///
 /// // Create a tonic from MIDI note number
 /// let tonic = Tonic::from_midi_note(60); // Middle C
@@ -305,7 +305,7 @@ impl Tonic {
     /// # Examples
     ///
     /// ```rust
-    /// use studio_project_manager::models::Tonic;
+    /// use seula::models::Tonic;
     ///
     /// assert_eq!(Tonic::from_midi_note(60), Tonic::C);      // Middle C
     /// assert_eq!(Tonic::from_midi_note(61), Tonic::CSharp); // C#
@@ -430,7 +430,7 @@ impl fmt::Display for Scale {
 /// # Examples
 ///
 /// ```rust
-/// use studio_project_manager::models::{KeySignature, Tonic, Scale};
+/// use seula::models::{KeySignature, Tonic, Scale};
 ///
 /// let c_major = KeySignature {
 ///     tonic: Tonic::C,
@@ -470,7 +470,7 @@ impl fmt::Display for KeySignature {
 /// # Examples
 ///
 /// ```rust
-/// use studio_project_manager::models::PluginFormat;
+/// use seula::models::PluginFormat;
 ///
 /// let format = PluginFormat::VST3Instrument;
 /// println!("{}", format); // "VST3 Instrument"
@@ -525,7 +525,7 @@ impl PluginFormat {
     /// # Examples
     ///
     /// ```rust
-    /// use studio_project_manager::models::PluginFormat;
+    /// use seula::models::PluginFormat;
     ///
     /// let format = PluginFormat::VST3Instrument;
     /// let (dev_type, category) = format.to_dev_type_and_category();
@@ -568,7 +568,7 @@ impl fmt::Display for PluginFormat {
 /// # Examples
 ///
 /// ```rust
-/// use studio_project_manager::models::{Plugin, PluginFormat};
+/// use seula::models::{Plugin, PluginFormat};
 /// use uuid::Uuid;
 ///
 /// let plugin = Plugin::new(
@@ -643,7 +643,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```rust
-    /// use studio_project_manager::models::{Plugin, PluginFormat};
+    /// use seula::models::{Plugin, PluginFormat};
     ///
     /// let plugin = Plugin::new(
     ///     "Massive".to_string(),
@@ -690,8 +690,8 @@ impl Plugin {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use studio_project_manager::models::{Plugin, PluginFormat};
-    /// use studio_project_manager::ableton_db::AbletonDatabase;
+    /// use seula::models::{Plugin, PluginFormat};
+    /// use seula::ableton_db::AbletonDatabase;
     ///
     /// let mut plugin = Plugin::new(
     ///     "Operator".to_string(),
@@ -782,7 +782,7 @@ static INSTALLED_PLUGINS: Lazy<Arc<Result<HashSet<(String, PluginFormat)>, Datab
 /// # Examples
 ///
 /// ```rust,no_run
-/// use studio_project_manager::models::get_installed_plugins;
+/// use seula::models::get_installed_plugins;
 ///
 /// match get_installed_plugins().as_ref() {
 ///     Ok(plugins) => {
@@ -817,7 +817,7 @@ pub fn get_installed_plugins() -> Arc<Result<HashSet<(String, PluginFormat)>, Da
 /// # Examples
 ///
 /// ```rust
-/// use studio_project_manager::models::Sample;
+/// use seula::models::Sample;
 /// use std::path::PathBuf;
 ///
 /// let sample = Sample::new(
@@ -917,7 +917,7 @@ impl Sample {
 /// # Examples
 ///
 /// ```rust
-/// use studio_project_manager::models::TimeSignature;
+/// use seula::models::TimeSignature;
 ///
 /// // Common time signatures
 /// let four_four = TimeSignature { numerator: 4, denominator: 4 };

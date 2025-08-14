@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.tasks;
+package seula.tasks;
 
 import "common.proto";
 
@@ -28,7 +28,7 @@ message GetProjectTasksRequest {
 }
 
 message GetProjectTasksResponse {
-  repeated studio_project_manager.common.Task tasks = 1;
+  repeated seula.common.Task tasks = 1;
 }
 
 message CreateTaskRequest {
@@ -37,7 +37,7 @@ message CreateTaskRequest {
 }
 
 message CreateTaskResponse {
-  studio_project_manager.common.Task task = 1;
+  seula.common.Task task = 1;
 }
 
 message UpdateTaskRequest {
@@ -47,7 +47,7 @@ message UpdateTaskRequest {
 }
 
 message UpdateTaskResponse {
-  studio_project_manager.common.Task task = 1;
+  seula.common.Task task = 1;
 }
 
 message DeleteTaskRequest {
@@ -65,7 +65,7 @@ message BatchUpdateTaskStatusRequest {
 }
 
 message BatchUpdateTaskStatusResponse {
-  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  repeated seula.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
 }
@@ -75,7 +75,7 @@ message BatchDeleteTasksRequest {
 }
 
 message BatchDeleteTasksResponse {
-  repeated studio_project_manager.common.BatchOperationResult results = 1;
+  repeated seula.common.BatchOperationResult results = 1;
   int32 successful_count = 2;
   int32 failed_count = 3;
 }
@@ -91,7 +91,7 @@ message SearchTasksRequest {
 }
 
 message SearchTasksResponse {
-  repeated studio_project_manager.common.Task tasks = 1;
+  repeated seula.common.Task tasks = 1;
   int32 total_count = 2;
 }
 

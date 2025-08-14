@@ -105,7 +105,7 @@ impl TrayApp {
 
         let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
-            .with_tooltip("Studio Project Manager")
+            .with_tooltip("Seula")
             .with_icon(icon)
             .build()?;
 
@@ -173,7 +173,7 @@ impl TrayApp {
             thread::sleep(Duration::from_millis(10));
         }
 
-        info!("Shutting down Studio Project Manager");
+        info!("Shutting down Seula");
         Ok(())
     }
 }

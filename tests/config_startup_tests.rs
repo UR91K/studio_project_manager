@@ -2,7 +2,7 @@
 
 use std::fs;
 use tempfile::TempDir;
-use studio_project_manager::config::Config;
+use seula::config::Config;
 
 /// Helper function to escape Windows paths for TOML
 fn escape_path_for_toml(path: &std::path::Path) -> String {
@@ -250,7 +250,7 @@ media_storage_dir = "{}"
 /// Test that the main scanning function handles empty paths gracefully
 
 fn test_scanning_with_empty_paths_impl() {
-    use studio_project_manager::process_projects;
+    use seula::process_projects;
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");

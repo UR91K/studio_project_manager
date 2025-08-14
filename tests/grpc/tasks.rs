@@ -2,8 +2,8 @@
 
 use crate::grpc::*;
 use crate::grpc::server_setup::{setup_test_server, create_test_project};
-use studio_project_manager::grpc::tasks::*;
-use studio_project_manager::grpc::tasks::task_service_server::TaskService;
+use seula::grpc::tasks::*;
+use seula::grpc::tasks::task_service_server::TaskService;
 
 #[tokio::test]
 async fn test_search_tasks() {

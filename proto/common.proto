@@ -1,9 +1,9 @@
 syntax = "proto3";
 
-package studio_project_manager.common;
+package seula.common;
 
 // Common types used across multiple services
-// Copy these message definitions from your original studio_project_manager.proto:
+// Copy these message definitions from your original seula.proto:
 
 // Core Data Types
 message Project {

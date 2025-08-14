@@ -4,7 +4,7 @@ use crate::common::setup;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use studio_project_manager::{
+use seula::{
     config::CONFIG, database::LiveSetDatabase, process_projects, process_projects_with_progress,
     scan::project_scanner::ProjectPathScanner,
 };

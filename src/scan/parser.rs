@@ -190,7 +190,7 @@ pub enum ParserState {
 /// # Examples
 ///
 /// ```rust
-/// use studio_project_manager::scan::parser::ParseOptions;
+/// use seula::scan::parser::ParseOptions;
 ///
 /// // Parse only basic musical properties
 /// let basic_options = ParseOptions {
@@ -341,7 +341,7 @@ pub struct ParseResult {
 /// # Usage
 ///
 /// ```rust,ignore
-/// use studio_project_manager::scan::parser::{Parser, ParseOptions};
+/// use seula::scan::parser::{Parser, ParseOptions};
 ///
 /// let xml_data = b"<Ableton>...</Ableton>";
 /// let options = ParseOptions::default();
@@ -437,14 +437,14 @@ impl Parser {
     /// # Examples
     ///
     /// ```rust,ignore
-    /// use studio_project_manager::scan::parser::{Parser, ParseOptions};
+    /// use seula::scan::parser::{Parser, ParseOptions};
     ///
     /// let xml_data = b"<Ableton MinorVersion=\"11.2_11215\">...</Ableton>";
     /// let options = ParseOptions::default();
     ///
     /// let parser = Parser::new(xml_data, options)?;
     /// println!("Detected version: {}", parser.ableton_version);
-    /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
+    /// # Ok::<(), seula::error::LiveSetError>(())
     /// ```
     ///
     /// # Version Compatibility
@@ -553,7 +553,7 @@ impl Parser {
     /// # Examples
     ///
     /// ```rust,ignore
-    /// use studio_project_manager::scan::parser::Parser;
+    /// use seula::scan::parser::Parser;
     ///
     /// let xml_data = br#"<Ableton MinorVersion="11.2_11215" SchemaChangeCount="3">..."#;
     /// let version = Parser::detect_version(xml_data)?;
@@ -562,7 +562,7 @@ impl Parser {
     /// assert_eq!(version.minor, 2);
     /// assert_eq!(version.patch, 11215);
     /// assert_eq!(version.beta, false);
-    /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
+    /// # Ok::<(), seula::error::LiveSetError>(())
     /// ```
     pub fn detect_version(xml_data: &[u8]) -> Result<AbletonVersion, LiveSetError> {
         let mut reader = Reader::from_reader(xml_data);
@@ -666,7 +666,7 @@ impl Parser {
     /// # Examples
     ///
     /// ```rust,ignore
-    /// use studio_project_manager::scan::parser::{Parser, ParseOptions};
+    /// use seula::scan::parser::{Parser, ParseOptions};
     ///
     /// let xml_data = include_bytes!("project.als");
     /// let options = ParseOptions::default();
@@ -680,7 +680,7 @@ impl Parser {
     /// println!("Found {} plugins and {} samples",
     ///          result.plugins.len(),
     ///          result.samples.len());
-    /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
+    /// # Ok::<(), seula::error::LiveSetError>(())
     /// ```
     ///
     /// # Performance Notes
@@ -792,14 +792,14 @@ impl Parser {
     /// # Examples
     ///
     /// ```rust,ignore
-    /// use studio_project_manager::scan::parser::{Parser, ParseResult, ParseOptions};
+    /// use seula::scan::parser::{Parser, ParseResult, ParseOptions};
     ///
     /// let mut parser = Parser::new(b"<xml>", ParseOptions::default())?;
     /// // ... parsing happens here ...
     ///
     /// let result = parser.finalize_result(ParseResult::default())?;
     /// println!("Final result: {} BPM", result.tempo);
-    /// # Ok::<(), studio_project_manager::error::LiveSetError>(())
+    /// # Ok::<(), seula::error::LiveSetError>(())
     /// ```
     pub fn finalize_result(&self, mut result: ParseResult) -> Result<ParseResult, LiveSetError> {
         // Set the version

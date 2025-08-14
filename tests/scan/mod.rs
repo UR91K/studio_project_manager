@@ -7,7 +7,7 @@ pub mod parser;
 pub mod project_scanner;
 
 // Common imports for scanning tests
-// use studio_project_manager::scan::*;
+// use seula::scan::*;
 // use crate::common::setup;
 // use std::path::PathBuf;
 // use tempfile::TempDir;

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.system;
+package seula.system;
 
 import "common.proto";
 
@@ -22,7 +22,7 @@ message GetSystemInfoResponse {
 }
 
 message GetStatisticsRequest {
-  optional studio_project_manager.common.DateRange date_range = 1;
+  optional seula.common.DateRange date_range = 1;
   repeated string collection_ids = 2;
   repeated string tag_ids = 3;
   optional string ableton_version_filter = 4;
@@ -54,7 +54,7 @@ message GetStatisticsResponse {
   // Duration analytics
   double average_project_duration_seconds = 15;
   int32 projects_under_40_seconds = 16;
-  studio_project_manager.common.Project longest_project = 17;
+  seula.common.Project longest_project = 17;
   
   // Complexity metrics
   repeated ProjectComplexityStatistic most_complex_projects = 18;
@@ -80,14 +80,14 @@ message GetStatisticsResponse {
   
   // Collection statistics
   double average_projects_per_collection = 28;
-  studio_project_manager.common.Collection largest_collection = 29;
+  seula.common.Collection largest_collection = 29;
   
   // Historical task analytics
   repeated TaskCompletionTrendStatistic task_completion_trends = 30;
 }
 
 message ExportStatisticsRequest {
-  studio_project_manager.common.ExportFormat format = 1;
+  seula.common.ExportFormat format = 1;
   optional GetStatisticsRequest filters = 2;
 }
 
@@ -139,7 +139,7 @@ message MonthStatistic {
 }
 
 message ProjectComplexityStatistic {
-  studio_project_manager.common.Project project = 1;
+  seula.common.Project project = 1;
   int32 plugin_count = 2;
   int32 sample_count = 3;
   int32 complexity_score = 4;

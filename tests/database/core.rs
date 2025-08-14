@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use chrono::Local;
-use studio_project_manager::{
+use seula::{
     AbletonVersion, KeySignature, Plugin, PluginFormat, Sample, Scale,
     TimeSignature, Tonic,
 };

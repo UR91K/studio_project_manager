@@ -1,6 +1,6 @@
 //! Project-related gRPC tests
 
-use studio_project_manager::grpc::projects::project_service_server::ProjectService;
+use seula::grpc::projects::project_service_server::ProjectService;
 
 use super::*;
 use crate::common::setup;

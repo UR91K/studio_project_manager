@@ -10,8 +10,8 @@ use crate::common::setup;
 
 use super::*;
 use std::collections::VecDeque;
-use studio_project_manager::grpc::media::media_service_server::MediaService;
-use studio_project_manager::media::{MediaFile, MediaType};
+use seula::grpc::media::media_service_server::MediaService;
+use seula::media::{MediaFile, MediaType};
 use tokio_stream::StreamExt;
 
 #[tokio::test]

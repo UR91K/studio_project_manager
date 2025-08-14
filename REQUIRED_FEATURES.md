@@ -1,6 +1,6 @@
 # Required Features
 
-This document outlines the required features and endpoints for the Studio Project Manager backend services.
+This document outlines the required features and endpoints for the Seula backend services.
 
 ## Collections Service
 

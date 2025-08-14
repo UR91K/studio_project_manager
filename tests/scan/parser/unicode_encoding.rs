@@ -4,7 +4,7 @@
 //! samples with unicode control characters and encoding issues.
 
 use std::path::PathBuf;
-use studio_project_manager::LiveSet;
+use seula::LiveSet;
 
 use crate::{common::setup, scan::parser::macos_sample_paths};
 
@@ -194,7 +194,7 @@ fn test_unicode_normalization() {
 fn test_path_decoding_macos_alias() {
     setup("error");
     let path_data: &str = macos_sample_paths::HEX_DATA;
-    let path = studio_project_manager::utils::samples::decode_sample_path(path_data);
+    let path = seula::utils::samples::decode_sample_path(path_data);
     let path = path.unwrap();
     println!("Path: {:?}", path);
     let file_name = path.file_name().unwrap().to_string_lossy();
@@ -245,7 +245,7 @@ fn test_path_decoding_valid() {
     } else {
         println!("Did not find expected filename sequence in utf16_chunks");
     }
-    let path = studio_project_manager::utils::samples::decode_sample_path(path_data);
+    let path = seula::utils::samples::decode_sample_path(path_data);
     if let Err(ref e) = path {
         eprintln!("Path decoding failed with error: {:?}", e);
     }

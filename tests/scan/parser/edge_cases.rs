@@ -3,8 +3,8 @@ use crate::scan::parser::basic::{
     assert_clean_state, create_test_scanner, process_xml, setup_valid_scanner,
 };
 use quick_xml::Reader;
-use studio_project_manager::models::PluginFormat;
-use studio_project_manager::scan::parser::ParseResult;
+use seula::models::PluginFormat;
+use seula::scan::parser::ParseResult;
 
 #[test]
 fn test_interleaved_plugins_and_sample() {

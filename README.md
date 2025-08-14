@@ -63,7 +63,7 @@ The application is now feature-complete. It runs as a system tray application by
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd studio_project_manager
+cd seula
 ```
 
 2. Build the project:
@@ -118,7 +118,7 @@ The `{USER_HOME}` placeholder will be automatically replaced with your user dire
 
 ```bash
 # Start as system tray application
-./studio_project_manager.exe
+./seula.exe
 
 # Or with cargo
 cargo run --release
@@ -136,7 +136,7 @@ Right-click the tray icon to quit the application.
 
 ```bash
 # Start in CLI mode (shows logs in terminal)
-./studio_project_manager.exe --cli
+./seula.exe --cli
 
 # Or with cargo
 cargo run --release -- --cli
@@ -148,7 +148,7 @@ Use CLI mode for debugging or when you want to see log output directly. The log 
 
 ### Client Integration
 
-The gRPC service can be integrated with any language that supports gRPC. The protobuf definitions are available in `proto/studio_project_manager.proto`.
+The gRPC service can be integrated with any language that supports gRPC. The protobuf definitions are available in `proto/seula.proto`.
 
 ## Deployment
 
@@ -159,13 +159,13 @@ The gRPC service can be integrated with any language that supports gRPC. The pro
 
 2. **Copy the executable and config:**
    ```
-   studio_project_manager.exe
+   seula.exe
    config.toml
    ```
 
 3. **Run the application:**
    - Double-click the executable for tray mode
-   - Or run from command line: `./studio_project_manager.exe`
+   - Or run from command line: `./seula.exe`
 
 The application will automatically:
 - Create the database if it doesn't exist

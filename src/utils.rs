@@ -163,7 +163,7 @@ pub fn validate_ableton_file(file_path: &Path) -> Result<(), FileError> {
 /// # Examples
 ///
 /// ```
-/// use studio_project_manager::utils::format_file_size;
+/// use seula::utils::format_file_size;
 ///
 /// assert_eq!(format_file_size(1023), "1023 B");
 /// assert_eq!(format_file_size(1024), "1.00 KB");
@@ -195,7 +195,7 @@ pub fn format_file_size(size: u64) -> String {
 ///
 /// ```no_run
 /// use std::path::Path;
-/// use studio_project_manager::decompress_gzip_file;
+/// use seula::decompress_gzip_file;
 ///
 /// let file_path = Path::new("path/to/compressed/file.gz");
 /// let decompressed_data = decompress_gzip_file(&file_path).expect("Failed to decompress file");

@@ -1,7 +1,7 @@
 mod common;
 
-use studio_project_manager::config::CONFIG;
-use studio_project_manager::error::ConfigError;
+use seula::config::CONFIG;
+use seula::error::ConfigError;
 
 use crate::common::setup;
 
@@ -22,11 +22,11 @@ fn test_config_validation() {
             // 0 means no limit, None means use media module default
             // Test that media formats are available (now handled by media module)
             assert!(
-                !studio_project_manager::media::ALLOWED_IMAGE_FORMATS.is_empty(),
+                !seula::media::ALLOWED_IMAGE_FORMATS.is_empty(),
                 "At least one image format should be allowed"
             );
             assert!(
-                !studio_project_manager::media::ALLOWED_AUDIO_FORMATS.is_empty(),
+                !seula::media::ALLOWED_AUDIO_FORMATS.is_empty(),
                 "At least one audio format should be allowed"
             );
 
@@ -66,24 +66,24 @@ fn test_config_validation() {
 fn test_config_constants() {
     setup("error");
     // Test that constants are properly defined
-    assert_eq!(studio_project_manager::config::DEFAULT_GRPC_PORT, 50051);
-    assert_eq!(studio_project_manager::config::DEFAULT_LOG_LEVEL, "info");
+    assert_eq!(seula::config::DEFAULT_GRPC_PORT, 50051);
+    assert_eq!(seula::config::DEFAULT_LOG_LEVEL, "info");
 
     // Test media module constants
     assert_eq!(
-        studio_project_manager::media::DEFAULT_MAX_COVER_ART_SIZE_MB,
+        seula::media::DEFAULT_MAX_COVER_ART_SIZE_MB,
         10
     );
     assert_eq!(
-        studio_project_manager::media::DEFAULT_MAX_AUDIO_FILE_SIZE_MB,
+        seula::media::DEFAULT_MAX_AUDIO_FILE_SIZE_MB,
         50
     );
 
     // Test format arrays (now in media module)
-    assert!(studio_project_manager::media::ALLOWED_IMAGE_FORMATS.contains(&"jpg"));
-    assert!(studio_project_manager::media::ALLOWED_IMAGE_FORMATS.contains(&"png"));
-    assert!(studio_project_manager::media::ALLOWED_AUDIO_FORMATS.contains(&"mp3"));
-    assert!(studio_project_manager::media::ALLOWED_AUDIO_FORMATS.contains(&"wav"));
+    assert!(seula::media::ALLOWED_IMAGE_FORMATS.contains(&"jpg"));
+    assert!(seula::media::ALLOWED_IMAGE_FORMATS.contains(&"png"));
+    assert!(seula::media::ALLOWED_AUDIO_FORMATS.contains(&"mp3"));
+    assert!(seula::media::ALLOWED_AUDIO_FORMATS.contains(&"wav"));
 }
 
 #[test]
@@ -145,11 +145,11 @@ fn test_path_length_validation() {
     setup("error");
     // Test path length validation
     let short_path = "C:\\short\\path";
-    assert!(studio_project_manager::config::Config::validate_path_length(short_path).is_ok());
+    assert!(seula::config::Config::validate_path_length(short_path).is_ok());
 
     // Test path that exceeds Windows limit
     let long_path = "C:\\".to_string() + &"a".repeat(260);
-    let result = studio_project_manager::config::Config::validate_path_length(&long_path);
+    let result = seula::config::Config::validate_path_length(&long_path);
 
     #[cfg(windows)]
     {
@@ -176,19 +176,19 @@ fn test_windows_path_validation() {
     setup("error");
     // Test valid Windows paths
     assert!(
-        studio_project_manager::config::Config::validate_windows_path("C:\\path\\to\\file").is_ok()
+        seula::config::Config::validate_windows_path("C:\\path\\to\\file").is_ok()
     );
     assert!(
-        studio_project_manager::config::Config::validate_windows_path("\\\\server\\share\\file")
+        seula::config::Config::validate_windows_path("\\\\server\\share\\file")
             .is_ok()
     );
     assert!(
-        studio_project_manager::config::Config::validate_windows_path("relative\\path").is_ok()
+        seula::config::Config::validate_windows_path("relative\\path").is_ok()
     );
 
     // Test invalid Unix-style paths
     assert!(
-        studio_project_manager::config::Config::validate_windows_path("/unix/style/path").is_err()
+        seula::config::Config::validate_windows_path("/unix/style/path").is_err()
     );
 }
 
@@ -197,7 +197,7 @@ fn test_write_permission_check() {
     setup("error");
     // Test write permission check (should work for temp directory)
     let temp_dir = std::env::temp_dir();
-    assert!(studio_project_manager::config::Config::can_write_to_directory(&temp_dir));
+    assert!(seula::config::Config::can_write_to_directory(&temp_dir));
 }
 
 #[test]
@@ -208,12 +208,12 @@ fn test_validation_helper_error_context() {
 
     // This should fail with path length validation, but we can't test the helper directly
     // since it's private. Instead, we test that the validation is called during config validation
-    let result = studio_project_manager::config::Config::validate_path_length(&long_path);
+    let result = seula::config::Config::validate_path_length(&long_path);
 
     #[cfg(windows)]
     {
         // On Windows, this might pass or fail depending on long path support
-        if let Err(studio_project_manager::error::ConfigError::InvalidPath(msg)) = result {
+        if let Err(seula::error::ConfigError::InvalidPath(msg)) = result {
             // Test that the error message contains the expected content
             assert!(msg.contains("characters"));
         } else {
@@ -228,7 +228,7 @@ fn test_validation_helper_error_context() {
             result.is_err(),
             "Path should be too long on non-Windows systems"
         );
-        if let Err(studio_project_manager::error::ConfigError::InvalidPath(msg)) = result {
+        if let Err(seula::error::ConfigError::InvalidPath(msg)) = result {
             assert!(msg.contains("Path exceeds limit"));
             assert!(msg.contains("260"));
         } else {
@@ -242,7 +242,7 @@ fn test_validation_helper_error_context() {
 fn test_windows_path_length_detection() {
     setup("error");
     // Test that we can access the Windows path length detection
-    use studio_project_manager::config::windows_paths;
+    use seula::config::windows_paths;
 
     let max_length = windows_paths::get_max_path_length();
     assert!(max_length >= 260);

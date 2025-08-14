@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package studio_project_manager.search;
+package seula.search;
 
 import "common.proto";
 
@@ -16,6 +16,6 @@ message SearchRequest {
 }
 
 message SearchResponse {
-  repeated studio_project_manager.common.Project projects = 1;
+  repeated seula.common.Project projects = 1;
   int32 total_count = 2;
 }

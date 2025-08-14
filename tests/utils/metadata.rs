@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use studio_project_manager::utils::metadata::load_file_name;
+use seula::utils::metadata::load_file_name;
 
 use crate::common::setup;
 
