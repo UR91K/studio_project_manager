@@ -1,4 +1,4 @@
-# Ableton Live Project Manager
+# Seula - Ableton Live Project Manager
 
 ## Overview
 
