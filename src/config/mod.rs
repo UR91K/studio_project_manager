@@ -26,7 +26,7 @@ pub use loader::MAX_DIRECTORY_TRAVERSAL_DEPTH;
 /// ]
 ///
 /// # Database file path (optional, defaults to user data directory)
-/// # database_path = "C:\\Users\\username\\AppData\\Roaming\\Seula\\ableton_live_sets.db"
+/// # database_path = "C:\\Users\\username\\AppData\\Roaming\\Seula\\seula.db"
 ///
 /// # Directory containing Ableton Live database files
 /// live_database_dir = "C:\\Users\\username\\AppData\\Local\\Ableton\\Live Database"

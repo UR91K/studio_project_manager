@@ -85,7 +85,7 @@ fn set_default_database_path(config: &mut Config) -> Result<(), ConfigError> {
 
         config.database_path = Some(
             app_data_dir
-                .join("ableton_live_sets.db")
+                .join("seula.db")
                 .to_str()
                 .ok_or_else(|| {
                     ConfigError::InvalidPath("Database path is not valid UTF-8".into())

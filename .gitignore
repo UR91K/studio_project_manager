@@ -3,7 +3,6 @@
 *.als
 /test_output.txt
 /specification.md
-live_set_db_test_dir/ableton_live_sets.db
 Cargo.lock
 tests/MIGRATION_GUIDE.md
 spec.md
