@@ -1,19 +1,35 @@
 //! Tests for configuration and startup scenarios
 
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 use studio_project_manager::config::Config;
-use studio_project_manager::error::ConfigError;
 
 /// Helper function to escape Windows paths for TOML
 fn escape_path_for_toml(path: &std::path::Path) -> String {
     path.display().to_string().replace("\\", "\\\\")
 }
 
-/// Test that configuration can be loaded with empty paths without crashing
+/// Single comprehensive test that runs all config startup scenarios in order
+/// This prevents test interference from parallel execution and shared environment variables
 #[test]
-fn test_config_loads_with_empty_paths() {
+fn test_all_config_startup_scenarios() {
+    println!("=== Running all config startup scenarios in sequence ===");
+    
+    // Run each test scenario in order
+    test_config_loads_with_empty_paths_impl();
+    test_config_validation_with_empty_paths_impl();
+    test_config_with_valid_paths_impl();
+    test_config_status_messages_impl();
+    test_config_path_manipulation_impl();
+    test_scanning_with_empty_paths_impl();
+    test_config_reload_impl();
+    
+    println!("=== All config startup scenarios completed successfully ===");
+}
+
+/// Test that configuration can be loaded with empty paths without crashing
+fn test_config_loads_with_empty_paths_impl() {
+    println!("Running: test_config_loads_with_empty_paths");
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -48,8 +64,8 @@ media_storage_dir = "{}"
 }
 
 /// Test that configuration validation allows empty paths but issues warnings
-#[test]
-fn test_config_validation_with_empty_paths() {
+fn test_config_validation_with_empty_paths_impl() {
+    println!("Running: test_config_validation_with_empty_paths");
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -84,8 +100,8 @@ media_storage_dir = "{}"
 }
 
 /// Test that configuration with valid paths works normally
-#[test]
-fn test_config_with_valid_paths() {
+
+fn test_config_with_valid_paths_impl() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
     let test_project_dir = temp_dir.path().join("projects");
@@ -117,8 +133,8 @@ media_storage_dir = "{}"
 }
 
 /// Test the status message functionality
-#[test]
-fn test_config_status_messages() {
+
+fn test_config_status_messages_impl() {
     // Test empty paths
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
@@ -172,8 +188,8 @@ media_storage_dir = "{}"
 }
 
 /// Test config path manipulation methods
-#[test]
-fn test_config_path_manipulation() {
+
+fn test_config_path_manipulation_impl() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
     let test_project_dir1 = temp_dir.path().join("projects1");
@@ -232,8 +248,8 @@ media_storage_dir = "{}"
 }
 
 /// Test that the main scanning function handles empty paths gracefully
-#[test]
-fn test_scanning_with_empty_paths() {
+
+fn test_scanning_with_empty_paths_impl() {
     use studio_project_manager::process_projects;
 
     let temp_dir = TempDir::new().unwrap();
@@ -264,8 +280,8 @@ media_storage_dir = "{}"
 }
 
 /// Test config reload functionality
-#[test]
-fn test_config_reload() {
+
+fn test_config_reload_impl() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -306,7 +322,7 @@ media_storage_dir = "{}"
     fs::write(&config_path, updated_config_content).unwrap();
 
     // Reload again
-    let (config, warnings) = Config::reload().unwrap();
+    let (config, _) = Config::reload().unwrap();
     assert!(!config.needs_setup(), "Reloaded config should not need setup");
     assert_eq!(config.paths.len(), 1, "Should have one path after reload");
 
