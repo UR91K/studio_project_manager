@@ -28,18 +28,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check command line arguments
     let args: Vec<String> = env::args().collect();
     let run_as_cli = args.contains(&"--cli".to_string()) || args.contains(&"-c".to_string());
+    let run_as_server = args.contains(&"--server".to_string()) || args.contains(&"-s".to_string());
 
     if run_as_cli {
         // Run as CLI (original behavior)
         run_cli_mode().await
+    } else if run_as_server {
+        // Run as server-only mode (for TUI clients)
+        run_server_mode().await
     } else {
-        // Run as tray application (new default behavior)
+        // Run as tray application (default behavior)
         run_tray_mode().await
     }
 }
 
 async fn run_cli_mode() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting Studio Project Manager gRPC Server (CLI mode)");
+    start_grpc_server().await
+}
+
+async fn run_server_mode() -> Result<(), Box<dyn std::error::Error>> {
+    info!("Starting Studio Project Manager gRPC Server (server-only mode)");
     start_grpc_server().await
 }
 
