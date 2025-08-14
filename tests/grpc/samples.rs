@@ -469,4 +469,111 @@ async fn test_get_all_samples_sorting() {
     assert_eq!(samples[0].id, sample2_id);
     assert_eq!(samples[1].id, sample1_id);
     assert_eq!(samples[2].id, sample3_id);
+}
+
+#[tokio::test]
+async fn test_get_sample_extensions() {
+    let server = create_test_server().await;
+    let db = server.db();
+
+    // Create test projects directly in database
+    let project1_id = uuid::Uuid::new_v4().to_string();
+    let project2_id = uuid::Uuid::new_v4().to_string();
+    
+    // Create test samples with different extensions directly in database
+    let sample1_id = uuid::Uuid::new_v4().to_string();
+    let sample2_id = uuid::Uuid::new_v4().to_string();
+    let sample3_id = uuid::Uuid::new_v4().to_string();
+    let sample4_id = uuid::Uuid::new_v4().to_string();
+
+    {
+        let db_lock = db.lock().await;
+        
+        // Insert projects with all required fields
+        db_lock.conn.execute(
+            "INSERT INTO projects (
+                id, name, path, hash, created_at, modified_at, last_parsed_at,
+                tempo, time_signature_numerator, time_signature_denominator,
+                ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta
+            ) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'), ?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![project1_id, "Test Project 1", "/path/to/project1.als", "test_hash_1", 120.0, 4, 4, 11, 0, 0, false],
+        ).unwrap();
+        db_lock.conn.execute(
+            "INSERT INTO projects (
+                id, name, path, hash, created_at, modified_at, last_parsed_at,
+                tempo, time_signature_numerator, time_signature_denominator,
+                ableton_version_major, ableton_version_minor, ableton_version_patch, ableton_version_beta
+            ) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'), ?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![project2_id, "Test Project 2", "/path/to/project2.als", "test_hash_2", 140.0, 4, 4, 11, 0, 0, false],
+        ).unwrap();
+
+        // Insert samples with different extensions
+        db_lock.conn.execute(
+            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            rusqlite::params![sample1_id, "test_wav.wav", "/path/to/test_wav.wav", true],
+        ).unwrap();
+        db_lock.conn.execute(
+            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            rusqlite::params![sample2_id, "test_aiff.aiff", "/path/to/test_aiff.aiff", true],
+        ).unwrap();
+        db_lock.conn.execute(
+            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            rusqlite::params![sample3_id, "test_mp3.mp3", "/path/to/test_mp3.mp3", false],
+        ).unwrap();
+        db_lock.conn.execute(
+            "INSERT INTO samples (id, name, path, is_present) VALUES (?, ?, ?, ?)",
+            rusqlite::params![sample4_id, "test_flac.flac", "/path/to/test_flac.flac", true],
+        ).unwrap();
+
+        // Link samples to projects (to create usage data)
+        db_lock.conn.execute(
+            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+            rusqlite::params![project1_id, sample1_id],
+        ).unwrap();
+        db_lock.conn.execute(
+            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+            rusqlite::params![project1_id, sample2_id],
+        ).unwrap();
+        db_lock.conn.execute(
+            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+            rusqlite::params![project2_id, sample1_id], // wav sample used in 2 projects
+        ).unwrap();
+        db_lock.conn.execute(
+            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+            rusqlite::params![project2_id, sample3_id],
+        ).unwrap();
+        db_lock.conn.execute(
+            "INSERT INTO project_samples (project_id, sample_id) VALUES (?, ?)",
+            rusqlite::params![project2_id, sample4_id],
+        ).unwrap();
+    }
+
+    // Test GetSampleExtensions
+    let request = Request::new(GetSampleExtensionsRequest {});
+    let response = server.get_sample_extensions(request).await.unwrap();
+    let extensions = response.into_inner().extensions;
+
+    // Should have extensions for wav, aiff, mp3, flac
+    assert!(extensions.contains_key("wav"));
+    assert!(extensions.contains_key("aiff"));
+    assert!(extensions.contains_key("mp3"));
+    assert!(extensions.contains_key("flac"));
+
+    // Check wav extension stats
+    let wav_stats = extensions.get("wav").unwrap();
+    assert_eq!(wav_stats.count, 1); // 1 wav sample
+    assert_eq!(wav_stats.present_count, 1); // 1 present
+    assert_eq!(wav_stats.missing_count, 0); // 0 missing
+    assert_eq!(wav_stats.average_usage_count, 2.0); // used in 2 projects
+
+    // Check mp3 extension stats
+    let mp3_stats = extensions.get("mp3").unwrap();
+    assert_eq!(mp3_stats.count, 1); // 1 mp3 sample
+    assert_eq!(mp3_stats.present_count, 0); // 0 present
+    assert_eq!(mp3_stats.missing_count, 1); // 1 missing
+    assert_eq!(mp3_stats.average_usage_count, 1.0); // used in 1 project
+
+    // Check that total_size_bytes is reasonable (estimated sizes)
+    assert!(wav_stats.total_size_bytes > 0);
+    assert!(mp3_stats.total_size_bytes > 0);
 } 

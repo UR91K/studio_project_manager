@@ -67,12 +67,12 @@ This document outlines the required features and endpoints for the Studio Projec
 ## Samples Service
 
 ### High Priority
-- [ ] **GetSample** - Get individual sample details by ID
-- [ ] **Enhanced GetAllSamples filtering** - Add present_only, missing_only, extension_filter, usage_count range filters
-- [ ] **GetSampleAnalytics** - Get advanced sample statistics for status bars/overviews
+- [*] **GetSample** - Get individual sample details by ID
+- [*] **Enhanced GetAllSamples filtering** - Add present_only, missing_only, extension_filter, usage_count range filters
+- [*] **GetSampleAnalytics** - Get advanced sample statistics for status bars/overviews
 
 ### Medium Priority
-- [ ] **GetSampleExtensions** - Get extension statistics for filtering UI and storage analysis
+- [*] **GetSampleExtensions** - Get extension statistics for filtering UI and storage analysis
 
 ### Not in Scope
 - Sample CRUD operations (samples are discovered from .als files)

@@ -389,4 +389,43 @@ impl SamplesHandler {
             }
         }
     }
+
+    pub async fn get_sample_extensions(
+        &self,
+        _request: Request<GetSampleExtensionsRequest>,
+    ) -> Result<Response<GetSampleExtensionsResponse>, Status> {
+        debug!("GetSampleExtensions request");
+
+        let db = self.db.lock().await;
+
+        match db.get_sample_extensions() {
+            Ok(extensions) => {
+                // Convert extensions to proto format
+                let proto_extensions = extensions
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (key, super::super::samples::ExtensionAnalytics {
+                            count: value.count,
+                            total_size_bytes: value.total_size_bytes,
+                            present_count: value.present_count,
+                            missing_count: value.missing_count,
+                            average_usage_count: value.average_usage_count,
+                        })
+                    })
+                    .collect();
+
+                let response = GetSampleExtensionsResponse {
+                    extensions: proto_extensions,
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                error!("Failed to get sample extensions: {:?}", e);
+                Err(Status::new(
+                    Code::Internal,
+                    format!("Database error: {}", e),
+                ))
+            }
+        }
+    }
 }

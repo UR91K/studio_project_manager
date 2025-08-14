@@ -15,6 +15,7 @@ service SampleService {
   rpc GetAllSampleUsageNumbers(GetAllSampleUsageNumbersRequest)
       returns (GetAllSampleUsageNumbersResponse);
   rpc GetSampleAnalytics(GetSampleAnalyticsRequest) returns (GetSampleAnalyticsResponse);
+  rpc GetSampleExtensions(GetSampleExtensionsRequest) returns (GetSampleExtensionsResponse);
 
   // Reverse Lookup - Projects by Plugin/Sample
   rpc GetProjectsBySample(GetProjectsBySampleRequest)
@@ -138,6 +139,13 @@ message ExtensionAnalytics {
 
 message GetSampleAnalyticsResponse {
   SampleAnalytics analytics = 1;
+}
+
+// Sample Extensions
+message GetSampleExtensionsRequest {}
+
+message GetSampleExtensionsResponse {
+  map<string, ExtensionAnalytics> extensions = 1;
 }
 
 // Reverse Lookup Messages

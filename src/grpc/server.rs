@@ -772,4 +772,11 @@ impl sample_service_server::SampleService for StudioProjectManagerServer {
     ) -> Result<Response<GetSampleAnalyticsResponse>, Status> {
         self.samples_handler.get_sample_analytics(request).await
     }
+
+    async fn get_sample_extensions(
+        &self,
+        request: Request<GetSampleExtensionsRequest>,
+    ) -> Result<Response<GetSampleExtensionsResponse>, Status> {
+        self.samples_handler.get_sample_extensions(request).await
+    }
 }

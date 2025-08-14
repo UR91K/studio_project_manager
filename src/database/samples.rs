@@ -508,6 +508,11 @@ impl LiveSetDatabase {
         Ok(distribution)
     }
 
+    /// Get sample extension statistics for filtering UI and storage analysis
+    pub fn get_sample_extensions(&self) -> Result<std::collections::HashMap<String, ExtensionAnalytics>, DatabaseError> {
+        self.get_extension_analytics()
+    }
+
     /// Get extension analytics with detailed statistics
     fn get_extension_analytics(&self) -> Result<std::collections::HashMap<String, ExtensionAnalytics>, DatabaseError> {
         let mut stmt = self.conn.prepare(
