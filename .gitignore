@@ -9,3 +9,6 @@ tests/MIGRATION_GUIDE.md
 spec.md
 appdata_roaming_junction/
 test_data/
+FRONTEND_SPEC.md
+TUI_ARCHITECTURE_ANALYSIS.md
+TUI_PROJECT_PLAN.md
