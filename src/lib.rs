@@ -38,6 +38,7 @@
 //! The library uses a `config.toml` file for configuration. See [`config`] module for details.
 
 pub mod ableton_db;
+pub mod cli;
 pub mod config;
 pub mod database;
 pub mod error;

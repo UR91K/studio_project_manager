@@ -13,35 +13,42 @@ use seula::grpc::plugins::plugin_service_server;
 use seula::grpc::samples::sample_service_server;
 use seula::grpc::scanning::scanning_service_server;
 use seula::grpc::watcher::watcher_service_server;
+use seula::cli::{Cli, Commands};
+use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load configuration first
     let config = CONFIG.as_ref().map_err(|e| {
         eprintln!("Failed to load configuration: {}", e);
         e
     })?;
 
-    // Initialize logging with configured level
     init_logging(&config.log_level);
 
-    // Check command line arguments
-    let args: Vec<String> = env::args().collect();
-    let run_as_cli = args.contains(&"--cli".to_string()) || args.contains(&"-c".to_string());
-    let run_as_server = args.contains(&"--server".to_string()) || args.contains(&"-s".to_string());
+    let cli = Cli::parse();
 
-    if run_as_cli {
-        // Run as CLI (original behavior)
-        run_cli_mode().await
-    } else if run_as_server {
-        // Run as server-only mode (for TUI clients)
-        run_server_mode().await
-    } else {
-        // Run as tray application (default behavior)
-        run_tray_mode().await
+    match &cli.command {
+        Some(command) => {
+            run_direct_command(command, cli.format, cli.no_color).await
+        }
+        None => {
+            if cli.cli {
+                run_interactive_cli(cli.format, cli.no_color).await
+            } else {
+                let args: Vec<String> = env::args().collect();
+                let run_as_server = args.contains(&"--server".to_string()) || args.contains(&"-s".to_string());
+
+                if run_as_server {
+                    run_server_mode().await
+                } else {
+                    run_tray_mode().await
+                }
+            }
+        }
     }
 }
 
+#[allow(unused)] //TODO: Remove this once it is used.
 async fn run_cli_mode() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting Seula gRPC Server (CLI mode)");
     start_grpc_server().await
@@ -117,6 +124,95 @@ async fn start_grpc_server() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     Ok(())
+}
+
+async fn run_interactive_cli(format: seula::cli::OutputFormat, no_color: bool) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Starting Seula Interactive CLI");
+
+    let mut interactive = seula::cli::InteractiveCli::new(format, no_color)
+        .await
+        .map_err(|e| e as Box<dyn std::error::Error>)?;
+    interactive
+        .run()
+        .await
+        .map_err(|e| e as Box<dyn std::error::Error>)?;
+
+    Ok(())
+}
+
+async fn run_direct_command(command: &Commands, format: seula::cli::OutputFormat, no_color: bool) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Executing direct CLI command");
+
+    use seula::cli::commands::{execute_command, ScanCommand, SearchCommand};
+
+    let result: Result<(), Box<dyn std::error::Error>> = match command {
+        Commands::Scan { paths, force } => {
+            let scan_cmd = ScanCommand {
+                paths: paths.clone(),
+                force: *force,
+            };
+            execute_command(&scan_cmd, format, no_color).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+        Commands::Search { query, limit, offset } => {
+            let search_cmd = SearchCommand {
+                query: query.clone(),
+                limit: *limit,
+                offset: *offset,
+            };
+            execute_command(&search_cmd, format, no_color).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+        Commands::Project { subcommand } => {
+            use seula::cli::commands::CliCommand;
+            let ctx = seula::cli::commands::CliContext::new(format, no_color)
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error> { e })?;
+            subcommand.execute(&ctx).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+        Commands::Sample { subcommand } => {
+            use seula::cli::commands::CliCommand;
+            let ctx = seula::cli::commands::CliContext::new(format, no_color)
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error> { e })?;
+            subcommand.execute(&ctx).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+        Commands::Collection { subcommand } => {
+            use seula::cli::commands::CliCommand;
+            let ctx = seula::cli::commands::CliContext::new(format, no_color)
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error> { e })?;
+            subcommand.execute(&ctx).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+        Commands::Tag { subcommand } => {
+            use seula::cli::commands::CliCommand;
+            let ctx = seula::cli::commands::CliContext::new(format, no_color)
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error> { e })?;
+            subcommand.execute(&ctx).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+        Commands::Task { subcommand } => {
+            use seula::cli::commands::CliCommand;
+            let ctx = seula::cli::commands::CliContext::new(format, no_color)
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error> { e })?;
+            subcommand.execute(&ctx).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+        Commands::System { subcommand } => {
+            use seula::cli::commands::CliCommand;
+            let ctx = seula::cli::commands::CliContext::new(format, no_color)
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error> { e })?;
+            subcommand.execute(&ctx).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+        Commands::Config { subcommand } => {
+            use seula::cli::commands::CliCommand;
+            let ctx = seula::cli::commands::CliContext::new(format, no_color)
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error> { e })?;
+            subcommand.execute(&ctx).await.map_err(|e| e as Box<dyn std::error::Error>)
+        }
+    };
+
+    result
 }
 
 fn init_logging(log_level: &str) {
