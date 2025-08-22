@@ -1,9 +1,12 @@
 //! Plugin service tests
 
-use crate::grpc::*;
+use crate::{common::setup, grpc::*};
 
 #[tokio::test]
 async fn test_refresh_plugin_installation_status() {
+
+    setup("trace");
+
     let server= create_test_server().await;
     
     // Test the new plugin refresh endpoint
