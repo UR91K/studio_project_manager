@@ -5,7 +5,7 @@ use crate::{common::setup, grpc::*};
 #[tokio::test]
 async fn test_refresh_plugin_installation_status() {
 
-    setup("trace");
+    setup("error");
 
     let server= create_test_server().await;
     
