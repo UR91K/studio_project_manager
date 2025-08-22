@@ -44,11 +44,6 @@ impl OutputFormatter {
     pub fn create_table(&self) -> Table {
         let mut table = Table::new();
         table.load_preset(presets::UTF8_FULL);
-
-        if !self.no_color {
-            table.set_header(vec!["Column1", "Column2"]); // Placeholder
-        }
-
         table
     }
 

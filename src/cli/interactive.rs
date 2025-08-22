@@ -144,8 +144,8 @@ impl InteractiveCli {
 
         println!();
         println!("{}", "Command Examples:".bold().underline());
-        println!("  {}", "scan ~/Music/Projects".italic());
-        println!("  {}", "search \"bpm:128 plugin:serum\"".italic());
+        println!("  {}", "scan [--force] [PATH ...]".italic());
+        println!("  {}", "search <query> [--limit N] [--offset N]".italic());
         println!("  {}", "project list".italic());
         println!("  {}", "system info".italic());
         println!("  {}", "status".italic());
@@ -193,19 +193,75 @@ impl InteractiveCli {
         // properly parse the arguments and route to the appropriate command handlers
         match args[0] {
             "scan" => {
-                println!("{}", "Scanning directories...".bold());
-                // TODO: Implement scan command
-                println!("{}", "Scan completed!".green());
+                use crate::cli::commands::{CliCommand, ScanCommand};
+
+                // parse flags and paths: scan [--force] [PATH ...]
+                let mut force = false;
+                let mut paths: Vec<std::path::PathBuf> = Vec::new();
+                for &arg in &args[1..] {
+                    if arg == "--force" || arg == "-f" {
+                        force = true;
+                    } else {
+                        paths.push(std::path::PathBuf::from(arg));
+                    }
+                }
+
+                let cmd = ScanCommand { paths, force };
+                cmd.execute(&self.context).await?;
             }
             "search" => {
+                use crate::cli::commands::{CliCommand, SearchCommand};
+
                 if args.len() < 2 {
-                    println!("{}", "Usage: search <query>".red());
+                    println!("{}", "Usage: search <query> [--limit N] [--offset N]".red());
                     return Ok(());
                 }
-                let query = args[1..].join(" ");
-                println!("{}", format!("Searching for: {}", query).bold());
-                // TODO: Implement search command
-                println!("{}", "Search completed!".green());
+
+                // parse: search <query parts and/or flags>
+                let mut limit: usize = 50;
+                let mut offset: usize = 0;
+                let mut query_parts: Vec<String> = Vec::new();
+
+                let mut i = 1;
+                while i < args.len() {
+                    match args[i] {
+                        "--limit" => {
+                            if i + 1 < args.len() {
+                                if let Ok(v) = args[i + 1].parse::<usize>() {
+                                    limit = v;
+                                    i += 2;
+                                    continue;
+                                }
+                            }
+                            println!("{}", "Invalid or missing value for --limit".red());
+                            return Ok(());
+                        }
+                        "--offset" => {
+                            if i + 1 < args.len() {
+                                if let Ok(v) = args[i + 1].parse::<usize>() {
+                                    offset = v;
+                                    i += 2;
+                                    continue;
+                                }
+                            }
+                            println!("{}", "Invalid or missing value for --offset".red());
+                            return Ok(());
+                        }
+                        _ => {
+                            query_parts.push(args[i].to_string());
+                            i += 1;
+                        }
+                    }
+                }
+
+                if query_parts.is_empty() {
+                    println!("{}", "Usage: search <query> [--limit N] [--offset N]".red());
+                    return Ok(());
+                }
+
+                let query = query_parts.join(" ");
+                let cmd = SearchCommand { query, limit, offset };
+                cmd.execute(&self.context).await?;
             }
             "project" => {
                 println!("{}", "Project management commands not yet implemented".yellow());
