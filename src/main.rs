@@ -34,7 +34,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Failed to load configuration: {}", e);
     })?;
 
-    init_logging(&config.log_level);
+    // Only the daemon writes files; the CLI commands print to the terminal (ADR-0071).
+    let daemon = cli.command.is_none() && !cli.cli;
+    let _log_guard = seula::logging::init(&config.log_level, daemon);
 
     match &cli.command {
         Some(command) => run_direct_command(command, cli.format, cli.no_color).await,
@@ -114,7 +116,7 @@ async fn run_tray_mode() -> Result<(), Box<dyn std::error::Error>> {
     // The HTTP server runs in a background task while the tray owns this thread.
     let http_handle = tokio::spawn(async move {
         if let Err(e) = start_http_server(state.services, state.system_service).await {
-            eprintln!("HTTP server error: {}", e);
+            tracing::error!("HTTP server error: {}", e);
         }
     });
 
@@ -130,10 +132,10 @@ async fn run_tray_mode() -> Result<(), Box<dyn std::error::Error>> {
             info!("Tray app exited normally");
         }
         Ok(Err(e)) => {
-            eprintln!("Tray app error: {}", e);
+            tracing::error!("Tray app error: {}", e);
         }
         Err(e) => {
-            eprintln!("Failed to run tray app: {}", e);
+            tracing::error!("Failed to run tray app: {}", e);
         }
     }
 
@@ -296,33 +298,4 @@ async fn run_direct_command(
     };
 
     result
-}
-
-fn init_logging(log_level: &str) {
-    use tracing_subscriber::filter::{EnvFilter, LevelFilter};
-
-    let level = match log_level.to_lowercase().as_str() {
-        "error" => LevelFilter::ERROR,
-        "warn" => LevelFilter::WARN,
-        "info" => LevelFilter::INFO,
-        "debug" => LevelFilter::DEBUG,
-        "trace" => LevelFilter::TRACE,
-        _ => {
-            eprintln!("Invalid log level '{}', defaulting to 'info'", log_level);
-            LevelFilter::INFO
-        }
-    };
-
-    // Reproduces `env_logger::Builder::from_default_env().filter_level(level)`.
-    // There, RUST_LOG is parsed first and `filter_level` then *replaces* the
-    // bare (no-target) directive while leaving per-target ones alone -- so
-    // `RUST_LOG=seula::scan=trace` wins for that module, but a bare
-    // `RUST_LOG=debug` loses to the config value. `add_directive` with a bare
-    // level has the same replace-on-same-key behaviour, so the precedence is
-    // unchanged.
-    let filter = EnvFilter::builder()
-        .parse_lossy(std::env::var("RUST_LOG").unwrap_or_default())
-        .add_directive(level.into());
-
-    tracing_subscriber::fmt().with_env_filter(filter).init();
 }

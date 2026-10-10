@@ -1,6 +1,6 @@
 # 0071. The daemon writes daily log files under the app data folder
 
-- **Status:** Accepted, not yet implemented
+- **Status:** Accepted
 - **Recognized:** 2026-10-09, in the installer's smoke run: the daemon wrote no log file
   anywhere, and the same day ADR-0070 made it log where a discarded database was backed up
 - **Decided:** 2026-10-11

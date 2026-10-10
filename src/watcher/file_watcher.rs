@@ -111,7 +111,7 @@ impl FileWatcher {
             match path.metadata() {
                 Ok(metadata) => {
                     let modified: SystemTime = metadata.modified()?;
-                    if modified > project.last_parsed_timestamp.into() {
+                    if modified > SystemTime::from(project.last_parsed_timestamp) {
                         debug!("Project modified while offline: {}", project.name);
                         self.event_tx.send(FileEvent::Modified(path.clone()))?;
                     }

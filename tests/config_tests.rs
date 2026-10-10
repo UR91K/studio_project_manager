@@ -64,7 +64,7 @@ fn test_config_constants() {
     setup("error");
     // Test that constants are properly defined
     assert_eq!(seula::config::DEFAULT_HTTP_PORT, 50052);
-    assert_eq!(seula::config::DEFAULT_LOG_LEVEL, "error");
+    assert_eq!(seula::config::DEFAULT_LOG_LEVEL, "info");
 
     // Test media module constants
     assert_eq!(seula::media::DEFAULT_MAX_COVER_ART_SIZE_MB, 10);

@@ -41,6 +41,7 @@ pub mod config;
 pub mod database;
 pub mod error;
 pub mod http;
+pub mod logging;
 pub mod media;
 pub mod models;
 pub mod project;

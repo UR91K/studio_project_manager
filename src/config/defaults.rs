@@ -4,8 +4,9 @@ use dirs;
 /// Default HTTP port (ADR-0024).
 pub const DEFAULT_HTTP_PORT: u16 = 50052;
 
-/// Default log level
-pub const DEFAULT_LOG_LEVEL: &str = "error";
+/// Default log level. `info` so a log file records what the daemon did, not only what
+/// failed (ADR-0071); a config that already says `error` keeps it.
+pub const DEFAULT_LOG_LEVEL: &str = "info";
 
 /// Default maximum cover art size in MB
 pub const DEFAULT_MAX_COVER_ART_SIZE_MB: u32 = 10;

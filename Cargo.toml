@@ -20,6 +20,7 @@ colored = "3.0.0"
 xml = "0.8.20"
 quick-xml = "0.37.2"
 tracing = "0.1"
+tracing-appender = "0.2"     # Daily log files for the daemon (ADR-0071)
 tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }  # tracing-log bridges `log`-emitting deps (notify)
 crc32fast = "1.4.0"
 thiserror = "2.0.11"
