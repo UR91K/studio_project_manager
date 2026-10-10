@@ -1,0 +1,9 @@
+Seula is free software under the GNU Affero General Public License, version 3 or later
+(see LICENSE). The plugin scanner, vst-meta.exe, is under the Mozilla Public License 2.0
+(see vst-meta-LICENSE). LICENSE-EXCEPTIONS.md describes how the two fit together.
+
+The source code for this version is at:
+
+    https://github.com/UR91K/seula
+
+Use the tag that matches the version number under Help > About in the app.

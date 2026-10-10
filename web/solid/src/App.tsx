@@ -6,6 +6,7 @@ import { projectsView } from "./projects/view";
 import { samplesView } from "./samples/view";
 import { statsView } from "./stats/view";
 import { TbBtn } from "./shell/parts";
+import { AboutDialog } from "./shell/About";
 import { Sidebar, Statusbar, Topbar } from "./shell/Frame";
 import { closePopups, loadChrome, route, setShell, shell, type RouteId } from "./shell/shell";
 import type { View } from "./shell/view";
@@ -45,6 +46,7 @@ export function App() {
       </div>
       <Statusbar keys={view().keys}><Dynamic component={view().Status} /></Statusbar>
       <Dynamic component={view().Popovers} />
+      <Show when={shell.about}><AboutDialog /></Show>
     </div>
   );
 }

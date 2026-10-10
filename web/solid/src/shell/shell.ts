@@ -36,6 +36,8 @@ export function showProjectsMatching(query: string) {
 export const [shell, setShell] = createStore({
   sidebarCollapsed: false,
   inspectorOpen: true,
+  /** Help > About is open. A dialog, so Escape and the scrim close it through Dialog itself. */
+  about: false,
   spelling: "sharp" as KeySpelling,
   /** The one open picker, by name. A view owns the names it uses. */
   popover: null as string | null,

@@ -5,7 +5,8 @@
     "resources": {
       "../../../LICENSE": "LICENSE",
       "../../../LICENSE-EXCEPTIONS.md": "LICENSE-EXCEPTIONS.md",
-      "../../../crates/vst-meta/LICENSE": "vst-meta-LICENSE"
+      "../../../crates/vst-meta/LICENSE": "vst-meta-LICENSE",
+      "windows/SOURCE.txt": "SOURCE.txt"
     },
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
