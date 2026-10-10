@@ -523,7 +523,7 @@ def write_config(path: Path, db: Path, http_port: int, vst_paths: list) -> None:
         "paths = []\n"
         f"database_path = '{toml_path(db)}'\n"
         f"media_storage_dir = '{toml_path(MEDIA_DIR)}'\n"
-        f"grpc_port = {grpc_port}\nhttp_port = {http_port}\n"
+        f"http_port = {http_port}\n"
         "log_level = 'error'\n"
         f"vst_search_paths = [{', '.join(repr(toml_path(v)) for v in vst_paths)}]\n", "utf-8")
 
