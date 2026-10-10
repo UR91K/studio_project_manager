@@ -152,6 +152,86 @@ fn a_database_from_before_versioning_is_discarded() {
         .expect("plugin_refs should exist after the rebuild");
 }
 
+/// The files beside `dir/seula.db` that are backups, by name.
+fn backups_in(dir: &std::path::Path) -> Vec<PathBuf> {
+    std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains(".backup-v")
+        })
+        .collect()
+}
+
+#[test]
+fn an_old_database_is_backed_up_before_it_is_discarded() {
+    setup("error");
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("seula.db");
+    let old_version = SCHEMA_VERSION - 1;
+
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tags (name TEXT);
+             INSERT INTO tags VALUES ('my hand-made tag');",
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", old_version)
+            .unwrap();
+    }
+
+    let db = ProjectDatabase::new(path.clone()).expect("the stale database should be rebuilt");
+
+    // The live database is the fresh one.
+    let live: i64 = db
+        .conn
+        .query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(live, 0, "the rebuilt database starts empty");
+
+    // And what was in it is in exactly one backup, named for the schema it came from.
+    let backups = backups_in(dir.path());
+    assert_eq!(backups.len(), 1, "expected one backup, found {backups:?}");
+    let name = backups[0]
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    assert!(
+        name.starts_with(&format!("seula.backup-v{old_version}-")) && name.ends_with(".db"),
+        "unexpected backup name {name}"
+    );
+    let backup = Connection::open(&backups[0]).unwrap();
+    let kept: String = backup
+        .query_row("SELECT name FROM tags", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(kept, "my hand-made tag");
+    let kept_version: i32 = backup
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(
+        kept_version, old_version,
+        "the backup is the old database as it was"
+    );
+}
+
+#[test]
+fn a_new_or_current_database_is_not_backed_up() {
+    setup("error");
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("seula.db");
+
+    // A brand-new file has nothing to lose, and neither does reopening a current one.
+    drop(ProjectDatabase::new(path.clone()).unwrap());
+    drop(ProjectDatabase::new(path).unwrap());
+
+    assert!(backups_in(dir.path()).is_empty());
+}
+
 #[test]
 fn a_database_from_a_newer_build_is_refused_not_destroyed() {
     setup("error");

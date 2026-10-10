@@ -15,6 +15,75 @@ pub const SCHEMA_VERSION: i32 = 3;
 /// outside the Rust build, such as the mockup data generator, share the real schema.
 const SCHEMA_SQL: &str = include_str!("schema.sql");
 
+/// Where the copy of a database about to be discarded goes: beside it, named for the
+/// schema it was written by and the moment, so no backup overwrites another.
+/// `seula.db` becomes `seula.backup-v2-20261009-152400.db`.
+fn backup_path(db_path: &Path, version: i32, now: DateTime<Local>) -> PathBuf {
+    let stem = db_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "seula".to_string());
+    let ext = db_path
+        .extension()
+        .map(|e| e.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "db".to_string());
+    db_path.with_file_name(format!(
+        "{stem}.backup-v{version}-{}.{ext}",
+        now.format("%Y%m%d-%H%M%S")
+    ))
+}
+
+/// Copy the open database to `backup` as one ordinary SQLite file (ADR-0070).
+///
+/// `VACUUM INTO` rather than a file copy: it reads through the connection, so writes still
+/// sitting in the `-wal` file are included. It refuses to overwrite an existing file.
+fn back_up(conn: &Connection, backup: &Path) -> Result<(), DatabaseError> {
+    let target = backup.to_str().ok_or_else(|| {
+        DatabaseError::ConnectionError(format!(
+            "The backup path {} is not valid UTF-8",
+            backup.display()
+        ))
+    })?;
+    conn.execute("VACUUM INTO ?1", [target]).map_err(|e| {
+        DatabaseError::ConnectionError(format!(
+            "Could not back up the old database to {} before rebuilding it: {}. The \
+             database has been left as it was.",
+            backup.display(),
+            e
+        ))
+    })?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_backup_is_named_for_the_old_schema_and_the_moment() {
+        let now = Local.with_ymd_and_hms(2026, 10, 9, 15, 24, 0).unwrap();
+        let path = backup_path(Path::new("C:/data/seula.db"), 2, now);
+        assert_eq!(
+            path,
+            Path::new("C:/data/seula.backup-v2-20261009-152400.db")
+        );
+    }
+
+    #[test]
+    fn a_backup_that_cannot_be_written_is_an_error_not_a_silent_skip() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = Connection::open(dir.path().join("a.db")).unwrap();
+        conn.execute_batch("CREATE TABLE t (x); INSERT INTO t VALUES (1);")
+            .unwrap();
+
+        let backup = dir.path().join("b.db");
+        back_up(&conn, &backup).unwrap();
+        // VACUUM INTO will not overwrite, so a second copy to the same name fails.
+        let err = back_up(&conn, &backup).unwrap_err();
+        assert!(err.to_string().contains("left as it was"), "{err}");
+    }
+}
+
 pub struct ProjectDatabase {
     pub conn: Connection,
 }
@@ -37,7 +106,8 @@ impl ProjectDatabase {
     ///
     /// Seula has no migrations. Backwards compatibility is explicitly not required
     /// (ADR-0011), so a stale database is deleted and rebuilt — which destroys
-    /// user-authored data that no rescan can recover, hence the loud warning.
+    /// user-authored data that no rescan can recover. A copy is made first (ADR-0070), and
+    /// if the copy fails the database is left alone and the open fails instead.
     ///
     /// A *newer* database is a different matter: a downgrade must not silently wipe
     /// work done by a later build, so that case fails instead.
@@ -73,11 +143,19 @@ impl ProjectDatabase {
             return Ok(conn);
         }
 
-        tracing::warn!(
-            "The database at {} uses an older schema and cannot be migrated. Deleting and \
-             rebuilding it. Projects will be recovered by the next scan; tags, collections, \
-             tasks, notes and stored media are lost.",
-            db_path.display()
+        let backup = backup_path(db_path, version, Local::now());
+        back_up(&conn, &backup)?;
+        // `error` rather than `warn`: the default log level is `error`, and this is the
+        // one message that tells a user why their library came up empty.
+        tracing::error!(
+            "The database at {} uses an older schema (version {}, this build writes {}) and \
+             cannot be migrated. It has been rebuilt empty. Projects will be recovered by \
+             the next scan; tags, collections, tasks and notes are not, and are in the \
+             backup at {}.",
+            db_path.display(),
+            version,
+            SCHEMA_VERSION,
+            backup.display()
         );
 
         // Windows will not remove a file whose handle is still open.
