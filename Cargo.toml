@@ -2,6 +2,7 @@
 members = [
     ".",
     "crates/vst-meta",
+    "crates/vst",
 ]
 resolver = "2"
 
