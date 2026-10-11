@@ -93,6 +93,13 @@ pub enum FileError {
     /// from abletoolz, not confirmed against a dated file; see `docs/status.md`.
     #[error("Unsupported Live version: sets from before Live 8.2 are not supported (file starts AB 1E 56 78, not gzipped XML) for {path:?}")]
     UnsupportedVersion { path: PathBuf },
+
+    /// The file opens with the bytes `00 05 16 07`, the AppleDouble magic: a macOS `._name.als`
+    /// sidecar that carries Finder metadata for the real file beside it. It is not a Live set
+    /// and was never going to parse. Matched on the bytes, not the `._` prefix, because a real
+    /// project could be named that way.
+    #[error("Not a Live set: macOS AppleDouble sidecar (file starts 00 05 16 07; the project is the file without the `._`) for {path:?}")]
+    AppleDoubleSidecar { path: PathBuf },
 }
 
 #[derive(Error, Debug)]

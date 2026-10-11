@@ -16,6 +16,10 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   Moved from `docs/status.md`, found before 2026-09-16. Environment-dependent: it needs
   sidecars in the configured project folders. Fixing it means deciding whether the scanner
   skips `._` files.
+  2026-10-11: found on two of the maintainer's real projects (4096 bytes each, magic
+  `00 05 16 07`). They now fail with their own error, `FileError::AppleDoubleSidecar`,
+  matched on the bytes and not the name (a real set could be called `._x.als`), instead of
+  "invalid gzip header". Still picked up, still counted as failures, so still open.
 - [ ] 2026-10-07 `real-folder-tests-collide` `test_process_projects_with_progress` fails when run alongside `test_process_projects_integration`: both scan the real configured folders into the same real database at once. tests/integration/scanning.rs
   Moved from `docs/status.md`. Passes serially (`--test-threads=1`) and alone. Both are
   `#[ignore]`d, so it only shows under `cargo test --workspace --tests -- --ignored`.
