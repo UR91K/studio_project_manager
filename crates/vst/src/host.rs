@@ -11,6 +11,7 @@ use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::os::raw::c_void;
 use std::path::Path;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fmt, ptr, slice};
 
@@ -293,6 +294,9 @@ pub struct PluginInstance {
     lib: Arc<Library>,
     info: Info,
     is_editor_active: bool,
+    /// Releases the host stored in `AEffect::reserved1`. A plain function pointer because
+    /// this struct is not generic over the host type that was stored there.
+    free_host: unsafe fn(isize),
 }
 
 struct PluginParametersInstance {
@@ -304,7 +308,11 @@ unsafe impl Sync for PluginParametersInstance {}
 
 impl Drop for PluginInstance {
     fn drop(&mut self) {
+        // The plugin frees its own `AEffect` on shutdown, so take the host pointer out of it
+        // first, and release the host only once the plugin can no longer call back into it.
+        let host = unsafe { (*self.get_effect()).reserved1 };
         self.dispatch(plugin::OpCode::Shutdown, 0, 0, ptr::null_mut(), 0.0);
+        unsafe { (self.free_host)(host) };
     }
 }
 
@@ -433,12 +441,6 @@ impl<T: Host> PluginLoader<T> {
         }
     }
 
-    /// Call the VST entry point and retrieve a (possibly null) pointer.
-    unsafe fn call_main(&mut self) -> *mut AEffect {
-        LOAD_POINTER = Box::into_raw(Box::new(Arc::clone(&self.host))) as *mut c_void;
-        (self.main)(callback_wrapper::<T>)
-    }
-
     /// Try to create an instance of this VST plugin.
     ///
     /// If the instance is successfully created, a [`PluginInstance`](struct.PluginInstance.html)
@@ -446,18 +448,13 @@ impl<T: Host> PluginLoader<T> {
     pub fn instance(&mut self) -> Result<PluginInstance, PluginLoadError> {
         // Call the plugin main function. This also passes the plugin main function as the closure
         // could not return an error if the symbol wasn't found
-        let effect = unsafe { self.call_main() };
+        let effect = unsafe { call_entry(self.main, &self.host) };
 
         if effect.is_null() {
             return Err(PluginLoadError::InstanceFailed);
         }
 
-        unsafe {
-            // Move the host to the heap and add it to the `AEffect` struct for future reference
-            (*effect).reserved1 = Box::into_raw(Box::new(Arc::clone(&self.host))) as isize;
-        }
-
-        let instance = PluginInstance::new(effect, Arc::clone(&self.lib));
+        let instance = PluginInstance::new(effect, Arc::clone(&self.lib), free_host::<T>);
 
         let api_ver = instance.dispatch(plugin::OpCode::GetApiVersion, 0, 0, ptr::null_mut(), 0.0);
         if api_ver >= 2400 {
@@ -470,7 +467,7 @@ impl<T: Host> PluginLoader<T> {
 }
 
 impl PluginInstance {
-    fn new(effect: *mut AEffect, lib: Arc<Library>) -> PluginInstance {
+    fn new(effect: *mut AEffect, lib: Arc<Library>, free_host: unsafe fn(isize)) -> PluginInstance {
         use plugin::OpCode as op;
 
         let params = Arc::new(PluginParametersInstance {
@@ -481,6 +478,7 @@ impl PluginInstance {
             lib,
             info: Default::default(),
             is_editor_active: false,
+            free_host,
         };
 
         unsafe {
@@ -914,17 +912,59 @@ fn pick_entry<T>(mut lookup: impl FnMut(&[u8]) -> Option<T>) -> Option<T> {
 /// HACK: a pointer to store the host so that it can be accessed from the `callback_wrapper`
 /// function passed to the plugin.
 ///
-/// When the plugin is being loaded, a `Box<Arc<Mutex<T>>>` is transmuted to a `*mut c_void` pointer
-/// and placed here. When the plugin calls the callback during initialization, the host refers to
-/// this pointer to get a handle to the Host. After initialization, this pointer is invalidated and
-/// the host pointer is placed into a [reserved field] in the instance `AEffect` struct.
+/// While the plugin's entry point runs, a `Box<Arc<Mutex<T>>>` is placed here as a
+/// `*mut c_void`. When the plugin calls the callback during initialization, the host refers to
+/// this pointer to get a handle to the Host. Once the entry point returns, the host is placed
+/// into a [reserved field] in the instance `AEffect` struct and this pointer is cleared and its
+/// box freed.
 ///
-/// The issue with this approach is that if 2 plugins are simultaneously loaded with 2 different
-/// host instances, this might fail as one host may receive a pointer to the other one. In practice
-/// this is a rare situation as you normally won't have 2 separate host instances loading at once.
+/// SEULA PATCH: this was a `static mut` that was never freed. It is an `AtomicPtr` now, and
+/// [`LOAD_LOCK`] makes loads take turns, so two simultaneous loads with different hosts can no
+/// longer receive each other's pointer.
 ///
 /// [reserved field]: ../api/struct.AEffect.html#structfield.reserved1
-static mut LOAD_POINTER: *mut c_void = std::ptr::null_mut::<c_void>();
+static LOAD_POINTER: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+
+/// Held for the whole of a plugin's entry point, so only one load uses [`LOAD_POINTER`].
+static LOAD_LOCK: Mutex<()> = Mutex::new(());
+
+/// Run a plugin's entry point and hand the host to the `AEffect` it returns (or null).
+///
+/// The host is stored in `reserved1` before the load pointer is cleared, so a callback from the
+/// plugin always finds the host in one place or the other.
+///
+/// # Safety
+/// `main` must be a real VST2 entry point.
+unsafe fn call_entry<T: Host>(main: PluginMain, host: &Arc<Mutex<T>>) -> *mut AEffect {
+    // A load that panicked must not stop every later one.
+    let _turn = LOAD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+    let during_load = Box::into_raw(Box::new(Arc::clone(host)));
+    LOAD_POINTER.store(during_load as *mut c_void, Ordering::SeqCst);
+
+    let effect = main(callback_wrapper::<T>);
+
+    if !effect.is_null() {
+        // Move the host to the heap and add it to the `AEffect` struct for future reference.
+        // `PluginInstance::drop` releases it with `free_host`.
+        (*effect).reserved1 = Box::into_raw(Box::new(Arc::clone(host))) as isize;
+    }
+
+    LOAD_POINTER.store(ptr::null_mut(), Ordering::SeqCst);
+    drop(Box::from_raw(during_load));
+
+    effect
+}
+
+/// Release the host `call_entry` stored in `AEffect::reserved1`.
+///
+/// # Safety
+/// `reserved` must be that `reserved1` value for host type `T`, or 0, and must not be used again.
+unsafe fn free_host<T: Host>(reserved: isize) {
+    if reserved != 0 {
+        drop(Box::from_raw(reserved as *mut Arc<Mutex<T>>));
+    }
+}
 
 /// Function passed to plugin to handle dispatching host opcodes.
 extern "C" fn callback_wrapper<T: Host>(
@@ -948,8 +988,13 @@ extern "C" fn callback_wrapper<T: Host>(
         // In this case, the plugin is still undergoing initialization and so `LOAD_POINTER` is
         // dereferenced
         } else {
-            // Used only during the plugin initialization
-            let host = LOAD_POINTER as *const Arc<Mutex<T>>;
+            // Used only during the plugin initialization. A plugin that calls back from another
+            // thread after its entry point returned finds this cleared; answer 0 ("not handled")
+            // instead of dereferencing null.
+            let host = LOAD_POINTER.load(Ordering::SeqCst) as *const Arc<Mutex<T>>;
+            if host.is_null() {
+                return 0;
+            }
             let host = &*host;
             let host = &mut *host.lock().unwrap();
 
@@ -960,8 +1005,113 @@ extern "C" fn callback_wrapper<T: Host>(
 
 #[cfg(test)]
 mod tests {
-    use super::pick_entry;
-    use crate::host::HostBuffer;
+    use std::ptr;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    use super::{call_entry, free_host, pick_entry, Host, LOAD_POINTER};
+    use crate::api::{AEffect, HostCallbackProc};
+    use crate::host::{HostBuffer, OpCode as HostOp};
+    use crate::plugin::{HostCallback, Info, OpCode as PluginOp, Plugin};
+
+    /// Counts the `idle` callbacks it receives, so a test can see which host a callback reached.
+    #[derive(Default)]
+    struct CountingHost {
+        idles: AtomicUsize,
+    }
+
+    impl Host for CountingHost {
+        fn idle(&self) {
+            self.idles.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    struct Probe;
+
+    impl Plugin for Probe {
+        fn new(_host: HostCallback) -> Self {
+            Probe
+        }
+
+        fn get_info(&self) -> Info {
+            Info::default()
+        }
+    }
+
+    /// An entry point that, like a real plugin, calls the host during initialization (before it
+    /// has an `AEffect` for the host to be stored in), then builds an `AEffect`.
+    extern "C" fn probing_main(callback: HostCallbackProc) -> *mut AEffect {
+        callback(ptr::null_mut(), HostOp::Idle.into(), 0, 0, ptr::null_mut(), 0.0);
+        crate::main::<Probe>(callback)
+    }
+
+    /// What a host does to release a plugin: read the stored host out of the `AEffect`, shut the
+    /// plugin down (which frees the `AEffect`), then free the host.
+    unsafe fn release<T: Host>(effect: *mut AEffect) {
+        let reserved = (*effect).reserved1;
+        ((*effect).dispatcher)(effect, PluginOp::Shutdown.into(), 0, 0, ptr::null_mut(), 0.0);
+        free_host::<T>(reserved);
+    }
+
+    #[test]
+    fn a_load_hands_the_host_over_and_frees_what_it_borrowed() {
+        let host = Arc::new(Mutex::new(CountingHost::default()));
+
+        let effect = unsafe { call_entry(probing_main, &host) };
+
+        // `crate::main` returns null unless the host answered its version callback, so a
+        // non-null effect means the callback made during init found the host.
+        assert!(!effect.is_null());
+        assert_eq!(host.lock().unwrap().idles.load(Ordering::SeqCst), 1);
+        assert!(LOAD_POINTER.load(Ordering::SeqCst).is_null(), "load pointer must be cleared");
+        assert_eq!(Arc::strong_count(&host), 2, "host + the copy in reserved1, nothing leaked");
+
+        unsafe { release::<CountingHost>(effect) };
+        assert_eq!(Arc::strong_count(&host), 1, "releasing the plugin frees the stored host");
+    }
+
+    #[test]
+    fn a_failed_load_leaks_nothing() {
+        extern "C" fn no_plugin(_: HostCallbackProc) -> *mut AEffect {
+            ptr::null_mut()
+        }
+
+        let host = Arc::new(Mutex::new(CountingHost::default()));
+        assert!(unsafe { call_entry(no_plugin, &host) }.is_null());
+        assert_eq!(Arc::strong_count(&host), 1);
+        assert!(LOAD_POINTER.load(Ordering::SeqCst).is_null());
+    }
+
+    #[test]
+    fn simultaneous_loads_with_different_hosts_do_not_swap_callbacks() {
+        const LOADS: usize = 200;
+
+        let hosts: Vec<Arc<Mutex<CountingHost>>> =
+            (0..4).map(|_| Arc::new(Mutex::new(CountingHost::default()))).collect();
+
+        let threads: Vec<_> = hosts
+            .iter()
+            .map(|host| {
+                let host = Arc::clone(host);
+                std::thread::spawn(move || {
+                    for _ in 0..LOADS {
+                        let effect = unsafe { call_entry(probing_main, &host) };
+                        assert!(!effect.is_null());
+                        unsafe { release::<CountingHost>(effect) };
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+
+        // Each load made exactly one idle callback, and it must have reached that load's host.
+        for host in &hosts {
+            assert_eq!(host.lock().unwrap().idles.load(Ordering::SeqCst), LOADS);
+            assert_eq!(Arc::strong_count(host), 1);
+        }
+    }
 
     #[test]
     fn entry_point_prefers_vstpluginmain() {
