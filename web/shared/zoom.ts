@@ -13,6 +13,13 @@ export function computeZoom(dpr: number, systemScale: number): number {
   return Number.isFinite(z) && z > 0 ? z : 1;
 }
 
+/** ADR-0078, VS Code's rule: below 100 percent the whole title bar is counter-zoomed, so its
+ * menus, search box and controls keep their normal size; at 100 percent and above only the
+ * controls hold their size and the rest grows with the page. */
+export function counterZoomBar(zoom: number): boolean {
+  return zoom < 1;
+}
+
 /** A test override, to exercise the factor in a browser: `?zoom=2` or `window.__SEULA_ZOOM_TEST__ = 2`. */
 export function zoomOverride(): number | null {
   const w = window as unknown as { __SEULA_ZOOM_TEST__?: number };

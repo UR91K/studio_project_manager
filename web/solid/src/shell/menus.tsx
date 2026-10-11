@@ -7,7 +7,8 @@
 // any picker closes it and the window's click-away and Escape handling cover it.
 
 import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
-import { place } from "../../../shared/place";
+import { counterZoomBar } from "../../../shared/zoom";
+import { zoom } from "./zoom";
 import { closeWindow, inTauri, pickFolders } from "../../../shared/os";
 import { checkSamples } from "../samples/state";
 import { scanPlugins } from "../plugins/state";
@@ -170,6 +171,25 @@ export function MenuBar() {
   );
 }
 
+/** Puts the dropdown directly under its title, whatever the zoom (ADR-0078). Below 100 percent
+ * the box carries `zoom: 1 / --zoom` so it is a normal size, and `left`/`top` of a zoomed box are
+ * in its own scaled units. Rectangles are measured in one space and `left`/`top` set in
+ * another, so both are worked out as ratios from the page itself and nothing assumes whether
+ * `getBoundingClientRect` includes a CSS `zoom` on an ancestor:
+ *   k = the window's rectangle over its layout size (rectangle space to the window's units)
+ *   f = the box's rectangle over its layout size, divided by k (the box's own zoom) */
+function placeUnder(win: HTMLElement, pop: HTMLElement, anchor: Element) {
+  const w = win.getBoundingClientRect(), a = anchor.getBoundingClientRect(), p = pop.getBoundingClientRect();
+  const k = w.width / win.offsetWidth || 1;
+  const f = p.width / k / pop.offsetWidth || 1;
+  const popW = pop.offsetWidth * f, popH = pop.offsetHeight * f;  // in the window's units
+  const left = (a.left - w.left) / k, top = (a.bottom - w.top) / k;
+  const x = Math.max(0, Math.min(left, win.offsetWidth - popW - 2));
+  const y = Math.max(0, Math.min(top, win.offsetHeight - popH - 2));
+  pop.style.left = `${x / f}px`;
+  pop.style.top = `${y / f}px`;
+}
+
 export function MenuDropdown() {
   let el: HTMLDivElement | undefined;
   // Whatever the daemon reports changes (the watcher, the paths), so read it fresh on opening.
@@ -180,11 +200,12 @@ export function MenuDropdown() {
     const id = openId();
     if (!id || !el) return;
     const anchor = document.querySelector(`.menubar [data-menu="${id}"]`);
-    if (anchor) place(el.closest(".win") as HTMLElement, el, { anchor });
+    zoom();  // a zoom change moves the title and resizes the box: place it again
+    if (anchor) placeUnder(el.closest(".win") as HTMLElement, el, anchor);
   });
   return (
     <Show when={openId()}>
-      <div class="pop menu appmenu" role="menu" ref={el}>
+      <div class="pop menu appmenu" classList={{ "counter-zoom": counterZoomBar(zoom()) }} role="menu" ref={el}>
         <For each={entriesOf(openId())}>{(e, i) => (
           <>
             <Show when={e === "sep"}><div class="sep" /></Show>

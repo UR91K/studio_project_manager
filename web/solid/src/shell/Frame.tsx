@@ -5,7 +5,8 @@ import { For, Show, onCleanup, onMount, type JSX } from "solid-js";
 import { LOGO_PATH, LOGO_TRANSFORM, LOGO_VIEWBOX } from "../../../shared/logo";
 import { plural } from "../../../shared/projects";
 import { inTauri } from "../../../shared/os";
-import { trackZoom } from "./zoom";
+import { counterZoomBar } from "../../../shared/zoom";
+import { trackZoom, zoom } from "./zoom";
 import { MenuBar } from "./menus";
 import { Icon, TbBtn, WindowControls } from "./parts";
 import { closePopups, counts, notice, route, scan, setRoute, setShell, shell, system, type RouteId } from "./shell";
@@ -25,7 +26,7 @@ export function Topbar(props: { view: View }) {
   // Search waits for typing to pause, then asks the server (FTS5, ADR-0024).
   const onInput = (value: string) => { clearTimeout(timer); timer = setTimeout(() => props.view.setQuery(value.trim()), 250); };
   return (
-    <header class="topbar" data-tauri-drag-region>
+    <header class="topbar" classList={{ "counter-zoom": counterZoomBar(zoom()) }} data-tauri-drag-region>
       <svg class="logo" viewBox={LOGO_VIEWBOX} role="img" aria-label="Seula">
         <path fill="currentColor" transform={LOGO_TRANSFORM} d={LOGO_PATH} />
       </svg>
