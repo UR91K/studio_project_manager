@@ -1,6 +1,6 @@
 # 0077. The title bar keeps its on-screen size at any zoom
 
-- **Status:** Accepted, not yet implemented
+- **Status:** Accepted, implemented; its sizes and zoomed-out behaviour are changed by ADR-0078
 - **Recognized:** 2026-10-11, checking zoom in the installed build (ADR-0073)
 - **Decided:** 2026-10-11
 - **Recorded:** 2026-10-11
