@@ -78,6 +78,40 @@ type ScanFailure = (ErrorType, String);
 /// If the binary turns out to be a shell, this returns the container record followed
 /// by one record per plugin inside it.
 fn read_vst2(plugin_path: &Path) -> Result<Vec<PluginMeta>, ScanFailure> {
+    let mut plugins = read_vst2_unnamed_ok(plugin_path)?;
+    for plugin in &mut plugins {
+        fill_empty_name(plugin, plugin_path);
+    }
+    Ok(plugins)
+}
+
+/// The `vst` crate fills `Info::name` from `effGetProductString` (opcode 48) alone and
+/// offers no way to dispatch `effGetEffectName` (opcode 45), which is the only name
+/// some plugins implement (SoundTheory Gullfoss, Gullfoss Live, Gullfoss Master).
+/// Those come back empty, so fall back to the file name, which is what a host shows
+/// for a plugin that gives it nothing better.
+fn fill_empty_name(plugin: &mut PluginMeta, plugin_path: &Path) {
+    if plugin.name.trim().is_empty() {
+        // Record what the plugin *did* answer, so a blank name can be told apart from
+        // a plugin that returned nothing at all.
+        eprintln!(
+            "  empty product name for {}: vendor={:?} uid={} category={} shell={} \
+             params={:?} presets={:?}; using file name",
+            plugin_path.display(),
+            plugin.vendor,
+            plugin.uid,
+            plugin.category,
+            plugin.is_shell,
+            plugin.parameters,
+            plugin.presets,
+        );
+        if let Some(stem) = plugin_path.file_stem() {
+            plugin.name = stem.to_string_lossy().into_owned();
+        }
+    }
+}
+
+fn read_vst2_unnamed_ok(plugin_path: &Path) -> Result<Vec<PluginMeta>, ScanFailure> {
     let container = load_vst2_instance(plugin_path, 0)?;
 
     if !container.is_shell {
