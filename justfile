@@ -51,9 +51,11 @@ reseed:
     {{python}} mockup/data/generate.py seed
     {{python}} mockup/data/generate.py config
 
-# Build the daemon
+# Build the daemon and, apart from it, the scanner worker the daemon looks for beside itself.
+# Two invocations on purpose: one would unify vst-meta's features and link the hosts into the daemon (ADR-0004).
 build:
     cargo build --bin seula
+    cargo build -p vst-meta
 
 # Build the Windows installer (ADR-0068): web/target/release/bundle/nsis/*-setup.exe
 #
