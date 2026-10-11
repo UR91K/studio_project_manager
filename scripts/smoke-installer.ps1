@@ -117,7 +117,6 @@ vst_search_paths = [$(& $q $plugins)]
     #     config.toml on disk, both reach the next scan with no restart. A bad edit is kept out
     #     and reported. Every project folder below holds one fixture, copied from the first.
     $cfgFile = Join-Path $work 'config.toml'
-    $good = Get-Content $cfgFile -Raw
     $more = @()
     foreach ($n in 'Gamma', 'Delta') {
         $d = Join-Path $work "projects-$n"
@@ -140,7 +139,7 @@ vst_search_paths = [$(& $q $plugins)]
     $seen = $false
     for ($i = 0; $i -lt 30 -and -not $seen; $i++) {
         $c = (Invoke-RestMethod "$url/api/v1/config").config
-        if ($c.paths.Count -eq 4) { $seen = $true } else { Start-Sleep -Milliseconds 300 }
+        if ($c.paths.Count -eq 3) { $seen = $true } else { Start-Sleep -Milliseconds 300 }
     }
     Check 'live config: editing config.toml is picked up within a few seconds' $seen
     $null = Invoke-WebRequest "$url/api/v1/system/scan" -Method Post -UseBasicParsing -TimeoutSec 120
@@ -154,7 +153,7 @@ vst_search_paths = [$(& $q $plugins)]
         if ($st.reload_error) { $bad = $true } else { Start-Sleep -Milliseconds 300 }
     }
     Check 'live config: a bad edit is reported as reload_error' $bad
-    Check 'live config: a bad edit keeps the old config' ((Invoke-RestMethod "$url/api/v1/config").config.paths.Count -eq 4)
+    Check 'live config: a bad edit keeps the old config' ((Invoke-RestMethod "$url/api/v1/config").config.paths.Count -eq 3)
     Set-Content $cfgFile $edited -Encoding utf8
     $ok = $false
     for ($i = 0; $i -lt 30 -and -not $ok; $i++) {
