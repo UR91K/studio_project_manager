@@ -109,6 +109,10 @@ impl Default for MediaConfig {
 pub struct MediaStorageManager {
     storage_dir: PathBuf,
     config: MediaConfig,
+    /// Read the size limits from the config in force at each upload instead of the ones
+    /// given at construction (ADR-0072). The storage folder never follows: it is a
+    /// restart-required setting.
+    follow_live_limits: bool,
 }
 
 impl MediaStorageManager {
@@ -116,10 +120,33 @@ impl MediaStorageManager {
         let manager = Self {
             storage_dir,
             config,
+            follow_live_limits: false,
         };
 
         manager.ensure_directories_exist()?;
         Ok(manager)
+    }
+
+    /// Like `new`, but the size limits follow `config.toml` while the daemon runs: each
+    /// upload is checked against the limits in force when it arrives. `config` is the
+    /// fallback if the live config cannot be read.
+    pub fn new_following_config(
+        storage_dir: PathBuf,
+        config: MediaConfig,
+    ) -> Result<Self, MediaError> {
+        let mut manager = Self::new(storage_dir, config)?;
+        manager.follow_live_limits = true;
+        Ok(manager)
+    }
+
+    /// The size limits for the upload being checked now.
+    fn limits(&self) -> MediaConfig {
+        if self.follow_live_limits {
+            if let Ok(live) = crate::config::current() {
+                return MediaConfig::from(&*live);
+            }
+        }
+        self.config.clone()
     }
 
     fn ensure_directories_exist(&self) -> Result<(), MediaError> {
@@ -229,13 +256,12 @@ impl MediaStorageManager {
         let file_size_mb = file_data.len() as f64 / (1024.0 * 1024.0);
 
         // Get max size limit (0 means no limit)
+        let limits = self.limits();
         let max_size = match media_type {
-            MediaType::CoverArt => self
-                .config
+            MediaType::CoverArt => limits
                 .max_cover_art_size_mb
                 .unwrap_or(DEFAULT_MAX_COVER_ART_SIZE_MB),
-            MediaType::AudioFile => self
-                .config
+            MediaType::AudioFile => limits
                 .max_audio_file_size_mb
                 .unwrap_or(DEFAULT_MAX_AUDIO_FILE_SIZE_MB),
         };

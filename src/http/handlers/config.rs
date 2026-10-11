@@ -21,7 +21,7 @@ fn load_error(e: impl std::fmt::Display) -> ApiError {
 pub async fn get_config(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let config = state.services.config.get().map_err(load_error)?;
     Ok(Json(GetConfigResponse {
-        config: ConfigDto::from(config),
+        config: ConfigDto::from(&*config),
     }))
 }
 
@@ -34,6 +34,8 @@ pub async fn get_config_status(
         is_ready_for_operation: config.is_ready_for_operation(),
         status_message: config.get_status_message(),
         configured_paths_count: config.paths.len() as i32,
+        reload_error: state.services.config.reload_error(),
+        restart_required: state.services.config.restart_required(),
     }))
 }
 
@@ -77,6 +79,8 @@ pub async fn update_settings(
         req.media_storage_dir,
         req.max_cover_art_size_mb,
         req.max_audio_file_size_mb,
+        req.vst_search_paths,
+        req.vst_scan_timeout_secs,
     )?;
     Ok(Json(PathMutationResponse {
         validation_warnings: warnings,
@@ -89,7 +93,7 @@ pub async fn reload_config(
     let (new_config, warnings) = state.services.config.reload()?;
     Ok(Json(ReloadConfigResponse {
         validation_warnings: warnings,
-        config: ConfigDto::from(&new_config),
+        config: ConfigDto::from(&*new_config),
     }))
 }
 

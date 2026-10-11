@@ -11,7 +11,14 @@ impl Config {
     /// Creates a new Config instance by loading from the config file
     pub fn new() -> Result<Self, ConfigError> {
         let config_path = find_config_file()?;
-        let config_str = std::fs::read_to_string(&config_path).map_err(|e| {
+        Self::from_file(&config_path)
+    }
+
+    /// Loads, expands and validates the config at exactly `config_path`. Unlike `new`,
+    /// it never goes looking for another file or writes a default one, which is what a
+    /// reload triggered by an edit needs (ADR-0072).
+    pub fn from_file(config_path: &std::path::Path) -> Result<Self, ConfigError> {
+        let config_str = std::fs::read_to_string(config_path).map_err(|e| {
             ConfigError::IoError(std::io::Error::new(
                 e.kind(),
                 format!(

@@ -1,4 +1,5 @@
 pub mod defaults;
+pub mod live;
 pub mod loader;
 pub mod paths;
 pub mod validator;
@@ -13,6 +14,7 @@ pub use defaults::{
     DEFAULT_HTTP_PORT, DEFAULT_LOG_LEVEL, DEFAULT_MAX_AUDIO_FILE_SIZE_MB,
     DEFAULT_MAX_COVER_ART_SIZE_MB,
 };
+pub use live::{current, reload_error, restart_required, subscribe};
 pub use loader::MAX_DIRECTORY_TRAVERSAL_DEPTH;
 pub use paths::MAX_PATH_LENGTH;
 
@@ -43,7 +45,7 @@ pub use paths::MAX_PATH_LENGTH;
 /// # max_cover_art_size_mb = 10
 /// # max_audio_file_size_mb = 50
 /// ```
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Config {
     /// List of paths to scan for music projects
     pub paths: Vec<String>,
@@ -154,6 +156,8 @@ impl Config {
         media_storage_dir: Option<String>,
         max_cover_art_size_mb: Option<Option<u32>>,
         max_audio_file_size_mb: Option<Option<u32>>,
+        vst_search_paths: Option<Vec<String>>,
+        vst_scan_timeout_secs: Option<u64>,
     ) -> Result<Vec<String>, ConfigError> {
         if let Some(db_path) = database_path {
             self.database_path = Some(db_path);
@@ -170,6 +174,12 @@ impl Config {
         if let Some(audio_size) = max_audio_file_size_mb {
             self.max_audio_file_size_mb = audio_size;
         }
+        if let Some(search_paths) = vst_search_paths {
+            self.vst_search_paths = search_paths;
+        }
+        if let Some(timeout) = vst_scan_timeout_secs {
+            self.vst_scan_timeout_secs = timeout;
+        }
 
         let warnings = self.validate()?;
         self.save_to_file()?;
@@ -180,7 +190,7 @@ impl Config {
     pub fn save_to_file(&self) -> Result<(), ConfigError> {
         let config_path = loader::find_config_file()?;
         let config_content = self.to_toml_string()?;
-        std::fs::write(&config_path, config_content).map_err(ConfigError::IoError)?;
+        write_atomically(&config_path, &config_content).map_err(ConfigError::IoError)?;
         Ok(())
     }
 
@@ -200,5 +210,24 @@ impl Config {
     }
 }
 
-/// Global configuration instance loaded lazily
+/// Writes `content` to a sibling temporary file and renames it over `path`, so the file
+/// watcher (and anything else reading) never sees a half-written config. If the rename is
+/// refused (the target held open, say) it falls back to writing in place.
+fn write_atomically(path: &std::path::Path, content: &str) -> std::io::Result<()> {
+    let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
+    tmp_name.push(".seula-tmp");
+    let tmp = path.with_file_name(tmp_name);
+    std::fs::write(&tmp, content)?;
+    match std::fs::rename(&tmp, path) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            let _ = std::fs::remove_file(&tmp);
+            std::fs::write(path, content)
+        }
+    }
+}
+
+/// The configuration as it was when the process started, read once. The CLI's one-shot
+/// commands use it; the daemon reads `current()` instead, which follows edits (ADR-0072),
+/// and compares against this to say which changes still need a restart.
 pub static CONFIG: Lazy<Result<Config, ConfigError>> = Lazy::new(Config::new);
