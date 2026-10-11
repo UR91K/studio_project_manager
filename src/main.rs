@@ -61,9 +61,7 @@ struct SharedState {
 }
 
 fn build_shared_state() -> Result<SharedState, Box<dyn std::error::Error>> {
-    let config = CONFIG
-        .as_ref()
-        .map_err(|e| format!("Failed to load config: {}", e))?;
+    let config = seula::config::current().map_err(|e| format!("Failed to load config: {}", e))?;
 
     let database_path = config
         .database_path
@@ -74,8 +72,9 @@ fn build_shared_state() -> Result<SharedState, Box<dyn std::error::Error>> {
         .map_err(|e| format!("Failed to initialize database: {}", e))?;
     let db = Arc::new(Mutex::new(db));
 
-    let media_config = MediaConfig::from(config);
-    let media_storage = Arc::new(MediaStorageManager::new(
+    let media_config = MediaConfig::from(&*config);
+    // The folder is fixed for the run; the size limits follow config.toml (ADR-0072).
+    let media_storage = Arc::new(MediaStorageManager::new_following_config(
         PathBuf::from(&config.media_storage_dir),
         media_config,
     )?);
@@ -94,6 +93,8 @@ fn build_shared_state() -> Result<SharedState, Box<dyn std::error::Error>> {
         watcher_events,
         start_time,
     );
+    // A running folder watcher follows `paths`; one that is off stays off (ADR-0072).
+    system_service.follow_config_paths();
 
     Ok(SharedState {
         services,
@@ -105,6 +106,7 @@ async fn run_server_mode() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting Seula (server-only mode)");
 
     let state = build_shared_state()?;
+    let _config_watch = watch_config_file();
     start_http_server(state.services, state.system_service).await
 }
 
@@ -112,6 +114,7 @@ async fn run_tray_mode() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting Seula (tray mode)");
 
     let state = build_shared_state()?;
+    let _config_watch = watch_config_file();
 
     // The HTTP server runs in a background task while the tray owns this thread.
     let http_handle = tokio::spawn(async move {
@@ -145,11 +148,27 @@ async fn run_tray_mode() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Starts reloading `config.toml` when it is edited (ADR-0072). Failing to watch is not
+/// fatal: the daemon still runs, and `POST /config/reload` still works.
+fn watch_config_file() -> Option<seula::config::live::ConfigFileWatcher> {
+    match seula::config::live::watch_file() {
+        Ok(watcher) => {
+            info!("Watching {} for edits", watcher.path().display());
+            Some(watcher)
+        }
+        Err(e) => {
+            tracing::warn!("Not watching config.toml for edits: {}", e);
+            None
+        }
+    }
+}
+
 async fn start_http_server(
     services: Services,
     system_service: SystemService,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let config = CONFIG.as_ref().inspect_err(|&e| {
+    // The port is read once, here: the socket it names is what stays open.
+    let config = seula::config::current().inspect_err(|e| {
         eprintln!("Failed to load configuration: {}", e);
     })?;
 

@@ -247,10 +247,8 @@ pub fn process_projects_with_progress<F>(progress_callback: Option<F>) -> Result
 where
     F: FnMut(u32, u32, f32, String, &str) + Send + 'static,
 {
-    let config = CONFIG
-        .as_ref()
-        .map_err(|e| LiveSetError::ConfigError(e.clone()))?;
-    scan_projects(config, open_scan_database(config)?, progress_callback)
+    let config = config::current().map_err(LiveSetError::ConfigError)?;
+    scan_projects(&config, open_scan_database(&config)?, progress_callback)
 }
 
 /// The same scan, reading and writing through `db`: the tray daemon's one connection,

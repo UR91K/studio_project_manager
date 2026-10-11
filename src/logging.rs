@@ -5,12 +5,15 @@
 //! console and a tester's problem would otherwise leave nothing behind.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{Builder, Rotation};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::reload;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
+use tracing_subscriber::Registry;
 
 /// How many daily files are kept; the oldest goes when another appears.
 pub const KEEP_LOG_FILES: usize = 7;
@@ -23,6 +26,41 @@ const FILE_SUFFIX: &str = "log";
 /// a moved `database_path`, so the documentation can always name one folder.
 pub fn log_dir() -> Option<PathBuf> {
     dirs::data_dir().map(|d| d.join("Seula").join("logs"))
+}
+
+/// The handle that swaps the filter while the program runs (ADR-0072). Set once by `init`.
+static FILTER: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
+
+/// The filter for `level`: `RUST_LOG` first, then `level` as the bare directive. See `init`
+/// for why the order matters.
+fn build_filter(level: LevelFilter) -> EnvFilter {
+    EnvFilter::builder()
+        .parse_lossy(std::env::var("RUST_LOG").unwrap_or_default())
+        .add_directive(level.into())
+}
+
+/// Changes the log level of the running program. Returns false when logging was never
+/// started by `init` (a test, say) or the level is not one of the five names; an unknown
+/// name is left alone rather than defaulted, because a live change should not quietly
+/// turn into `info`.
+pub fn set_level(log_level: &str) -> bool {
+    let Some(handle) = FILTER.get() else {
+        return false;
+    };
+    let level = match log_level.to_lowercase().as_str() {
+        "error" => LevelFilter::ERROR,
+        "warn" => LevelFilter::WARN,
+        "info" => LevelFilter::INFO,
+        "debug" => LevelFilter::DEBUG,
+        "trace" => LevelFilter::TRACE,
+        _ => return false,
+    };
+    handle.reload(build_filter(level)).is_ok()
+}
+
+/// The bare level directive currently in force, for tests and diagnostics.
+pub fn current_max_level() -> Option<LevelFilter> {
+    FILTER.get()?.with_current(|f| f.max_level_hint()).ok()?
 }
 
 /// Start logging at `log_level`. With `to_file`, also write the daily files.
@@ -40,9 +78,8 @@ pub fn init(log_level: &str, to_file: bool) -> Option<WorkerGuard> {
     // `RUST_LOG=debug` loses to the config value. `add_directive` with a bare
     // level has the same replace-on-same-key behaviour, so the precedence is
     // unchanged.
-    let filter = EnvFilter::builder()
-        .parse_lossy(std::env::var("RUST_LOG").unwrap_or_default())
-        .add_directive(level.into());
+    let (filter, handle) = reload::Layer::new(build_filter(level));
+    let _ = FILTER.set(handle);
 
     let stdout = tracing_subscriber::fmt::layer();
     let (file, guard) = match to_file.then(open_file).flatten() {

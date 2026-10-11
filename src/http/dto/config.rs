@@ -16,6 +16,11 @@ pub struct ConfigDto {
     pub media_storage_dir: String,
     pub max_cover_art_size_mb: Option<u32>,
     pub max_audio_file_size_mb: Option<u32>,
+    /// Empty means the platform defaults.
+    pub vst_search_paths: Vec<String>,
+    pub vst_scan_timeout_secs: u64,
+    /// Read-only over the API: it belongs to the listening socket (ADR-0072).
+    pub http_port: u16,
     pub needs_setup: bool,
     pub status_message: String,
 }
@@ -29,6 +34,9 @@ impl From<&Config> for ConfigDto {
             media_storage_dir: config.media_storage_dir.clone(),
             max_cover_art_size_mb: config.max_cover_art_size_mb,
             max_audio_file_size_mb: config.max_audio_file_size_mb,
+            vst_search_paths: config.vst_search_paths.clone(),
+            vst_scan_timeout_secs: config.vst_scan_timeout_secs,
+            http_port: config.http_port(),
             needs_setup: config.needs_setup(),
             status_message: config.get_status_message(),
         }
@@ -46,6 +54,10 @@ pub struct ConfigStatusResponse {
     pub is_ready_for_operation: bool,
     pub status_message: String,
     pub configured_paths_count: i32,
+    /// Why the last edit of config.toml was not applied; null once a load succeeds.
+    pub reload_error: Option<String>,
+    /// Keys whose file value differs from the running one.
+    pub restart_required: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -80,6 +92,8 @@ pub struct UpdateSettingsRequest {
     pub media_storage_dir: Option<String>,
     pub max_cover_art_size_mb: Option<Option<u32>>,
     pub max_audio_file_size_mb: Option<Option<u32>>,
+    pub vst_search_paths: Option<Vec<String>>,
+    pub vst_scan_timeout_secs: Option<u64>,
 }
 
 #[derive(Serialize)]
