@@ -35,7 +35,7 @@ export function Topbar(props: { view: View }) {
         <input placeholder="Search projects, plugins, samples, tags" value={props.view.query()}
           onInput={(e) => onInput(e.currentTarget.value)} />
       </label>
-      <TbBtn icon="settings" title="Settings" />
+      <TbBtn icon="settings" title="Settings" onClick={() => { closePopups(); setShell("settingsOpen", true); }} />
       <Show when={inTauri()} fallback={<span style={{ width: "calc(var(--u) * 2)" }} />}>
         <WindowControls />
       </Show>

@@ -178,3 +178,45 @@ export interface Statistics {
   largest_collection: CollectionRow | null;
   task_completion_trends: { year: number; month: number; completed_tasks: number; total_tasks: number; completion_rate: number }[];
 }
+
+/** GET /config: the running config (ADR-0072). The fields marked "new" are added by the live-config
+ *  work; until it lands the daemon omits them, so readers treat them as optional. */
+export interface ConfigInfo {
+  paths: string[];
+  database_path: string | null;
+  log_level: string;
+  media_storage_dir: string;
+  max_cover_art_size_mb: number | null;
+  max_audio_file_size_mb: number | null;
+  /** new: empty means the platform defaults. */
+  vst_search_paths?: string[];
+  /** new */
+  vst_scan_timeout_secs?: number;
+  /** new: read-only in the UI, it needs a restart. */
+  http_port?: number;
+  needs_setup: boolean;
+  status_message: string;
+}
+
+/** GET /config/status. `reload_error` and `restart_required` are new (ADR-0072). */
+export interface ConfigStatus {
+  needs_setup: boolean;
+  is_ready_for_operation: boolean;
+  status_message: string;
+  configured_paths_count: number;
+  /** Why the last edit of config.toml was not applied, or null/absent when it was. */
+  reload_error?: string | null;
+  /** Keys whose file value differs from the running one, so a restart is needed. */
+  restart_required?: string[];
+}
+
+/** POST /config/settings; every field optional, an absent one is left alone. */
+export interface ConfigSettingsUpdate {
+  database_path?: string;
+  log_level?: string;
+  media_storage_dir?: string;
+  max_cover_art_size_mb?: number | null;
+  max_audio_file_size_mb?: number | null;
+  vst_search_paths?: string[];
+  vst_scan_timeout_secs?: number;
+}

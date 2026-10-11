@@ -1,7 +1,8 @@
 // The daemon's HTTP client: plain fetch, as ADR-0048 says. No Tauri IPC for data.
 
 import type {
-  Collection, CollectionRow, CollectionSortKey, CollectionStats, CollectionTask, FailedPluginFile, FormatRollup,
+  Collection, CollectionRow, CollectionSortKey, CollectionStats, CollectionTask, ConfigInfo, ConfigSettingsUpdate, ConfigStatus,
+  FailedPluginFile, FormatRollup,
   PluginDetails, PluginRow,
   Project, SampleFile, SampleFormat, SampleRow, ScanProgress, Scope, Statistics, StatsScope, SystemInfo, VendorRollup,
 } from "./types";
@@ -64,6 +65,17 @@ export class Api {
   }
 
   systemInfo() { return this.json<SystemInfo>("/api/v1/system/info"); }
+
+  /** The config routes (ADR-0072, ADR-0074). Every change applies to the running daemon. */
+  async config() { return (await this.json<{ config: ConfigInfo }>("/api/v1/config")).config; }
+  configStatus() { return this.json<ConfigStatus>("/api/v1/config/status"); }
+  /** Resolves with the daemon's validation warnings; rejects when the path cannot be used. */
+  async addProjectPath(path: string) {
+    return (await this.json<{ validation_warnings: string[] }>("/api/v1/config/paths", post({ path }))).validation_warnings;
+  }
+  async removeProjectPath(path: string) { await this.send("/api/v1/config/paths/remove", post({ path })); }
+  async updateSettings(settings: ConfigSettingsUpdate) { await this.send("/api/v1/config/settings", put(settings)); }
+  async reloadConfig() { await this.send("/api/v1/config/reload", post({})); }
 
   /** The library's figures in a project scope (ADR-0045). */
   statistics(scope: StatsScope) { return this.json<Statistics>(`/api/v1/system/statistics?scope=${scope}`); }

@@ -7,6 +7,10 @@ import { samplesView } from "./samples/view";
 import { statsView } from "./stats/view";
 import { TbBtn } from "./shell/parts";
 import { AboutDialog } from "./shell/About";
+import { DropZone } from "./shell/DropZone";
+import { ErrorScreen } from "./shell/ErrorScreen";
+import { SettingsDialog } from "./shell/Settings";
+import { Welcome } from "./shell/Welcome";
 import { Sidebar, Statusbar, Topbar } from "./shell/Frame";
 import { closePopups, loadChrome, route, setShell, shell, type RouteId } from "./shell/shell";
 import type { View } from "./shell/view";
@@ -47,6 +51,10 @@ export function App() {
       <Statusbar keys={view().keys}><Dynamic component={view().Status} /></Statusbar>
       <Dynamic component={view().Popovers} />
       <Show when={shell.about}><AboutDialog /></Show>
+      <Welcome />
+      <ErrorScreen />
+      <DropZone />
+      <SettingsDialog />
     </div>
   );
 }

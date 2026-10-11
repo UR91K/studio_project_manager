@@ -38,6 +38,10 @@ export const [shell, setShell] = createStore({
   inspectorOpen: true,
   /** Help > About is open. A dialog, so Escape and the scrim close it through Dialog itself. */
   about: false,
+  /** Settings is open (ADR-0074). A dialog, like About. */
+  settingsOpen: false,
+  /** The user chose "Not now" on the welcome screen, so it stays away until the app restarts. */
+  skipOnboarding: false,
   spelling: "sharp" as KeySpelling,
   /** The one open picker, by name. A view owns the names it uses. */
   popover: null as string | null,

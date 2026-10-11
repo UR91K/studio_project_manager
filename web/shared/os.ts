@@ -54,3 +54,46 @@ export const setSnapBounds = (x: number, y: number, width: number, height: numbe
 export async function onSnapHover(handler: (hovering: boolean) => void): Promise<() => void> {
   return (await tauri()?.event.listen("snap-hover", (e) => handler(e.payload === true))) ?? (() => {});
 }
+
+// Starting the daemon, choosing folders and dropping folders (ADR-0073).
+
+/** Starts the daemon if nothing answers `/health`, and resolves once it does. Idempotent.
+ *  Rejects with the reason on failure, and outside the shell. */
+export async function startDaemon(): Promise<void> {
+  const t = tauri();
+  if (!t) throw new Error("Starting the daemon needs the Tauri shell");
+  await t.core.invoke("start_daemon");
+}
+
+/** The native folder dialog, several folders allowed. Absolute paths; empty if cancelled, and
+ *  empty outside the shell (the page falls back to a text box). */
+export async function pickFolders(): Promise<string[]> {
+  const t = tauri();
+  if (!t) return [];
+  return ((await t.core.invoke("pick_folders")) as string[] | null) ?? [];
+}
+
+export type FolderDragEvent =
+  | { kind: "enter" | "over"; position: { x: number; y: number } }
+  | { kind: "leave" }
+  | { kind: "drop"; paths: string[]; position: { x: number; y: number } };
+
+/** Follows a file drag over the window: Tauri's `tauri://drag-enter`, `drag-over`, `drag-leave`
+ *  and `drag-drop` events, in the page's CSS pixels (the physical position divided by the device
+ *  pixel ratio). The page draws its own drop zone from these, because the webview delivers no
+ *  HTML5 drag events while Tauri handles drops. Returns a function that stops listening; outside
+ *  the shell it listens to nothing. */
+export async function onFolderDrag(handler: (e: FolderDragEvent) => void): Promise<() => void> {
+  const t = tauri();
+  if (!t) return () => {};
+  type Payload = { paths?: string[]; position?: { x: number; y: number } };
+  const css = (p?: { x: number; y: number }) => ({ x: (p?.x ?? 0) / devicePixelRatio, y: (p?.y ?? 0) / devicePixelRatio });
+  const on = (name: string, fn: (p: Payload) => void) => t.event.listen(name, (e) => fn((e.payload ?? {}) as Payload));
+  const offs = await Promise.all([
+    on("tauri://drag-enter", (p) => handler({ kind: "enter", position: css(p.position) })),
+    on("tauri://drag-over", (p) => handler({ kind: "over", position: css(p.position) })),
+    on("tauri://drag-leave", () => handler({ kind: "leave" })),
+    on("tauri://drag-drop", (p) => handler({ kind: "drop", paths: p.paths ?? [], position: css(p.position) })),
+  ]);
+  return () => offs.forEach((off) => off());
+}
