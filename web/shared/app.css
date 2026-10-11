@@ -77,3 +77,27 @@ input, textarea, .inspector { user-select: text; }
   border: 3px solid transparent; border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--text-3); border-width: 2px; }
+
+/* ------------------------------------------------------------------ first-run flow (ADR-0073, ADR-0074) */
+
+/* Sits over the columns, not the title bar or status bar, so the window controls keep working.
+   The window is a grid and row 2 is where the columns are. */
+.flow-screen { grid-area: 2 / 1; z-index: 20; background: var(--surface); min-height: 0; overflow: auto; }
+.flow-screen.drop-zone { background: var(--scrim); pointer-events: none; display: flex; }
+.flow-screen.drop-zone .empty { flex: 1; margin: calc(var(--u) * 8); border: 2px dashed var(--accent); border-radius: var(--radius); height: auto; background: var(--surface); }
+.flow-error { color: var(--danger); }
+.flow-actions { display: flex; gap: calc(var(--u) * 3); }
+.welcome {
+  display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 4);
+  max-width: calc(var(--u) * 220); margin: 0 auto; padding: calc(var(--u) * 16) calc(var(--u) * 8);
+  text-align: center; color: var(--text-2);
+}
+.welcome > .ms { font-size: calc(var(--u) * 24); width: calc(var(--u) * 24); height: calc(var(--u) * 24); color: var(--text-3); }
+.welcome h2 { font-size: var(--step-up); font-weight: 600; color: var(--text); }
+.welcome .row { display: flex; gap: calc(var(--u) * 3); width: 100%; }
+.welcome .row .field { flex: 1; }
+.welcome .folders { list-style: none; width: 100%; text-align: left; border: 1px solid var(--border); border-radius: var(--radius); }
+.welcome .folders li { display: flex; align-items: center; gap: calc(var(--u) * 3); padding: var(--u) calc(var(--u) * 3); }
+.welcome .folders li + li { border-top: 1px solid var(--border-lo); }
+.welcome .folders .path { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.welcome .folders .path > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }

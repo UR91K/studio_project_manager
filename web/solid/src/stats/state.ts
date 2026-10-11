@@ -7,7 +7,7 @@ import type { StatsScope } from "../../../shared/types";
 
 // The source is false while another view is showing, so nothing is fetched until the page is
 // opened and the figures are read afresh each time it is (a scan may have changed them).
-export const [statistics] = createResource(
+export const [statistics, { refetch: reloadStatistics }] = createResource(
   () => (route() === "stats" ? projectScope() : false),
   (scope) => api.statistics(scope),
 );
