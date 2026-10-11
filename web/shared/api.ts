@@ -77,6 +77,9 @@ export class Api {
   async updateSettings(settings: ConfigSettingsUpdate) { await this.send("/api/v1/config/settings", put(settings)); }
   async reloadConfig() { await this.send("/api/v1/config/reload", post({})); }
 
+  /** Asks the daemon to stop, the way the tray's Quit does (ADR-0076). Answers before it goes. */
+  async shutdownDaemon() { await this.send("/api/v1/system/shutdown", post({})); }
+
   /** The library's figures in a project scope (ADR-0045). */
   statistics(scope: StatsScope) { return this.json<Statistics>(`/api/v1/system/statistics?scope=${scope}`); }
 

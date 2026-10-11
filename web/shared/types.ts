@@ -35,7 +35,11 @@ export interface Project {
 
 export interface Collection { id: string; name: string; project_count: number }
 
-export interface SystemInfo { version: string; watch_paths: string[]; watcher_active: boolean; uptime_seconds: number }
+export interface SystemInfo {
+  version: string; watch_paths: string[]; watcher_active: boolean; uptime_seconds: number;
+  /** The config.toml in use, and the folder logs are written to (ADR-0076). Optional until the daemon sends them. */
+  config_path?: string | null; log_dir?: string | null;
+}
 
 /** One event of a scan's SSE stream (ScanProgressDto). */
 export interface ScanProgress {
