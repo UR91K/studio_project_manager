@@ -347,23 +347,41 @@ mod tests {
 
     #[test]
     fn plugin_drop() {
-        static mut DROP_TEST: bool = false;
+        use std::sync::atomic::{AtomicBool, Ordering};
 
-        impl Drop for TestPlugin {
-            fn drop(&mut self) {
-                unsafe {
-                    DROP_TEST = true;
-                }
+        // A plugin type private to this test, so the `Drop` impl and the flag below
+        // cannot be seen or tripped by any other test, which run in parallel. An impl
+        // inside a fn body is still global, but only to the type it is written for.
+        static DROPPED: AtomicBool = AtomicBool::new(false);
+
+        struct DropProbe;
+
+        impl Plugin for DropProbe {
+            fn new(_host: HostCallback) -> Self {
+                DropProbe
+            }
+
+            fn get_info(&self) -> Info {
+                Info::default()
             }
         }
 
-        let aeffect = VSTPluginMain(pass_callback);
+        impl Drop for DropProbe {
+            fn drop(&mut self) {
+                DROPPED.store(true, Ordering::SeqCst);
+            }
+        }
+
+        // `plugin_main!` emits `#[no_mangle]` symbols, so a second one cannot live in
+        // this binary; `main` is what it calls.
+        let aeffect = crate::main::<DropProbe>(pass_callback);
         assert!(!aeffect.is_null());
+        assert!(!DROPPED.load(Ordering::SeqCst), "dropped before drop_plugin()");
 
         unsafe { (*aeffect).drop_plugin() };
 
         // Assert that the VST is shut down and dropped.
-        assert!(unsafe { DROP_TEST });
+        assert!(DROPPED.load(Ordering::SeqCst));
     }
 
     #[test]
