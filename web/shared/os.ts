@@ -19,6 +19,8 @@ type TauriWindow = {
   close(): Promise<void>;
   isMaximized(): Promise<boolean>;
   onResized(handler: () => void): Promise<() => void>;
+  scaleFactor(): Promise<number>;
+  onScaleChanged(handler: () => void): Promise<() => void>;
 };
 
 const appWindow = (): TauriWindow | null =>
@@ -34,6 +36,27 @@ export const isWindowMaximized = async () => (await appWindow()?.isMaximized()) 
  * by any means. Returns a function that stops listening. */
 export async function onWindowResized(handler: () => void): Promise<() => void> {
   return (await appWindow()?.onResized(handler)) ?? (() => {});
+}
+
+/** The operating system's display scale for this window (1.25 at 125 percent), which the
+ * webview's zoom is measured against (ADR-0077). 1 outside the shell, and if the call fails. */
+export async function getScaleFactor(): Promise<number> {
+  try {
+    const s = await appWindow()?.scaleFactor();
+    return typeof s === "number" && s > 0 ? s : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** Calls `handler` when the window's display scale changes (moved to another monitor, or the
+ * system setting changed). Returns a function that stops listening. */
+export async function onWindowScaleChanged(handler: () => void): Promise<() => void> {
+  try {
+    return (await appWindow()?.onScaleChanged(handler)) ?? (() => {});
+  } catch {
+    return () => {};
+  }
 }
 
 // Snap layouts (ADR-0057): a native overlay sits over the maximise button, so the page tells

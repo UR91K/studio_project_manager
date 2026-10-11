@@ -17,13 +17,23 @@ html, body, #app { height: 100%; }
 .win { width: 100%; height: 100%; border: 0; }
 .error-banner { padding: var(--u) calc(var(--u) * 4); color: var(--danger); }
 
-/* Zoom must not squeeze the title bar (titlebar-breaks-at-extreme-zoom). The bar is one --hdr
- * control plus its padding at least, and the controls are fixed-size flex items that never
- * shrink when the bar overflows: every size here is in --u so they scale together. */
-.topbar { min-height: calc(var(--u) * 15); }
-.winctl { flex: none; }
+/* The title bar keeps its on-screen size at any zoom (ADR-0077, titlebar-breaks-at-extreme-zoom).
+ * The webview's zoom scales every CSS pixel, so a size that must not zoom is a screen size
+ * divided by --zoom, which the page sets on the root (web/shared/zoom.ts; 1 outside the shell).
+ * The three buttons are --chrome-controls-w wide together and the bar is at least
+ * --chrome-bar-min-h tall, both in screen pixels. Above that height the bar grows with the
+ * page, and the buttons, which fill it, grow with it. */
+:root {
+  --chrome-controls-w: 230px;
+  --chrome-bar-min-h: 34px;
+  --chrome-icon: 10px;
+}
+.topbar { min-height: calc(var(--chrome-bar-min-h) / var(--zoom, 1)); }
+/* The mockup gives .winctl a negative vertical margin to reach the bar's edges; stretched in a
+ * bar with a minimum height, that still fills it. */
+.winctl { flex: none; align-self: stretch; }
 /* The window buttons are real buttons (ADR-0057); the mockup draws them as spans. */
-.winctl button { display: flex; flex: none; align-items: center; justify-content: center; width: calc(var(--u) * 23); min-width: calc(var(--u) * 23); background: none; border: 0; border-radius: 0; color: var(--text-2); cursor: default; }
+.winctl button { display: flex; flex: none; align-items: center; justify-content: center; width: calc(var(--chrome-controls-w) / 3 / var(--zoom, 1)); min-width: 0; align-self: stretch; background: none; border: 0; border-radius: 0; color: var(--text-2); cursor: default; }
 /* `.hot` is :hover for the maximise button, which the native snap overlay covers (ADR-0057). */
 .winctl button:hover, .winctl button.hot { background: var(--hover); color: var(--text); }
 .winctl button.close:hover { background: var(--close); color: var(--close-text); }
@@ -33,7 +43,7 @@ html, body, #app { height: 100%; }
  * own hover background: a grey bar across the red. Undo that. */
 .winctl button .glyph, .winctl button .glyph:hover {
   display: block; width: auto; background: none; color: inherit;
-  font: calc(var(--u) * 5)/1 "Segoe Fluent Icons", "Segoe MDL2 Assets";
+  font: calc(var(--chrome-icon) / var(--zoom, 1))/1 "Segoe Fluent Icons", "Segoe MDL2 Assets";
 }
 
 /* The main pane is one column no wider than its grid cell, and clips. Its grid had no

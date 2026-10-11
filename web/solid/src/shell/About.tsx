@@ -6,6 +6,7 @@
 
 import { createSignal } from "solid-js";
 import { Dialog } from "./Dialog";
+import { displayScale, zoom } from "./zoom";
 import { setShell, system } from "./shell";
 
 export const SOURCE_URL = "https://github.com/UR91K/seula";
@@ -31,6 +32,9 @@ export function AboutDialog() {
       <p>The source for this version is at the tag matching the number above:</p>
       <p><code style={{ "user-select": "text" }}>{SOURCE_URL}</code></p>
       <p><button class="btn" onClick={copy}>{copied() ? "Copied" : "Copy address"}</button></p>
+      <p class="dim" style={{ "font-size": "0.9em" }}>
+        Display: zoom {Math.round(zoom() * 100)}%, display scale {Math.round(displayScale() * 100)}%
+      </p>
     </Dialog>
   );
 }
