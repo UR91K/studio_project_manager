@@ -5,6 +5,7 @@ import { For, Show, type JSX } from "solid-js";
 import { LOGO_PATH, LOGO_TRANSFORM, LOGO_VIEWBOX } from "../../../shared/logo";
 import { plural } from "../../../shared/projects";
 import { inTauri } from "../../../shared/os";
+import { MenuBar } from "./menus";
 import { Icon, TbBtn, WindowControls } from "./parts";
 import { closePopups, counts, notice, route, scan, setRoute, setShell, shell, system, type RouteId } from "./shell";
 import type { View } from "./view";
@@ -26,10 +27,7 @@ export function Topbar(props: { view: View }) {
       <svg class="logo" viewBox={LOGO_VIEWBOX} role="img" aria-label="Seula">
         <path fill="currentColor" transform={LOGO_TRANSFORM} d={LOGO_PATH} />
       </svg>
-      <nav class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Tools</span>
-        <span role="button" tabIndex={0} title="About Seula" onClick={() => { closePopups(); setShell("about", true); }}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { closePopups(); setShell("about", true); } }}>Help</span>
-      </nav>
+      <MenuBar />
       <label class="search">
         <Icon name="search" />
         <input placeholder="Search projects, plugins, samples, tags" value={props.view.query()}

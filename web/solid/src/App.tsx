@@ -11,6 +11,7 @@ import { DropZone } from "./shell/DropZone";
 import { ErrorScreen } from "./shell/ErrorScreen";
 import { SettingsDialog } from "./shell/Settings";
 import { Welcome } from "./shell/Welcome";
+import { MenuDropdown, installShortcuts } from "./shell/menus";
 import { Sidebar, Statusbar, Topbar } from "./shell/Frame";
 import { closePopups, loadChrome, route, setShell, shell, type RouteId } from "./shell/shell";
 import type { View } from "./shell/view";
@@ -21,6 +22,7 @@ const VIEWS: Record<RouteId, View> = {
 
 export function App() {
   onMount(loadChrome);
+  installShortcuts();
   const view = () => VIEWS[route()];
   const inspector = () => view().Inspector;
   const shown = () => !!inspector() && shell.inspectorOpen;
@@ -50,6 +52,7 @@ export function App() {
       </div>
       <Statusbar keys={view().keys}><Dynamic component={view().Status} /></Statusbar>
       <Dynamic component={view().Popovers} />
+      <MenuDropdown />
       <Show when={shell.about}><AboutDialog /></Show>
       <Welcome />
       <ErrorScreen />
