@@ -663,7 +663,10 @@ impl Plugin for PluginInstance {
     }
 
     fn get_input_info(&self, input: i32) -> ChannelInfo {
-        let mut props: MaybeUninit<api::ChannelProperties> = MaybeUninit::uninit();
+        // SEULA PATCH: zeroed, not uninit. A plugin that does not implement the opcode never
+        // writes the buffer, and `assume_init` on that would be undefined behaviour. All zeroes
+        // is a valid `ChannelProperties` (the arrangement type has a variant at 0).
+        let mut props: MaybeUninit<api::ChannelProperties> = MaybeUninit::zeroed();
         let ptr = props.as_mut_ptr() as *mut c_void;
 
         self.dispatch(plugin::OpCode::GetInputInfo, input, 0, ptr, 0.0);
@@ -672,7 +675,8 @@ impl Plugin for PluginInstance {
     }
 
     fn get_output_info(&self, output: i32) -> ChannelInfo {
-        let mut props: MaybeUninit<api::ChannelProperties> = MaybeUninit::uninit();
+        // SEULA PATCH: zeroed, not uninit; see `get_input_info`.
+        let mut props: MaybeUninit<api::ChannelProperties> = MaybeUninit::zeroed();
         let ptr = props.as_mut_ptr() as *mut c_void;
 
         self.dispatch(plugin::OpCode::GetOutputInfo, output, 0, ptr, 0.0);
@@ -967,7 +971,29 @@ unsafe fn free_host<T: Host>(reserved: isize) {
 }
 
 /// Function passed to plugin to handle dispatching host opcodes.
+///
+/// SEULA PATCH: a panic in the host (or a poisoned host mutex) used to unwind out of this
+/// `extern "C"` function, which aborts the process. It is caught here and answered as 0
+/// ("not handled"), and a mutex poisoned by an earlier panic no longer fails every later call.
 extern "C" fn callback_wrapper<T: Host>(
+    effect: *mut AEffect,
+    opcode: i32,
+    index: i32,
+    value: isize,
+    ptr: *mut c_void,
+    opt: f32,
+) -> isize {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        dispatch_to_host::<T>(effect, opcode, index, value, ptr, opt)
+    }))
+    .unwrap_or(0)
+}
+
+/// Find the host for `effect` and forward the opcode to it.
+///
+/// # Safety
+/// `effect` must be null or a live `AEffect` handed out by [`call_entry`].
+unsafe fn dispatch_to_host<T: Host>(
     effect: *mut AEffect,
     opcode: i32,
     index: i32,
@@ -982,7 +1008,7 @@ extern "C" fn callback_wrapper<T: Host>(
             let reserved = (*effect).reserved1 as *const Arc<Mutex<T>>;
             let host = &*reserved;
 
-            let host = &mut *host.lock().unwrap();
+            let host = &mut *host.lock().unwrap_or_else(|e| e.into_inner());
 
             interfaces::host_dispatch(host, effect, opcode, index, value, ptr, opt)
         // In this case, the plugin is still undergoing initialization and so `LOAD_POINTER` is
@@ -996,7 +1022,7 @@ extern "C" fn callback_wrapper<T: Host>(
                 return 0;
             }
             let host = &*host;
-            let host = &mut *host.lock().unwrap();
+            let host = &mut *host.lock().unwrap_or_else(|e| e.into_inner());
 
             interfaces::host_dispatch(host, effect, opcode, index, value, ptr, opt)
         }
@@ -1068,6 +1094,29 @@ mod tests {
 
         unsafe { release::<CountingHost>(effect) };
         assert_eq!(Arc::strong_count(&host), 1, "releasing the plugin frees the stored host");
+    }
+
+    struct PanickingHost;
+
+    impl Host for PanickingHost {
+        fn idle(&self) {
+            panic!("host callback panicked");
+        }
+    }
+
+    /// A panic must not unwind out of the `extern "C"` callback into the plugin's frames, and the
+    /// host mutex it poisoned must not stop later callbacks from being answered.
+    #[test]
+    fn a_panicking_host_callback_does_not_cross_the_ffi_boundary() {
+        let host = Arc::new(Mutex::new(PanickingHost));
+
+        // `probing_main` makes an idle callback (which panics), then asks for the host version
+        // through the same poisoned mutex and builds its `AEffect` only if that is answered.
+        let effect = unsafe { call_entry(probing_main, &host) };
+
+        assert!(!effect.is_null(), "callbacks after the panic must still be answered");
+        unsafe { release::<PanickingHost>(effect) };
+        assert!(host.is_poisoned());
     }
 
     #[test]
