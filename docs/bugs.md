@@ -52,3 +52,23 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   Fixed def83dd. Regression test: `validating_project_paths_writes_nothing_into_them`.
 - [ ] 2026-10-11 `titlebar-breaks-at-extreme-zoom` At extreme zoom levels (found in the Windows Sandbox, 2026-10-11) the title bar breaks: it can shrink below a usable height and the window controls change width and icon size. Wanted: a minimum height on the title bar, a constant width for the window controls, and their icons always the same size. Frame.tsx, parts.tsx
 - [ ] 2026-10-11 `zoom-not-remembered` The window's zoom (Ctrl plus, minus, zero) resets on every launch; checked in the Windows Sandbox 2026-10-11. ADR-0073 left this open: the webview does not keep it, so it waits for the preferences endpoint (ADR-0031, ADR-0062) or the page storing the factor itself.
+- [x] 2026-10-11 `vst2-name-blank` SoundTheory Gullfoss, Gullfoss Live and Gullfoss Master (VST2) were stored with an empty name; a think-aloud test showed the same on other plugins. crates/vst/src/host.rs
+  Cause: the `vst` crate reads the name from `effGetProductString` (48) alone. These plugins
+  answer 48 with an empty string and success; only `effGetEffectName` (45) has the name
+  (probed against the three DLLs, 2026-10-11). The crate cannot send 45 (`dispatch` is private).
+  Fixed 04c02ae, with the crate vendored (ADR-0079). `a42cae2` adds the file name as a last
+  resort for a plugin that answers neither, and logs what it did answer.
+- [x] 2026-10-11 `vst2-main-entry-not-found` A VST2 that exports only the classic `main` entry point was reported as "NotAPlugin (invalid format)", so it never scanned. crates/vst/src/host.rs
+  The loader looked for `VSTPluginMain` only. On the maintainer's machine, 2 of about 217 DLLs
+  (`FL Studio VSTi.dll`, `FL Studio VSTi (Multi).dll`) export only `main`. A tester with a few
+  hundred plugins is likely to have more. Fixed 350838c: try `VSTPluginMain`, then `main`.
+- [x] 2026-10-11 `vst-load-handoff-race-and-leak` Loading a VST2 passed the host to the plugin through a `static mut` that two simultaneous loads could overwrite with each other's, and leaked two boxed host handles per plugin. crates/vst/src/host.rs
+  Latent for Seula (the worker loads one plugin at a time, and is short-lived), found reading
+  the vendored crate's `unsafe` code. Fixed bc4c748. A lock and an `AtomicPtr`; the handles are
+  freed when the plugin shuts down. Regression tests, one of which fails without the lock.
+- [x] 2026-10-11 `vst-host-callback-panic-aborts` A panic in a host callback unwound out of an `extern "C"` function into the plugin, which aborts the whole worker process, and the supervisor would blame the plugin in flight. crates/vst/src/host.rs
+  Also: `get_input_info` and `get_output_info` read a buffer the plugin might never write
+  (`assume_init`), which is undefined behaviour. Neither is reachable from the scanner today.
+  Fixed ba0a9c1. The panic is caught and answered as 0, and the buffer is zeroed first.
+  Regression test: `a_panicking_host_callback_does_not_cross_the_ffi_boundary`, which aborted
+  the test process before the fix.
