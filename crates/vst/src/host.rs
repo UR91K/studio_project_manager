@@ -531,10 +531,17 @@ trait Dispatch {
 
     /// Send a dispatch message to the plugin.
     fn dispatch(&self, opcode: plugin::OpCode, index: i32, value: isize, ptr: *mut c_void, opt: f32) -> isize {
-        let dispatcher = unsafe { (*self.get_effect()).dispatcher };
-        if (dispatcher as *mut u8).is_null() {
+        // SEULA PATCH: the field is a non-nullable fn pointer, so a null check on it is
+        // optimised away (`useless_ptr_null_checks`). Read it as an `Option`, which has
+        // the same layout with null as `None`, so the guard can actually fire.
+        let dispatcher = unsafe {
+            ptr::addr_of!((*self.get_effect()).dispatcher)
+                .cast::<Option<crate::api::DispatcherProc>>()
+                .read()
+        };
+        let Some(dispatcher) = dispatcher else {
             panic!("Plugin was not loaded correctly.");
-        }
+        };
         dispatcher(self.get_effect(), opcode.into(), index, value, ptr, opt)
     }
 
