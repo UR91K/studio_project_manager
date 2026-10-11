@@ -15,6 +15,17 @@
 
 html, body, #app { height: 100%; }
 .win { width: 100%; height: 100%; border: 0; }
+/* The window is never wider than the viewport (titlebar-breaks-at-extreme-zoom, ADR-0078). Its one
+ * grid column was `auto`, so it took the columns' minimum content width (sidebar + main +
+ * inspector, about 640 CSS px) and the title bar stretched past a narrow window, which is what
+ * high zoom makes, pushing the caption buttons off screen. The column is now the window's width,
+ * the columns clip inside it, and in the bar the menu bar and search box give way first. */
+.win { grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.win > .cols { min-width: 0; overflow: hidden; }
+.topbar { min-width: 0; }
+.topbar .logo, .topbar .tb-btn, .winctl { flex: none; }
+.topbar .menubar { min-width: 0; overflow: hidden; }
+.topbar .search { min-width: 0; flex: 0 1 auto; }
 .error-banner { padding: var(--u) calc(var(--u) * 4); color: var(--danger); }
 
 /* The title bar keeps its on-screen size at any zoom (ADR-0077, titlebar-breaks-at-extreme-zoom).
