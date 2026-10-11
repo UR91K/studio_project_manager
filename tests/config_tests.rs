@@ -174,12 +174,33 @@ fn test_windows_path_validation() {
     assert!(seula::config::Config::validate_windows_path("/unix/style/path").is_err());
 }
 
+// Regression: project-folders-probed-for-writing. Validation used to create and delete a
+// .temp_write_test file in every project folder and warn when that failed.
 #[test]
-fn test_write_permission_check() {
+fn validating_project_paths_writes_nothing_into_them() {
     setup("error");
-    // Test write permission check (should work for temp directory)
-    let temp_dir = std::env::temp_dir();
-    assert!(seula::config::Config::can_write_to_directory(&temp_dir));
+    let project_dir = tempfile::tempdir().unwrap();
+    let media_dir = tempfile::tempdir().unwrap();
+    let toml_text = format!(
+        "paths = [{:?}]
+media_storage_dir = {:?}
+",
+        project_dir.path().to_str().unwrap(),
+        media_dir.path().to_str().unwrap()
+    );
+    let config: seula::config::Config = toml::from_str(&toml_text).unwrap();
+
+    let warnings = config.validate_paths().unwrap();
+
+    assert!(
+        !warnings.iter().any(|w| w.contains("writable")),
+        "unexpected warnings: {warnings:?}"
+    );
+    let leftovers: Vec<_> = std::fs::read_dir(project_dir.path()).unwrap().collect();
+    assert!(
+        leftovers.is_empty(),
+        "project folder was written to: {leftovers:?}"
+    );
 }
 
 #[test]

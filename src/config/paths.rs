@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::error::ConfigError;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Maximum path length for Windows compatibility (260 characters)
 /// Note: Use windows_paths::get_max_path_length() for dynamic detection
@@ -25,14 +25,6 @@ impl Config {
             }
             Ok(())
         }
-    }
-
-    /// Tests if a directory is writable by attempting to create and remove a test file
-    pub fn can_write_to_directory(path: &Path) -> bool {
-        let test_file = path.join(".temp_write_test");
-        std::fs::File::create(&test_file)
-            .and_then(|_| std::fs::remove_file(&test_file))
-            .is_ok()
     }
 
     /// Validates Windows path format (drive letter, UNC paths, etc.)
@@ -91,10 +83,6 @@ impl Config {
 // Re-export the path validation functions for easier access
 pub fn validate_path_length(path: &str) -> Result<(), ConfigError> {
     Config::validate_path_length(path)
-}
-
-pub fn can_write_to_directory(path: &Path) -> bool {
-    Config::can_write_to_directory(path)
 }
 
 pub fn validate_windows_path(path: &str) -> Result<(), ConfigError> {
