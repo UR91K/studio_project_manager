@@ -10,3 +10,8 @@ Copied from crates.io (MIT, see LICENSE), minus `examples/`. Seula patches two t
   optimised away (rustc `useless_ptr_null_checks`). Marked `SEULA PATCH`.
 
 Stays MIT; it is not part of the AGPL/MPL crates. See ADR-0079.
+
+Beyond the patches, the source has had a clippy and rust-upgrade cleanup (documented
+`# Safety` sections, `matches!`, `From` over `Into`, redundant casts, elided lifetimes).
+It is behaviour-neutral; `cargo clippy -p vst` is clean. Upstream is unmaintained, so there
+is no upstream to stay merge-compatible with.

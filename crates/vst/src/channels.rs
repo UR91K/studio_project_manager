@@ -42,34 +42,34 @@ impl ChannelInfo {
     }
 }
 
-impl Into<api::ChannelProperties> for ChannelInfo {
+impl From<ChannelInfo> for api::ChannelProperties {
     /// Convert to the VST api equivalent of this structure.
-    fn into(self) -> api::ChannelProperties {
+    fn from(val: ChannelInfo) -> Self {
         api::ChannelProperties {
             name: {
-                let mut label = [0; MAX_LABEL as usize];
-                for (b, c) in self.name.bytes().zip(label.iter_mut()) {
+                let mut label = [0; MAX_LABEL];
+                for (b, c) in val.name.bytes().zip(label.iter_mut()) {
                     *c = b;
                 }
                 label
             },
             flags: {
                 let mut flag = api::ChannelFlags::empty();
-                if self.active {
+                if val.active {
                     flag |= api::ChannelFlags::ACTIVE
                 }
-                if self.arrangement_type.is_left_stereo() {
+                if val.arrangement_type.is_left_stereo() {
                     flag |= api::ChannelFlags::STEREO
                 }
-                if self.arrangement_type.is_speaker_type() {
+                if val.arrangement_type.is_speaker_type() {
                     flag |= api::ChannelFlags::SPEAKER
                 }
                 flag.bits()
             },
-            arrangement_type: self.arrangement_type.into(),
+            arrangement_type: val.arrangement_type.into(),
             short_name: {
-                let mut label = [0; MAX_SHORT_LABEL as usize];
-                for (b, c) in self.short_name.bytes().zip(label.iter_mut()) {
+                let mut label = [0; MAX_SHORT_LABEL];
+                for (b, c) in val.short_name.bytes().zip(label.iter_mut()) {
                     *c = b;
                 }
                 label
@@ -179,12 +179,14 @@ pub enum SurroundConfig {
 }
 
 /// Type representing how a channel is used. Only useful for some hosts.
+#[derive(Default)]
 pub enum SpeakerArrangementType {
     /// Custom arrangement not specified to host.
     Custom,
     /// Empty arrangement.
     Empty,
     /// Mono channel.
+    #[default]
     Mono,
     /// Stereo channel. Contains type of stereo arrangement and speaker represented.
     Stereo(StereoConfig, StereoChannel),
@@ -192,40 +194,27 @@ pub enum SpeakerArrangementType {
     Surround(SurroundConfig),
 }
 
-impl Default for SpeakerArrangementType {
-    fn default() -> SpeakerArrangementType {
-        SpeakerArrangementType::Mono
-    }
-}
 
 impl SpeakerArrangementType {
     /// Determine whether this channel is part of a surround speaker arrangement.
     pub fn is_speaker_type(&self) -> bool {
-        if let SpeakerArrangementType::Surround(..) = *self {
-            true
-        } else {
-            false
-        }
+        matches!(*self, SpeakerArrangementType::Surround(..))
     }
 
     /// Determine whether this channel is the left speaker in a stereo pair.
     pub fn is_left_stereo(&self) -> bool {
-        if let SpeakerArrangementType::Stereo(_, StereoChannel::Left) = *self {
-            true
-        } else {
-            false
-        }
+        matches!(*self, SpeakerArrangementType::Stereo(_, StereoChannel::Left))
     }
 }
 
-impl Into<api::SpeakerArrangementType> for SpeakerArrangementType {
+impl From<SpeakerArrangementType> for api::SpeakerArrangementType {
     /// Convert to VST API arrangement type.
-    fn into(self) -> api::SpeakerArrangementType {
+    fn from(val: SpeakerArrangementType) -> Self {
         use self::ArrangementTarget::{Cinema, Music};
         use self::SpeakerArrangementType::*;
         use api::SpeakerArrangementType as Raw;
 
-        match self {
+        match val {
             Custom => Raw::Custom,
             Empty => Raw::Empty,
             Mono => Raw::Mono,

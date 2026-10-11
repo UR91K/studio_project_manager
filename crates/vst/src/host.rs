@@ -636,8 +636,8 @@ impl Plugin for PluginInstance {
         unsafe {
             ((*self.get_effect()).processReplacing)(
                 self.get_effect(),
-                buffer.raw_inputs().as_ptr() as *const *const _,
-                buffer.raw_outputs().as_mut_ptr() as *mut *mut _,
+                buffer.raw_inputs().as_ptr(),
+                buffer.raw_outputs().as_mut_ptr(),
                 buffer.samples() as i32,
             )
         }
@@ -653,8 +653,8 @@ impl Plugin for PluginInstance {
         unsafe {
             ((*self.get_effect()).processReplacingF64)(
                 self.get_effect(),
-                buffer.raw_inputs().as_ptr() as *const *const _,
-                buffer.raw_outputs().as_mut_ptr() as *mut *mut _,
+                buffer.raw_inputs().as_ptr(),
+                buffer.raw_outputs().as_mut_ptr(),
                 buffer.samples() as i32,
             )
         }
@@ -914,7 +914,7 @@ impl<T: Float> HostBuffer<T> {
 /// this is a rare situation as you normally won't have 2 separate host instances loading at once.
 ///
 /// [reserved field]: ../api/struct.AEffect.html#structfield.reserved1
-static mut LOAD_POINTER: *mut c_void = 0 as *mut c_void;
+static mut LOAD_POINTER: *mut c_void = std::ptr::null_mut::<c_void>();
 
 /// Function passed to plugin to handle dispatching host opcodes.
 extern "C" fn callback_wrapper<T: Host>(

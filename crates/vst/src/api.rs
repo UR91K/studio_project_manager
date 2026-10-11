@@ -135,31 +135,48 @@ pub struct AEffect {
 
 impl AEffect {
     /// Return handle to Plugin object. Only works for plugins created using this library.
-    /// Caller is responsible for not calling this function concurrently.
-    // Suppresses warning about returning a reference to a box
-    #[allow(clippy::borrowed_box)]
+    ///
+    /// # Safety
+    /// `self.object` must point to a `Box<dyn Plugin>` created by this library, and the
+    /// caller must not call this function concurrently, since it hands out `&mut`.
+    // Suppresses warning about returning a reference to a box, and about `&mut` from `&self`
+    #[allow(clippy::borrowed_box, clippy::mut_from_ref)]
     pub unsafe fn get_plugin(&self) -> &mut Box<dyn Plugin> {
         //FIXME: find a way to do this without resorting to transmuting via a box
         &mut *(self.object as *mut Box<dyn Plugin>)
     }
 
     /// Return handle to Info object. Only works for plugins created using this library.
+    ///
+    /// # Safety
+    /// `self.user` must point to a `PluginCache` created by this library.
     pub unsafe fn get_info(&self) -> &Info {
         &(*(self.user as *mut super::PluginCache)).info
     }
 
     /// Return handle to PluginParameters object. Only works for plugins created using this library.
+    ///
+    /// # Safety
+    /// `self.user` must point to a `PluginCache` created by this library.
     pub unsafe fn get_params(&self) -> &Arc<dyn PluginParameters> {
         &(*(self.user as *mut super::PluginCache)).params
     }
 
     /// Return handle to Editor object. Only works for plugins created using this library.
-    /// Caller is responsible for not calling this function concurrently.
+    ///
+    /// # Safety
+    /// `self.user` must point to a `PluginCache` created by this library, and the caller
+    /// must not call this function concurrently, since it hands out `&mut`.
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn get_editor(&self) -> &mut Option<Box<dyn Editor>> {
         &mut (*(self.user as *mut super::PluginCache)).editor
     }
 
     /// Drop the Plugin object. Only works for plugins created using this library.
+    ///
+    /// # Safety
+    /// `self.object` and `self.user` must be the pointers this library created, and must
+    /// not be used again afterwards.
     pub unsafe fn drop_plugin(&mut self) {
         drop(Box::from_raw(self.object as *mut Box<dyn Plugin>));
         drop(Box::from_raw(self.user as *mut super::PluginCache));
@@ -170,7 +187,7 @@ impl AEffect {
 #[repr(C)]
 pub struct ChannelProperties {
     /// Channel name.
-    pub name: [u8; MAX_LABEL as usize],
+    pub name: [u8; MAX_LABEL],
 
     /// Flags found in `ChannelFlags`.
     pub flags: i32,
@@ -179,7 +196,7 @@ pub struct ChannelProperties {
     pub arrangement_type: SpeakerArrangementType,
 
     /// Name of channel (recommended: 6 characters + delimiter).
-    pub short_name: [u8; MAX_SHORT_LABEL as usize],
+    pub short_name: [u8; MAX_SHORT_LABEL],
 
     /// Reserved for future use.
     pub future: [u8; 48],
@@ -292,12 +309,12 @@ impl Supported {
     }
 }
 
-impl Into<isize> for Supported {
+impl From<Supported> for isize {
     /// Convert to integer ordinal for interop with VST api.
-    fn into(self) -> isize {
+    fn from(val: Supported) -> Self {
         use self::Supported::*;
 
-        match self {
+        match val {
             Yes => 1,
             Maybe => 0,
             No => -1,
@@ -703,8 +720,10 @@ pub struct TimeInfo {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug)]
 /// SMPTE Frame Rates.
+#[derive(Default)]
 pub enum SmpteFrameRate {
     /// 24 fps
+    #[default]
     Smpte24fps = 0,
     /// 25 fps
     Smpte25fps = 1,
@@ -731,11 +750,6 @@ pub enum SmpteFrameRate {
     Smpte599fps = 12,
     /// HDTV: 60 fps
     Smpte60fps = 13,
-}
-impl Default for SmpteFrameRate {
-    fn default() -> Self {
-        SmpteFrameRate::Smpte24fps
-    }
 }
 
 bitflags! {

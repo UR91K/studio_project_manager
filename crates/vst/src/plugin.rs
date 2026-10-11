@@ -430,11 +430,11 @@ impl CanDo {
     }
 }
 
-impl Into<String> for CanDo {
-    fn into(self) -> String {
+impl From<CanDo> for String {
+    fn from(val: CanDo) -> Self {
         use self::CanDo::*;
 
-        match self {
+        match val {
             SendEvents => "sendVstEvents".to_string(),
             SendMidiEvent => "sendVstMidiEvent".to_string(),
             ReceiveEvents => "receiveVstEvents".to_string(),
@@ -835,7 +835,7 @@ impl HostCallback {
     #[doc(hidden)]
     fn is_effect_valid(&self) -> bool {
         // Check whether `effect` points to a valid AEffect struct
-        unsafe { (*self.effect).magic as i32 == VST_MAGIC }
+        unsafe { (*self.effect).magic == VST_MAGIC }
     }
 
     /// Create a new Host structure wrapping a host callback.

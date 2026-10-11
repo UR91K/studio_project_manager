@@ -16,6 +16,11 @@ pub struct AudioBuffer<'a, T: 'a + Float> {
 impl<'a, T: 'a + Float> AudioBuffer<'a, T> {
     /// Create an `AudioBuffer` from raw pointers.
     /// Only really useful for interacting with the VST API.
+    ///
+    /// # Safety
+    /// `inputs_raw` and `outputs_raw` must point to `input_count` and `output_count`
+    /// channel pointers, each valid for `samples` reads (inputs) or writes (outputs), and
+    /// must stay valid for `'a`.
     #[inline]
     pub unsafe fn from_raw(
         input_count: usize,
@@ -58,7 +63,7 @@ impl<'a, T: 'a + Float> AudioBuffer<'a, T> {
     /// The raw outputs to pass to processReplacing
     #[inline]
     pub(crate) fn raw_outputs(&mut self) -> &mut [*mut T] {
-        &mut self.outputs
+        self.outputs
     }
 
     /// Split this buffer into separate inputs and outputs.
@@ -306,7 +311,7 @@ pub trait WriteIntoPlaceholder {
     fn write_into(&self, out: &mut PlaceholderEvent);
 }
 
-impl<'a, T: WriteIntoPlaceholder> WriteIntoPlaceholder for &'a T {
+impl<T: WriteIntoPlaceholder> WriteIntoPlaceholder for &T {
     fn write_into(&self, out: &mut PlaceholderEvent) {
         (*self).write_into(out);
     }
@@ -345,7 +350,7 @@ impl<'a> WriteIntoPlaceholder for SysExEvent<'a> {
             _flags: 0,
             data_size: self.payload.len() as i32,
             _reserved1: 0,
-            system_data: self.payload.as_ptr() as *const u8 as *mut u8,
+            system_data: self.payload.as_ptr() as *mut u8,
             _reserved2: 0,
         };
     }
