@@ -146,6 +146,16 @@ sandbox:
             $b = [Text.Encoding]::UTF8.GetBytes($xml); $gz.Write($b, 0, $b.Length); $gz.Dispose(); $fs.Dispose()
         }
     }
+    # A few small pictures for the cover art drop target
+    $pics = "$root\target\sandbox\Pictures"
+    New-Item -ItemType Directory -Force $pics | Out-Null
+    Add-Type -AssemblyName System.Drawing
+    foreach ($c in @(@('Red', 'Crimson'), @('Blue', 'RoyalBlue'), @('Green', 'SeaGreen'))) {
+        $bmp = New-Object System.Drawing.Bitmap 300, 300
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.Clear([System.Drawing.Color]::FromName($c[1]))
+        $g.Dispose(); $bmp.Save("$pics\$($c[0]).png", [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+    }
     $wsb = "$root\target\sandbox\manual.wsb"
     @"
     <Configuration>
@@ -153,11 +163,14 @@ sandbox:
       <MappedFolders>
         <MappedFolder><HostFolder>$installer</HostFolder><SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\installer</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
         <MappedFolder><HostFolder>$sets</HostFolder><SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\Live Sets</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+        <MappedFolder><HostFolder>$pics</HostFolder><SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\Pictures</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
       </MappedFolders>
     </Configuration>
     "@ | Set-Content $wsb -Encoding utf8
     Start-Process "$env:windir\System32\WindowsSandbox.exe" -ArgumentList "`"$wsb`""
-    Write-Host 'Sandbox started: the installer and the Live Sets are on its Desktop.'
+    Write-Host 'Sandbox started: the installer, the Live Sets and some Pictures are on its Desktop.'
+    Write-Host 'There is no text editor in the sandbox. To edit config.toml, run in PowerShell there, for example:'
+    Write-Host '  Add-Content "$env:APPDATA\Seula\config.toml" "http_port = 50099"   (a restart-only key)'
 
 # Typecheck and lint the frontend
 check: _npm
