@@ -34,3 +34,9 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   `web/shared/api.ts`.
   Fixed 8b79a6a. Failures are 404/400/500; mutations with nothing to return
   are 204; `success` and `error_message` are gone from the media and config responses.
+- [ ] 2026-10-11 `api-errors-shown-raw` A failed request is shown to the user as the raw `PUT /api/v1/config/settings: 400 {"error":"..."}` text, in Settings and in the status bar notice ("Could not add C:\bad\folder: {...}"). web/shared/api.ts
+  Found checking the alpha.2 screens in a browser. `Api.json` and `Api.send` build the message
+  from method, path, status and body. The screens want the daemon's `error` text alone.
+- [ ] 2026-10-11 `welcome-not-centred` The welcome screen's content sits at the top of the window instead of being centred like the other empty states. web/solid/src/shell/Welcome.tsx
+- [ ] 2026-10-11 `failed-folder-notice-hidden` After "Scan" on the welcome screen, a folder the daemon rejected is reported only as a status bar notice, which the scan progress then covers, and the welcome screen is already gone. web/solid/src/shell/Welcome.tsx
+  The folder is dropped from the list when the others succeed, so nothing on screen says it failed.
