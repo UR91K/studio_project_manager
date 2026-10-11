@@ -74,3 +74,7 @@ vst-meta = { path = "crates/vst-meta", default-features = false }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
 winreg = "0.52"
+
+# Smaller target folders: backtraces keep file and line, debuggers lose locals.
+[profile.dev]
+debug = "line-tables-only"
