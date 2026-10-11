@@ -44,4 +44,9 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
 - [x] 2026-10-11 `project-folders-probed-for-writing` Validating the config creates and deletes a .temp_write_test file inside every project folder, on every load and reload, and warns 'Directory is not writable' for a read-only one. Seula only reads .als files, so neither the probe nor the warning is wanted. src/config/validator.rs
   Maintainer, 2026-10-11: "that shouldn't be doing that, not sure why it ever did that." No ADR
   covers it. Fix: drop the probe and the warning for project folders; keep the read check.
+  Origin, both 2025-07-21, neither message gives a reason. `c567773` added the check as a
+  `metadata().permissions().readonly()` test under the comment "directories that need to be
+  writable", in a general "validation of read/write permissions" pass. `0239457` replaced it
+  with the create-and-delete probe because `readonly()` is unreliable on Windows, and never
+  asked whether project folders needed checking at all. No ADR or doc says they must be writable.
   Fixed def83dd. Regression test: `validating_project_paths_writes_nothing_into_them`.
