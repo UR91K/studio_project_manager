@@ -50,3 +50,5 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   with the create-and-delete probe because `readonly()` is unreliable on Windows, and never
   asked whether project folders needed checking at all. No ADR or doc says they must be writable.
   Fixed def83dd. Regression test: `validating_project_paths_writes_nothing_into_them`.
+- [ ] 2026-10-11 `titlebar-breaks-at-extreme-zoom` At extreme zoom levels (found in the Windows Sandbox, 2026-10-11) the title bar breaks: it can shrink below a usable height and the window controls change width and icon size. Wanted: a minimum height on the title bar, a constant width for the window controls, and their icons always the same size. Frame.tsx, parts.tsx
+- [ ] 2026-10-11 `zoom-not-remembered` The window's zoom (Ctrl plus, minus, zero) resets on every launch; checked in the Windows Sandbox 2026-10-11. ADR-0073 left this open: the webview does not keep it, so it waits for the preferences endpoint (ADR-0031, ADR-0062) or the page storing the factor itself.
