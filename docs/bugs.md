@@ -41,6 +41,7 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
 - [ ] 2026-10-11 `welcome-not-centred` The welcome screen's content sits at the top of the window instead of being centred like the other empty states. Welcome.tsx
 - [ ] 2026-10-11 `failed-folder-notice-hidden` After "Scan" on the welcome screen, a folder the daemon rejected is reported only as a status bar notice, which the scan progress then covers, and the welcome screen is already gone. Welcome.tsx
   The folder is dropped from the list when the others succeed, so nothing on screen says it failed.
-- [ ] 2026-10-11 `project-folders-probed-for-writing` Validating the config creates and deletes a .temp_write_test file inside every project folder, on every load and reload, and warns 'Directory is not writable' for a read-only one. Seula only reads .als files, so neither the probe nor the warning is wanted. src/config/validator.rs
+- [x] 2026-10-11 `project-folders-probed-for-writing` Validating the config creates and deletes a .temp_write_test file inside every project folder, on every load and reload, and warns 'Directory is not writable' for a read-only one. Seula only reads .als files, so neither the probe nor the warning is wanted. src/config/validator.rs
   Maintainer, 2026-10-11: "that shouldn't be doing that, not sure why it ever did that." No ADR
   covers it. Fix: drop the probe and the warning for project folders; keep the read check.
+  Fixed def83dd. Regression test: `validating_project_paths_writes_nothing_into_them`.
