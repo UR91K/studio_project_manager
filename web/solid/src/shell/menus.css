@@ -1,0 +1,7 @@
+/* The menu bar's dropdowns reuse the row context menu's look (.pop.menu in the mockup); these are
+ * only the differences. The title that owns the open menu keeps its hover background. */
+.menubar span.open { background: var(--hover); }
+.appmenu { min-width: calc(var(--u) * 80); }
+/* The mark column: a tick, a blank of the same width, or (for items without a mark) none at all
+ * so plain menus do not indent their labels. */
+.appmenu .mi .ms.none { display: none; }

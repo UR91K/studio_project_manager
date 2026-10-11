@@ -17,12 +17,23 @@ export const DEFAULT_URL = "http://127.0.0.1:50052";
  *  limit out does not mean everything. */
 const PAGE = 5000;
 
+/** The error for a failed response. The daemon answers `{"error": "..."}`, and that text is what a
+ *  person should read (bugs.md `api-errors-shown-raw`); anything else keeps the request line and body. */
+async function failure(method: string, path: string, res: Response): Promise<Error> {
+  const text = await res.text();
+  try {
+    const error = (JSON.parse(text) as { error?: unknown } | null)?.error;
+    if (typeof error === "string" && error) return new Error(error);
+  } catch { /* not JSON */ }
+  return new Error(`${method} ${path}: ${res.status} ${text}`);
+}
+
 export class Api {
   constructor(readonly base: string = DEFAULT_URL) {}
 
   private async json<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(this.base + path, init);
-    if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${path}: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await failure(init?.method ?? "GET", path, res);
     return res.json() as Promise<T>;
   }
 
@@ -49,7 +60,7 @@ export class Api {
   /** A write whose answer carries nothing the screen needs. */
   private async send(path: string, init: RequestInit): Promise<void> {
     const res = await fetch(this.base + path, init);
-    if (!res.ok) throw new Error(`${init.method} ${path}: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await failure(init.method ?? "GET", path, res);
   }
 
   projects(scope: Scope): Promise<Project[]> {
@@ -79,6 +90,10 @@ export class Api {
 
   /** Asks the daemon to stop, the way the tray's Quit does (ADR-0076). Answers before it goes. */
   async shutdownDaemon() { await this.send("/api/v1/system/shutdown", post({})); }
+
+  /** Starts or stops the folder watcher. */
+  async startWatcher() { await this.send("/api/v1/system/watcher/start", post({})); }
+  async stopWatcher() { await this.send("/api/v1/system/watcher/stop", post({})); }
 
   /** The library's figures in a project scope (ADR-0045). */
   statistics(scope: StatsScope) { return this.json<Statistics>(`/api/v1/system/statistics?scope=${scope}`); }
@@ -240,7 +255,7 @@ const post = (body: unknown): RequestInit => ({
 /** Parse a text/event-stream response body into its `data:` payloads. */
 export async function* sse<T>(url: string, init: RequestInit): AsyncGenerator<T> {
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`${init.method ?? "GET"} ${url}: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw await failure(init.method ?? "GET", url, res);
   const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";
   try {

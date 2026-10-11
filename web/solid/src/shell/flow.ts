@@ -8,6 +8,7 @@ import { load as loadPlugins } from "../plugins/state";
 import { load as loadProjects } from "../projects/state";
 import { load as loadSamples } from "../samples/state";
 import { reloadStatistics } from "../stats/state";
+import { startDaemon } from "../../../shared/os";
 import { api, loadChrome, loadCollectionNames, route, runScan, setNotice, shell } from "./shell";
 
 export type Daemon = "unknown" | "up" | "down";
@@ -77,5 +78,52 @@ export function scanProjects() {
 export function reportFailures(failed: AddResult["failed"]) {
   if (failed.length) setNotice(failed.map((f) => `Could not add ${f.path}: ${f.reason}`).join(" "));
 }
+
+// ---------------------------------------------------------------- daemon controls (ADR-0076)
+
+/** A deliberate stop-then-start is under way, so the unreachable-daemon screen stays quiet. */
+export const [restarting, setRestarting] = createSignal(false);
+
+const RESTART_WAIT_MS = 10_000;
+
+/** Waits, bounded, until the daemon stops answering. Resolves whether it did. */
+async function waitUntilStopped(): Promise<boolean> {
+  const until = Date.now() + RESTART_WAIT_MS;
+  while (Date.now() < until) {
+    try { await api.configStatus(); } catch { return true; }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
+/** Runs a daemon control and shows a failure as a notice, in the daemon's own words. */
+async function control(act: () => Promise<void>) {
+  try { await act(); setNotice(null); }
+  catch (e) { setNotice(reason(e)); await probe(); }
+}
+
+async function startSteps() { await startDaemon(); await probe(); }
+
+/** Asks the daemon to stop. The error screen appears once it has gone, as it should. */
+async function stopSteps() {
+  await api.shutdownDaemon();
+  await waitUntilStopped();
+  await probe();
+}
+
+async function restartSteps() {
+  setRestarting(true);
+  try {
+    await api.shutdownDaemon();
+    if (!(await waitUntilStopped())) throw new Error("The daemon did not stop.");
+    await startDaemon();
+    await probe();
+    await reloadAll();
+  } finally { setRestarting(false); }
+}
+
+export const startDaemonNow = () => control(startSteps);
+export const stopDaemonNow = () => control(stopSteps);
+export const restartDaemonNow = () => control(restartSteps);
 
 export const dropAllowed = createMemo(() => daemon() === "up" && !shell.about && !shell.settingsOpen && (welcomeOpen() || route() === "projects"));

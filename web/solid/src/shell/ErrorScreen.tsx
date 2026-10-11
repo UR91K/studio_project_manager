@@ -4,7 +4,7 @@
 
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { startDaemon } from "../../../shared/os";
-import { daemon, probe, reason } from "./flow";
+import { daemon, probe, reason, restarting } from "./flow";
 import { Icon } from "./parts";
 
 const WATCH_MS = 4000;
@@ -32,7 +32,7 @@ export function ErrorScreen() {
   };
 
   return (
-    <Show when={daemon() === "down"}>
+    <Show when={daemon() === "down" && !restarting()}>
       <div class="flow-screen" role="alert">
         <div class="empty">
           <Icon name="cloud_off" />
