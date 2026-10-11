@@ -46,3 +46,15 @@ describe("reading a whole list", () => {
     expect(urls).toHaveLength(1);
   });
 });
+
+describe("failed requests", () => {
+  it("show the daemon's own error text", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: "not a folder: /bad" }), { status: 400 }));
+    await expect(new Api("http://daemon").addProjectPath("/bad")).rejects.toThrow("not a folder: /bad");
+  });
+
+  it("keep the request line when the body is not the daemon's error", async () => {
+    vi.stubGlobal("fetch", async () => new Response("oops", { status: 500 }));
+    await expect(new Api("http://daemon").shutdownDaemon()).rejects.toThrow("POST /api/v1/system/shutdown: 500 oops");
+  });
+});

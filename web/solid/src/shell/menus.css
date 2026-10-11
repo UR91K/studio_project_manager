@@ -5,3 +5,5 @@
 /* The mark column: a tick, a blank of the same width, or (for items without a mark) none at all
  * so plain menus do not indent their labels. */
 .appmenu .mi .ms.none { display: none; }
+/* Above the welcome and error screens (z-index 20), whose menus must still work: Start daemon lives here. */
+.appmenu { z-index: 30; }
