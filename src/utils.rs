@@ -193,14 +193,20 @@ pub fn format_file_size(size: u64) -> String {
 /// XML. Seen on one real project, `4-DUNE.als`; see `docs/status.md`.
 pub const PRE_8_2_MAGIC: [u8; 4] = [0xAB, 0x1E, 0x56, 0x78];
 
-/// Whether the file starts with [`PRE_8_2_MAGIC`]. A file that cannot be read says no,
-/// so the ordinary open and decompress errors still report it.
-fn is_pre_8_2_set(file_path: &Path) -> bool {
+/// The first four bytes of a macOS AppleDouble file, the `._name.als` that a copy from a Mac
+/// volume leaves next to `name.als`. It holds Finder metadata (extended attributes, resource
+/// fork) for the real file, so it is never a Live set. Seen on two real projects, both 4096
+/// bytes with identical headers; see `docs/bugs.md`, `appledouble-sidecars-scanned`.
+pub const APPLE_DOUBLE_MAGIC: [u8; 4] = [0x00, 0x05, 0x16, 0x07];
+
+/// The first four bytes of the file. A file that cannot be read, or is shorter than that,
+/// says `None`, so the ordinary open and decompress errors still report it.
+fn read_magic(file_path: &Path) -> Option<[u8; 4]> {
     let mut head = [0u8; 4];
     File::open(file_path)
         .and_then(|mut f| f.read_exact(&mut head))
-        .is_ok()
-        && head == PRE_8_2_MAGIC
+        .ok()
+        .map(|()| head)
 }
 
 /// Decompresses a gzip file and returns its contents as a byte vector.
@@ -216,10 +222,18 @@ fn is_pre_8_2_set(file_path: &Path) -> bool {
 /// println!("Decompressed {} bytes", decompressed_data.len());
 /// ```
 pub fn decompress_gzip_file(file_path: &Path) -> Result<Vec<u8>, FileError> {
-    if is_pre_8_2_set(file_path) {
-        return Err(FileError::UnsupportedVersion {
-            path: file_path.to_path_buf(),
-        });
+    match read_magic(file_path) {
+        Some(PRE_8_2_MAGIC) => {
+            return Err(FileError::UnsupportedVersion {
+                path: file_path.to_path_buf(),
+            });
+        }
+        Some(APPLE_DOUBLE_MAGIC) => {
+            return Err(FileError::AppleDoubleSidecar {
+                path: file_path.to_path_buf(),
+            });
+        }
+        _ => {}
     }
     trace!("Attempting to extract gzipped data from: {:?}", file_path);
     trace!("Opening file for gzip decompression");
