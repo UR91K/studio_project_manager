@@ -25,14 +25,22 @@ $resultFile = Join-Path $OutDir 'smoke-result.txt'
 Set-Content $resultFile "smoke run $(Get-Date -Format s)"
 $script:failed = 0
 
+# The result file is on a folder shared with the host, which may be reading it at the moment
+# of a write. A failed append is retried rather than allowed to abort the run.
+function Append([string]$line) {
+    for ($i = 0; $i -lt 20; $i++) {
+        try { Add-Content $resultFile $line -ErrorAction Stop; return } catch { Start-Sleep -Milliseconds 250 }
+    }
+}
+
 function Check([string]$name, [bool]$ok, [string]$detail = '') {
     $line = "$(if ($ok) { 'PASS' } else { 'FAIL' })  $name$(if ($detail) { "  ($detail)" })"
     Write-Host $line
-    Add-Content $resultFile $line
+    Append $line
     if (-not $ok) { $script:failed++ }
 }
 
-function Note([string]$text) { Write-Host $text; Add-Content $resultFile $text }
+function Note([string]$text) { Write-Host $text; Append $text }
 
 $url = "http://127.0.0.1:$Port"
 $work = Join-Path $env:TEMP "seula-smoke-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
@@ -105,9 +113,19 @@ vst_search_paths = [$(& $q $plugins)]
     Check 'plugin scan: worker ran and reported the fake plugin' ($ps.Content -match 'Fake Synth') 'see plugin-scan.sse.txt'
     Check 'daemon still alive after the worker ran' (-not $daemon.HasExited)
 
-    # 7. Log file (item F; recorded, not required yet)
-    $logs = Get-ChildItem -Recurse (Join-Path $env:APPDATA 'Seula') -Filter '*.log*' -ErrorAction SilentlyContinue
-    Note "info  log files under %APPDATA%\Seula: $(@($logs).Count)"
+    # 7. Log file (ADR-0071): the daemon writes seula.YYYY-MM-DD.log under %APPDATA%\Seula\logs.
+    #    Its writer is asynchronous, so give it a moment to flush.
+    Start-Sleep -Seconds 2
+    $logDir = Join-Path $env:APPDATA 'Seula\logs'
+    $logs = @(Get-ChildItem $logDir -Filter 'seula.*.log' -ErrorAction SilentlyContinue)
+    Check 'daemon wrote a log file' ($logs.Count -ge 1) $logDir
+    if ($logs.Count -ge 1) {
+        Copy-Item $logs[0].FullName (Join-Path $OutDir 'daemon-file.log') -Force
+        $text = Get-Content $logs[0].FullName -Raw
+        Check 'log file records startup' ($text -match 'HTTP server listening') $logs[0].Name
+        Check 'log file records the plugin scan' ($text -match 'plugin scan|Plugin scan|plugin file') 'at the info level'
+        Check 'log file has no terminal colour codes' ($text -notmatch [char]27)
+    }
 } catch {
     Check 'script ran to the end' $false $_.Exception.Message
 } finally {
