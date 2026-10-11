@@ -57,12 +57,8 @@ impl Config {
 
             // Check read permissions
             match std::fs::read_dir(&path_buf) {
-                Ok(_) => {
-                    // Check write permissions using actual file operations
-                    if !paths::can_write_to_directory(&path_buf) {
-                        warnings.push(format!("Directory is not writable: {}", path));
-                    }
-                }
+                // Seula only reads project folders, so they are never probed for writing.
+                Ok(_) => {}
                 Err(e) => {
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
                         return Err(ConfigError::PermissionDenied(path.clone()));
