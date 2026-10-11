@@ -269,8 +269,7 @@ mod tests {
 
     use crate::{
         api::{consts::VST_MAGIC, AEffect},
-        interfaces,
-        plugin::{HostCallback, Info, Plugin},
+        plugin::{HostCallback, Info, OpCode, Plugin},
     };
 
     struct TestPlugin;
@@ -393,32 +392,59 @@ mod tests {
         unsafe { (*aeffect).drop_plugin() };
     }
 
+    /// A live `TestPlugin` effect. Dropping it sends `Shutdown` through the dispatcher, which
+    /// is how a host releases a plugin: it drops the plugin and frees the `AEffect`. Doing it
+    /// in `Drop` means a failing assertion does not leak.
+    struct Effect(*mut AEffect);
+
+    impl Effect {
+        fn new() -> Self {
+            let aeffect = VSTPluginMain(pass_callback);
+            assert!(!aeffect.is_null(), "VSTPluginMain returned null");
+            Effect(aeffect)
+        }
+
+        fn dispatch(&self, opcode: OpCode, ptr: *mut c_void) -> isize {
+            unsafe { ((*self.0).dispatcher)(self.0, opcode.into(), 0, 0, ptr, 0.0) }
+        }
+
+        /// Ask the plugin for a string with one of the `Get*Name` opcodes.
+        fn string(&self, opcode: OpCode) -> String {
+            let mut buf = [0u8; 64];
+            self.dispatch(opcode, buf.as_mut_ptr() as *mut c_void);
+            let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+            String::from_utf8_lossy(&buf[..len]).into_owned()
+        }
+    }
+
+    impl std::ops::Deref for Effect {
+        type Target = AEffect;
+
+        fn deref(&self) -> &AEffect {
+            unsafe { &*self.0 }
+        }
+    }
+
+    impl Drop for Effect {
+        fn drop(&mut self) {
+            self.dispatch(OpCode::Shutdown, ptr::null_mut());
+        }
+    }
+
     #[test]
     fn plugin_deref() {
-        let aeffect = VSTPluginMain(pass_callback);
-        assert!(!aeffect.is_null());
+        let effect = Effect::new();
 
-        let plugin = unsafe { (*aeffect).get_plugin() };
+        let plugin = unsafe { effect.get_plugin() };
         // Assert that deref works correctly.
         assert!(plugin.get_info().name == "Test Plugin");
     }
 
     #[test]
     fn aeffect_params() {
-        // Assert that 2 function pointers are equal.
-        macro_rules! assert_fn_eq {
-            ($a:expr, $b:expr) => {
-                assert_eq!($a as usize, $b as usize);
-            };
-        }
-
-        let aeffect = unsafe { &mut *VSTPluginMain(pass_callback) };
+        let aeffect = Effect::new();
 
         assert_eq!(aeffect.magic, VST_MAGIC);
-        assert_fn_eq!(aeffect.dispatcher, interfaces::dispatch);
-        assert_fn_eq!(aeffect._process, interfaces::process_deprecated);
-        assert_fn_eq!(aeffect.setParameter, interfaces::set_parameter);
-        assert_fn_eq!(aeffect.getParameter, interfaces::get_parameter);
         assert_eq!(aeffect.numPrograms, 1);
         assert_eq!(aeffect.numParams, 1);
         assert_eq!(aeffect.numInputs, 2);
@@ -428,7 +454,18 @@ mod tests {
         assert_eq!(aeffect.initialDelay, 123);
         assert_eq!(aeffect.uniqueId, 5678);
         assert_eq!(aeffect.version, 1234);
-        assert_fn_eq!(aeffect.processReplacing, interfaces::process_replacing);
-        assert_fn_eq!(aeffect.processReplacingF64, interfaces::process_replacing_f64);
+    }
+
+    /// The function pointers in the `AEffect` are checked by calling them, not by comparing
+    /// addresses: the language does not promise that a function has one address, or that
+    /// two functions do not share one.
+    #[test]
+    fn aeffect_dispatcher_answers_the_plugin_info() {
+        let aeffect = Effect::new();
+
+        assert_eq!(aeffect.string(OpCode::GetEffectName), "Test Plugin");
+        assert_eq!(aeffect.string(OpCode::GetProductName), "Test Plugin");
+        assert_eq!(aeffect.string(OpCode::GetVendorName), "overdrivenpotato");
+        assert_eq!((aeffect.getParameter)(aeffect.0, 0), 0.0);
     }
 }
