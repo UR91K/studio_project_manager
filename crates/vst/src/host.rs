@@ -488,7 +488,17 @@ impl PluginInstance {
             let flags = PluginFlags::from_bits_truncate(effect.flags);
 
             plug.info = Info {
-                name: plug.read_string(op::GetProductName, MAX_PRODUCT_STR_LEN),
+                // SEULA PATCH (ADR-0079): try effGetEffectName first. Some plugins
+                // (SoundTheory Gullfoss) answer effGetProductString with an empty string
+                // and success, and only effGetEffectName carries the real name.
+                name: {
+                    let effect_name = plug.read_string(op::GetEffectName, MAX_PRODUCT_STR_LEN);
+                    if effect_name.trim().is_empty() {
+                        plug.read_string(op::GetProductName, MAX_PRODUCT_STR_LEN)
+                    } else {
+                        effect_name
+                    }
+                },
                 vendor: plug.read_string(op::GetVendorName, MAX_VENDOR_STR_LEN),
 
                 presets: effect.numPrograms,
