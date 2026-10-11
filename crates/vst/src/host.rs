@@ -419,14 +419,14 @@ impl<T: Host> PluginLoader<T> {
                 Err(_) => return Err(PluginLoadError::InvalidPath),
             };
 
+            // Search the library for the VSTAPI entry point
+            let main = match pick_entry(|name| lib.get::<PluginMain>(name).ok().map(|s| *s)) {
+                Some(main) => main,
+                None => return Err(PluginLoadError::NotAPlugin),
+            };
+
             Ok(PluginLoader {
-                main:
-                    // Search the library for the VSTAPI entry point
-                    match lib.get(b"VSTPluginMain") {
-                        Ok(s) => *s,
-                        _ => return Err(PluginLoadError::NotAPlugin),
-                    }
-                ,
+                main,
                 lib: Arc::new(lib),
                 host,
             })
@@ -901,6 +901,16 @@ impl<T: Float> HostBuffer<T> {
     }
 }
 
+/// Entry point symbols, in the order they are tried. SEULA PATCH: upstream looked only for
+/// `VSTPluginMain`, so a plugin that exports just the classic `main` (for example the
+/// FL Studio VSTi wrappers) was reported as not being a plugin.
+const ENTRY_POINTS: [&[u8]; 2] = [b"VSTPluginMain\0", b"main\0"];
+
+/// Return the first entry point `lookup` can resolve.
+fn pick_entry<T>(mut lookup: impl FnMut(&[u8]) -> Option<T>) -> Option<T> {
+    ENTRY_POINTS.iter().find_map(|name| lookup(name))
+}
+
 /// HACK: a pointer to store the host so that it can be accessed from the `callback_wrapper`
 /// function passed to the plugin.
 ///
@@ -950,7 +960,30 @@ extern "C" fn callback_wrapper<T: Host>(
 
 #[cfg(test)]
 mod tests {
+    use super::pick_entry;
     use crate::host::HostBuffer;
+
+    #[test]
+    fn entry_point_prefers_vstpluginmain() {
+        let mut asked = Vec::new();
+        let found = pick_entry(|name| {
+            asked.push(name.to_vec());
+            Some(name.to_vec())
+        });
+        assert_eq!(found.unwrap(), b"VSTPluginMain\0");
+        assert_eq!(asked.len(), 1, "should stop at the first symbol that resolves");
+    }
+
+    #[test]
+    fn entry_point_falls_back_to_main() {
+        let found = pick_entry(|name| (name == b"main\0").then(|| name.to_vec()));
+        assert_eq!(found.unwrap(), b"main\0");
+    }
+
+    #[test]
+    fn entry_point_none_when_nothing_resolves() {
+        assert!(pick_entry(|_| None::<()>).is_none());
+    }
 
     #[test]
     fn host_buffer() {

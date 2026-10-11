@@ -25,7 +25,9 @@ pub mod consts {
 }
 
 /// `VSTPluginMain` function signature.
-pub type PluginMain = fn(callback: HostCallbackProc) -> *mut AEffect;
+///
+/// SEULA PATCH: was a Rust-ABI `fn`, but it is called straight out of a foreign library.
+pub type PluginMain = extern "C" fn(callback: HostCallbackProc) -> *mut AEffect;
 
 /// Host callback function passed to plugin.
 /// Can be used to query host information from plugin side.
