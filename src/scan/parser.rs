@@ -517,16 +517,34 @@ impl Parser {
         self.current_file = Some(file_name.to_string());
     }
 
+    /// Parses a `Creator` attribute such as `"Ableton Live 12.2"` or
+    /// `"Ableton Live 11.3.13"` into `(major, minor, patch)`; a missing patch is 0.
+    /// Trailing text (e.g. a beta suffix like `"12.1b3"`) is ignored.
+    fn parse_creator(creator: &str) -> Option<(u32, u32, u32)> {
+        let rest = creator.strip_prefix("Ableton Live ")?.trim();
+        let numeric: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        let mut parts = numeric.split('.').filter(|s| !s.is_empty());
+        let major = parts.next()?.parse().ok()?;
+        let minor = parts.next()?.parse().ok()?;
+        let patch = parts.next().map_or(Some(0), |p| p.parse().ok())?;
+        Some((major, minor, patch))
+    }
+
     /// Detects the Ableton Live version from XML header information.
     ///
     /// This method performs a fast scan of the XML header to extract version information
-    /// without parsing the entire file. It reads the `MinorVersion` and `SchemaChangeCount`
-    /// attributes from the root `<Ableton>` element to determine the exact Live version.
+    /// without parsing the entire file. It reads `Creator` (the Live that saved the file),
+    /// falling back to `MinorVersion`, plus `SchemaChangeCount` for beta status.
     ///
     /// # Version Format
     ///
-    /// Ableton Live stores version information in the format: `"major.minor_patch"`
-    /// - Example: `"11.2_11215"` represents Live 11.2 patch 11215
+    /// `Creator` is preferred: `"Ableton Live 12.2"` gives 12.2.0. `MinorVersion` is a
+    /// schema marker that lags the saving version (Live 12.2 writes `"12.0_12203"`), so
+    /// it is only the fallback, in the format `"major.minor_build"`:
+    /// - Example: `"11.2_11215"` represents Live 11.2 build 11215
     /// - Beta versions are indicated by `SchemaChangeCount="beta"`
     ///
     /// # Arguments
@@ -570,7 +588,34 @@ impl Parser {
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Empty(ref e)) | Ok(Event::Start(ref e)) => {
                     if e.name().as_ref() == b"Ableton" {
-                        // Get MinorVersion attribute which contains the actual version info
+                        // `Creator` names the Live that saved the file; `MinorVersion` is
+                        // a schema marker that lags behind it (12.2 writes "12.0_12203").
+                        let beta = e
+                            .try_get_attribute("SchemaChangeCount")
+                            .ok()
+                            .flatten()
+                            .map(|attr| attr.unescape_value())
+                            .transpose()?
+                            .map(|v| v == "beta")
+                            .unwrap_or(false);
+
+                        if let Some(creator) = e.try_get_attribute("Creator")? {
+                            if let Some((major, minor, patch)) =
+                                Self::parse_creator(&creator.unescape_value()?)
+                            {
+                                if !(9..=12).contains(&major) {
+                                    return Err(LiveSetError::UnsupportedVersion(major));
+                                }
+                                return Ok(AbletonVersion {
+                                    major,
+                                    minor,
+                                    patch,
+                                    beta,
+                                });
+                            }
+                        }
+
+                        // No usable Creator: fall back to the schema marker.
                         let version_str = e
                             .try_get_attribute("MinorVersion")?
                             .ok_or(LiveSetError::MissingVersion)?
@@ -597,16 +642,6 @@ impl Parser {
                         let patch: u32 = parts[1]
                             .parse()
                             .map_err(|_| LiveSetError::InvalidVersion(version_str.to_string()))?;
-
-                        // Get beta status from SchemaChangeCount
-                        let beta = e
-                            .try_get_attribute("SchemaChangeCount")
-                            .ok()
-                            .flatten()
-                            .map(|attr| attr.unescape_value())
-                            .transpose()?
-                            .map(|v| v == "beta")
-                            .unwrap_or(false);
 
                         // Validate major version
                         if !(9..=12).contains(&major) {
@@ -1874,5 +1909,31 @@ impl Parser {
             current_data.push_str(&text);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    #[test]
+    fn creator_wins_over_lagging_minor_version() {
+        let xml = br#"<Ableton MajorVersion="5" MinorVersion="12.0_12203" SchemaChangeCount="3" Creator="Ableton Live 12.2" Revision="x"></Ableton>"#;
+        let v = Parser::detect_version(xml).unwrap();
+        assert_eq!((v.major, v.minor, v.patch, v.beta), (12, 2, 0, false));
+    }
+
+    #[test]
+    fn creator_patch_is_kept() {
+        let xml = br#"<Ableton MinorVersion="11.0_11300" Creator="Ableton Live 11.3.13"></Ableton>"#;
+        let v = Parser::detect_version(xml).unwrap();
+        assert_eq!((v.major, v.minor, v.patch), (11, 3, 13));
+    }
+
+    #[test]
+    fn falls_back_to_minor_version_without_creator() {
+        let xml = br#"<Ableton MinorVersion="11.2_11215" SchemaChangeCount="3"></Ableton>"#;
+        let v = Parser::detect_version(xml).unwrap();
+        assert_eq!((v.major, v.minor, v.patch), (11, 2, 11215));
     }
 }
