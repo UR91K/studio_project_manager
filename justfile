@@ -79,6 +79,86 @@ release: _npm
     Run 'tauri build' { npx tauri build --config src-tauri/tauri.release.conf.json }
     Get-ChildItem ../target/release/bundle/nsis/*-setup.exe | ForEach-Object { Write-Host "$($_.FullName)  $([math]::Round($_.Length / 1MB, 1)) MB" }
 
+# Networking is off. One sandbox runs at a time, so close an open one first; this one is left
+# open after it finishes, close it yourself. The generated .wsb and the results are under
+# target/sandbox.
+#
+# Smoke-test the built installer (`just release` first) in a clean Windows Sandbox
+[windows]
+[script("powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File")]
+[extension(".ps1")]
+smoke:
+    $ErrorActionPreference = 'Stop'
+    if (Get-Process -Name 'WindowsSandbox*' -ErrorAction SilentlyContinue) { Write-Host 'A Windows Sandbox is already open; close it first.'; exit 1 }
+    $root = (Get-Location).Path
+    $installer = "$root\web\target\release\bundle\nsis"
+    if (-not (Get-ChildItem $installer -Filter '*-setup.exe' -ErrorAction SilentlyContinue)) { Write-Host 'No installer found; run `just release` first.'; exit 1 }
+    $out = "$root\target\sandbox\out"
+    if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+    New-Item -ItemType Directory -Force $out | Out-Null
+    $wsb = "$root\target\sandbox\smoke.wsb"
+    @"
+    <Configuration>
+      <Networking>Disable</Networking>
+      <MappedFolders>
+        <MappedFolder><HostFolder>$installer</HostFolder><SandboxFolder>C:\in</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+        <MappedFolder><HostFolder>$root\scripts</HostFolder><SandboxFolder>C:\scripts</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+        <MappedFolder><HostFolder>$out</HostFolder><SandboxFolder>C:\out</SandboxFolder><ReadOnly>false</ReadOnly></MappedFolder>
+      </MappedFolders>
+      <LogonCommand><Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\scripts\smoke-installer.ps1</Command></LogonCommand>
+    </Configuration>
+    "@ | Set-Content $wsb -Encoding utf8
+    Start-Process "$env:windir\System32\WindowsSandbox.exe" -ArgumentList "`"$wsb`""
+    Write-Host 'Sandbox started; waiting for the result (up to 10 minutes)...'
+    $result = "$out\smoke-result.txt"
+    $done = $false
+    for ($i = 0; $i -lt 120 -and -not $done; $i++) {
+        Start-Sleep -Seconds 5
+        $text = try { Get-Content $result -Raw -ErrorAction Stop } catch { '' }
+        if ($text -match 'ALL CHECKS PASSED|CHECK\(S\) FAILED') { $done = $true }
+    }
+    if (-not $done) { Write-Host "No result after 10 minutes; see $out"; exit 1 }
+    Write-Host $text
+    if ($text -match 'CHECK\(S\) FAILED') { exit 1 }
+
+# Networking is off. Two small folders of Live sets sit on the sandbox's Desktop, to add as
+# project folders.
+#
+# Open the built installer (`just release` first) in an interactive Windows Sandbox
+[windows]
+[script("powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File")]
+[extension(".ps1")]
+sandbox:
+    $ErrorActionPreference = 'Stop'
+    if (Get-Process -Name 'WindowsSandbox*' -ErrorAction SilentlyContinue) { Write-Host 'A Windows Sandbox is already open; close it first.'; exit 1 }
+    $root = (Get-Location).Path
+    $installer = "$root\web\target\release\bundle\nsis"
+    if (-not (Get-ChildItem $installer -Filter '*-setup.exe' -ErrorAction SilentlyContinue)) { Write-Host 'No installer found; run `just release` first.'; exit 1 }
+    # Two folders of three minimal sets each (EnumEvent 201 is 4/4, how the parser reads the time signature)
+    $sets = "$root\target\sandbox\Live Sets"
+    $xml = '<?xml version="1.0" encoding="UTF-8"?><Ableton MajorVersion="5" MinorVersion="12.0_12049" SchemaChangeCount="7" Creator="Ableton Live 12.0"><LiveSet><Tempo><Manual Value="128.0"/></Tempo><EnumEvent Id="0" Value="201"/></LiveSet></Ableton>'
+    foreach ($set in 'Set A', 'Set B') {
+        $d = Join-Path $sets $set
+        New-Item -ItemType Directory -Force $d | Out-Null
+        foreach ($n in 1..3) {
+            $fs = [IO.File]::Create((Join-Path $d "Song $n.als"))
+            $gz = New-Object IO.Compression.GZipStream($fs, [IO.Compression.CompressionMode]::Compress)
+            $b = [Text.Encoding]::UTF8.GetBytes($xml); $gz.Write($b, 0, $b.Length); $gz.Dispose(); $fs.Dispose()
+        }
+    }
+    $wsb = "$root\target\sandbox\manual.wsb"
+    @"
+    <Configuration>
+      <Networking>Disable</Networking>
+      <MappedFolders>
+        <MappedFolder><HostFolder>$installer</HostFolder><SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\installer</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+        <MappedFolder><HostFolder>$sets</HostFolder><SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\Live Sets</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+      </MappedFolders>
+    </Configuration>
+    "@ | Set-Content $wsb -Encoding utf8
+    Start-Process "$env:windir\System32\WindowsSandbox.exe" -ArgumentList "`"$wsb`""
+    Write-Host 'Sandbox started: the installer and the Live Sets are on its Desktop.'
+
 # Typecheck and lint the frontend
 check: _npm
     cd web/solid; npm run build

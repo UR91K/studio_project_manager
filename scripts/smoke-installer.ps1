@@ -1,5 +1,5 @@
 # Smoke test for the Windows installer (ADR-0068). Meant to run inside Windows Sandbox, a
-# clean machine with no Rust, Node or Visual C++ runtime; see `scripts/smoke-installer.wsb`.
+# clean machine with no Rust, Node or Visual C++ runtime; run it with `just smoke`, which writes the sandbox config.
 #
 #   install silently -> files present -> start the daemon on the default port -> project scan
 #   -> plugin scan (a fake plugin proves the worker is found and runs) -> stop -> uninstall
