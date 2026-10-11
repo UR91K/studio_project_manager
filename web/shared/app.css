@@ -20,7 +20,7 @@ html, body, #app { height: 100%; }
 /* Zoom must not squeeze the title bar (titlebar-breaks-at-extreme-zoom). The bar is one --hdr
  * control plus its padding at least, and the controls are fixed-size flex items that never
  * shrink when the bar overflows: every size here is in --u so they scale together. */
-.topbar { min-height: calc(var(--u) * 15); flex: none; }
+.topbar { min-height: calc(var(--u) * 15); }
 .winctl { flex: none; }
 /* The window buttons are real buttons (ADR-0057); the mockup draws them as spans. */
 .winctl button { display: flex; flex: none; align-items: center; justify-content: center; width: calc(var(--u) * 23); min-width: calc(var(--u) * 23); background: none; border: 0; border-radius: 0; color: var(--text-2); cursor: default; }
