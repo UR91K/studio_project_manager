@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use super::scan::{ScanProgress, ScanStatus, WatcherEvent, WatcherEventType};
 use super::statistics::*;
 use super::CollectionDetail;
-use crate::config::CONFIG;
+use crate::config;
 use crate::database::batch::BatchInsertManager;
 use crate::database::plugins::PluginRefreshResult;
 use crate::database::samples::SampleRefreshResult;
@@ -82,9 +82,7 @@ impl SystemService {
     }
 
     pub async fn get_system_info(&self) -> Result<(String, Vec<String>, bool, i64), DatabaseError> {
-        let config = CONFIG
-            .as_ref()
-            .map_err(|e| DatabaseError::ConfigError(e.clone()))?;
+        let config = config::current().map_err(DatabaseError::ConfigError)?;
         let watcher_active = self.watcher.lock().await.is_some();
         let uptime_seconds = self.start_time.elapsed().as_secs() as i64;
 
@@ -125,10 +123,9 @@ impl SystemService {
     {
         let db = Arc::clone(&self.db);
         self.start_scan_with(on_progress, move |callback| {
-            let config = CONFIG
-                .as_ref()
-                .map_err(|e| LiveSetError::ConfigError(e.clone()))?;
-            process_projects_into(&db, config, Some(callback))
+            // One snapshot for the whole scan: an edit made meanwhile applies to the next.
+            let config = config::current().map_err(LiveSetError::ConfigError)?;
+            process_projects_into(&db, &config, Some(callback))
         })
         .await
     }
@@ -531,9 +528,7 @@ impl SystemService {
         let (mut watcher, event_receiver) =
             FileWatcher::new(Arc::clone(&self.db)).map_err(|e| e.to_string())?;
 
-        let config = CONFIG
-            .as_ref()
-            .map_err(|e| format!("Config error: {}", e))?;
+        let config = config::current().map_err(|e| format!("Config error: {}", e))?;
         for path in &config.paths {
             if let Err(e) = watcher.add_watch_path(PathBuf::from(path)) {
                 tracing::warn!("Failed to add watch path {}: {}", path, e);
@@ -543,6 +538,57 @@ impl SystemService {
         *watcher_guard = Some(watcher);
         *events_guard = Some(event_receiver);
         Ok(true)
+    }
+
+    /// Makes a running folder watcher follow `paths` as the config changes: folders added
+    /// are watched, folders removed are dropped. A watcher that is not running is left
+    /// off -- starting one is a separate decision (ADR-0072). Spawns a task; call it
+    /// once, inside the runtime.
+    pub fn follow_config_paths(&self) {
+        let Ok(mut changes) = config::subscribe() else {
+            return;
+        };
+        let this = self.clone();
+        tokio::spawn(async move {
+            while changes.changed().await.is_ok() {
+                let paths = changes.borrow_and_update().paths.clone();
+                this.sync_watcher_paths(&paths).await;
+            }
+        });
+    }
+
+    /// Brings a running watcher's folders in line with `paths`. Does nothing when no
+    /// watcher is running.
+    pub async fn sync_watcher_paths(&self, paths: &[String]) {
+        let mut guard = self.watcher.lock().await;
+        let Some(watcher) = guard.as_mut() else {
+            return;
+        };
+        let wanted: std::collections::HashSet<PathBuf> = paths.iter().map(PathBuf::from).collect();
+        let stale: Vec<PathBuf> = watcher
+            .get_watch_paths()
+            .iter()
+            .filter(|p| !wanted.contains(*p))
+            .cloned()
+            .collect();
+        for path in stale {
+            if let Err(e) = watcher.remove_watch_path(&path) {
+                tracing::warn!("Failed to stop watching {}: {}", path.display(), e);
+            }
+        }
+        for path in wanted {
+            if let Err(e) = watcher.add_watch_path(path.clone()) {
+                tracing::warn!("Failed to add watch path {}: {}", path.display(), e);
+            }
+        }
+    }
+
+    /// The folders the running watcher has a handle on; empty when none is running.
+    pub async fn watched_paths(&self) -> Vec<PathBuf> {
+        match self.watcher.lock().await.as_ref() {
+            Some(watcher) => watcher.get_watch_paths().iter().cloned().collect(),
+            None => Vec::new(),
+        }
     }
 
     pub async fn stop_watcher(&self) {

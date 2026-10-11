@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
-use crate::config::CONFIG;
+use crate::config;
 use crate::database::plugin_details::PluginDetails;
 use crate::database::plugins::{
     FormatInfo, InstallState, PluginFilter, PluginRefreshResult, PluginStats, VendorInfo,
@@ -203,9 +203,7 @@ pub(crate) fn scan_configured_plugins(
     db: &Mutex<ProjectDatabase>,
     on_progress: &mut dyn FnMut(usize, usize, &Path),
 ) -> Result<PluginScan, DatabaseError> {
-    let config = CONFIG
-        .as_ref()
-        .map_err(|e| DatabaseError::ConfigError(e.clone()))?;
+    let config = config::current().map_err(DatabaseError::ConfigError)?;
     let roots: Vec<PathBuf> = config.vst_search_paths.iter().map(PathBuf::from).collect();
     let timeout = Duration::from_secs(config.vst_scan_timeout_secs);
     let unchanged = |files: &[_]| {
