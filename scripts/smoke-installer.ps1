@@ -113,6 +113,61 @@ vst_search_paths = [$(& $q $plugins)]
     Check 'plugin scan: worker ran and reported the fake plugin' ($ps.Content -match 'Fake Synth') 'see plugin-scan.sse.txt'
     Check 'daemon still alive after the worker ran' (-not $daemon.HasExited)
 
+    # 6b. Live config (ADR-0072): a path added through the API, and one added by editing
+    #     config.toml on disk, both reach the next scan with no restart. A bad edit is kept out
+    #     and reported. Every project folder below holds one fixture, copied from the first.
+    $cfgFile = Join-Path $work 'config.toml'
+    $good = Get-Content $cfgFile -Raw
+    $more = @()
+    foreach ($n in 'Gamma', 'Delta') {
+        $d = Join-Path $work "projects-$n"
+        New-Item -ItemType Directory -Force $d | Out-Null
+        Copy-Item (Join-Path $projects 'Alpha.als') (Join-Path $d "$n.als")
+        $more += $d
+    }
+    $null = Invoke-RestMethod "$url/api/v1/config/paths" -Method Post -ContentType 'application/json' -Body (@{ path = $more[0] } | ConvertTo-Json)
+    $null = Invoke-WebRequest "$url/api/v1/system/scan" -Method Post -UseBasicParsing -TimeoutSec 120
+    $list = Invoke-RestMethod "$url/api/v1/projects?limit=100"
+    Check 'live config: a path added through the API is scanned with no restart' ($list.total_count -eq 3) "total_count=$($list.total_count)"
+
+    $info = Invoke-RestMethod "$url/api/v1/system/info"
+    Check 'system info reports the config path' ($info.config_path -and ((Resolve-Path $info.config_path).Path -eq (Resolve-Path $cfgFile).Path)) "$($info.config_path)"
+    Check 'system info reports the log folder' ([bool]$info.log_dir) "$($info.log_dir)"
+
+    $paths = [regex]::Match((Get-Content $cfgFile -Raw), '(?m)^paths = \[(.*)\]').Groups[1].Value
+    $edited = (Get-Content $cfgFile -Raw) -replace '(?m)^paths = \[.*\]', "paths = [$paths, $(& $q $more[1])]"
+    Set-Content $cfgFile $edited -Encoding utf8
+    $seen = $false
+    for ($i = 0; $i -lt 30 -and -not $seen; $i++) {
+        $c = (Invoke-RestMethod "$url/api/v1/config").config
+        if ($c.paths.Count -eq 4) { $seen = $true } else { Start-Sleep -Milliseconds 300 }
+    }
+    Check 'live config: editing config.toml is picked up within a few seconds' $seen
+    $null = Invoke-WebRequest "$url/api/v1/system/scan" -Method Post -UseBasicParsing -TimeoutSec 120
+    $list = Invoke-RestMethod "$url/api/v1/projects?limit=100"
+    Check 'live config: a path added by file edit is scanned with no restart' ($list.total_count -eq 4) "total_count=$($list.total_count)"
+
+    Set-Content $cfgFile 'paths = [this is not toml' -Encoding utf8
+    $bad = $false
+    for ($i = 0; $i -lt 30 -and -not $bad; $i++) {
+        $st = Invoke-RestMethod "$url/api/v1/config/status"
+        if ($st.reload_error) { $bad = $true } else { Start-Sleep -Milliseconds 300 }
+    }
+    Check 'live config: a bad edit is reported as reload_error' $bad
+    Check 'live config: a bad edit keeps the old config' ((Invoke-RestMethod "$url/api/v1/config").config.paths.Count -eq 4)
+    Set-Content $cfgFile $edited -Encoding utf8
+    $ok = $false
+    for ($i = 0; $i -lt 30 -and -not $ok; $i++) {
+        $st = Invoke-RestMethod "$url/api/v1/config/status"
+        if (-not $st.reload_error) { $ok = $true } else { Start-Sleep -Milliseconds 300 }
+    }
+    Check 'live config: a good edit clears reload_error' $ok
+
+    # 6c. Stop from the window (ADR-0076): the shutdown route answers 202, then the daemon exits.
+    $sd = Invoke-WebRequest "$url/api/v1/system/shutdown" -Method Post -UseBasicParsing -TimeoutSec 10
+    Check 'shutdown route answers 202' ($sd.StatusCode -eq 202) "status $($sd.StatusCode)"
+    Check 'daemon exits after the shutdown route' ($daemon.WaitForExit(15000)) 'within 15 s'
+
     # 7. Log file (ADR-0071): the daemon writes seula.YYYY-MM-DD.log under %APPDATA%\Seula\logs.
     #    Its writer is asynchronous, so give it a moment to flush.
     Start-Sleep -Seconds 2
