@@ -1,10 +1,11 @@
 // The frame (ADR-0032): top bar, sidebar, status bar. The status bar is where push-speed
 // state lands, and it is the only reader of `scan`.
 
-import { For, Show, type JSX } from "solid-js";
+import { For, Show, onCleanup, onMount, type JSX } from "solid-js";
 import { LOGO_PATH, LOGO_TRANSFORM, LOGO_VIEWBOX } from "../../../shared/logo";
 import { plural } from "../../../shared/projects";
 import { inTauri } from "../../../shared/os";
+import { trackZoom } from "./zoom";
 import { MenuBar } from "./menus";
 import { Icon, TbBtn, WindowControls } from "./parts";
 import { closePopups, counts, notice, route, scan, setRoute, setShell, shell, system, type RouteId } from "./shell";
@@ -20,6 +21,7 @@ const NAV: { id: RouteId | null; label: string; icon: string }[] = [
 
 export function Topbar(props: { view: View }) {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  onMount(() => onCleanup(trackZoom()));
   // Search waits for typing to pause, then asks the server (FTS5, ADR-0024).
   const onInput = (value: string) => { clearTimeout(timer); timer = setTimeout(() => props.view.setQuery(value.trim()), 250); };
   return (

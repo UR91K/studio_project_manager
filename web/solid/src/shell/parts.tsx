@@ -1,10 +1,11 @@
 // Small shared pieces: icon, checkbox, toolbar button, path chip, tag chip.
 
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import { splitPath } from "../../../shared/format";
 import {
   closeWindow, isWindowMaximized, minimizeWindow, onSnapHover, onWindowResized, setSnapBounds, toggleMaximizeWindow,
 } from "../../../shared/os";
+import { zoom } from "./zoom";
 
 export function Icon(props: { name: string; fill?: boolean; class?: string }) {
   return <span class={`ms ${props.fill ? "fill" : ""} ${props.class ?? ""}`}>{props.name}</span>;
@@ -72,6 +73,8 @@ export function WindowControls() {
     const observer = new ResizeObserver(reportBounds);
     observer.observe(maximizeBtn);
     window.addEventListener("resize", reportBounds);
+    // A zoom change moves the button too, not only resizes it (ADR-0077): report on it as well.
+    createEffect(on(zoom, reportBounds, { defer: true }));
     onCleanup(() => {
       void stopResize.then((unlisten) => unlisten());
       void stopHover.then((unlisten) => unlisten());
