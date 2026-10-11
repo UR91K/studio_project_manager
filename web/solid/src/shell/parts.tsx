@@ -74,7 +74,9 @@ export function WindowControls() {
     observer.observe(maximizeBtn);
     window.addEventListener("resize", reportBounds);
     // A zoom change moves the button too, not only resizes it (ADR-0077): report on it as well.
-    createEffect(on(zoom, reportBounds, { defer: true }));
+    // The class that counter-zooms the bar lands in the same update, so measure after it too (this also
+    // covers the first report, which can run before that class is applied).
+    createEffect(on(zoom, () => { reportBounds(); requestAnimationFrame(reportBounds); }));
     onCleanup(() => {
       void stopResize.then((unlisten) => unlisten());
       void stopHover.then((unlisten) => unlisten());
