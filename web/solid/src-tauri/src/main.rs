@@ -38,7 +38,10 @@ fn reveal_in_explorer(path: String) -> Result<(), String> {
     #[cfg(not(windows))]
     {
         let dir = path.parent().unwrap_or(&path);
-        Command::new("xdg-open").arg(dir).spawn().map_err(|e| e.to_string())?;
+        Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -46,7 +49,13 @@ fn reveal_in_explorer(path: String) -> Result<(), String> {
 /// Keep the snap-layout overlay over the page's maximise button (ADR-0057). The rectangle is
 /// in physical pixels, relative to the window's client area. A no-op off Windows.
 #[tauri::command]
-fn set_snap_bounds(window: tauri::WebviewWindow, x: i32, y: i32, width: i32, height: i32) -> Result<(), String> {
+fn set_snap_bounds(
+    window: tauri::WebviewWindow,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> Result<(), String> {
     #[cfg(windows)]
     return snap::set_bounds(&window, x, y, width, height);
     #[cfg(not(windows))]
@@ -82,23 +91,22 @@ fn daemon_is_up() -> bool {
 
 /// Start the daemon from this executable's folder unless one already answers (ADR-0069).
 /// In tray mode, so the user can see it running and quit it, and detached, so it outlives
-/// this window (ADR-0048). Failures are logged and left for the page to show, as "Cannot
-/// reach the daemon".
-fn ensure_daemon() {
+/// this window (ADR-0048). Blocks for up to `DAEMON_START_TIMEOUT`. `Err` carries the reason.
+fn ensure_daemon() -> Result<(), String> {
     if daemon_is_up() {
-        return;
+        return Ok(());
     }
-    let Some(daemon) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(DAEMON_BIN)))
-    else {
-        eprintln!("seula-shell: cannot locate the daemon next to this executable");
-        return;
-    };
+    let daemon = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(DAEMON_BIN)))
+        .ok_or_else(|| "cannot locate the daemon next to this executable".to_string())?;
     if !daemon.is_file() {
-        eprintln!("seula-shell: no daemon at {}", daemon.display());
-        return;
+        return Err(format!("no daemon at {}", daemon.display()));
     }
     let mut cmd = Command::new(&daemon);
-    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -106,27 +114,71 @@ fn ensure_daemon() {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
     }
-    if let Err(e) = cmd.spawn() {
-        eprintln!("seula-shell: could not start {}: {e}", daemon.display());
-        return;
-    }
+    cmd.spawn()
+        .map_err(|e| format!("could not start {}: {e}", daemon.display()))?;
     let deadline = Instant::now() + DAEMON_START_TIMEOUT;
     while Instant::now() < deadline {
         if daemon_is_up() {
-            return;
+            return Ok(());
         }
         std::thread::sleep(Duration::from_millis(150));
     }
-    eprintln!("seula-shell: the daemon did not answer within {DAEMON_START_TIMEOUT:?}");
+    Err(format!(
+        "the daemon did not answer within {DAEMON_START_TIMEOUT:?}"
+    ))
+}
+
+/// Start the daemon if nothing answers `/health` (ADR-0073). No arguments: it launches one
+/// fixed executable, so the page cannot choose what runs. Idempotent. Runs on a blocking
+/// thread so the wait does not stall the window.
+#[tauri::command]
+async fn start_daemon() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(ensure_daemon)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The native folder dialog, several folders allowed (ADR-0073). Absolute paths; empty if the
+/// user cancels. Written here over the dialog plugin so the page is granted this command and
+/// none of the plugin's own.
+#[tauri::command]
+async fn pick_folders(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        let picked = app
+            .dialog()
+            .file()
+            .set_title("Choose project folders")
+            .blocking_pick_folders();
+        picked
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| {
+                p.into_path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .map_err(|e| e.to_string())
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {
-            ensure_daemon();
+            if let Err(e) = ensure_daemon() {
+                eprintln!("seula-shell: {e}");
+            }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![reveal_in_explorer, set_snap_bounds])
+        .invoke_handler(tauri::generate_handler![
+            reveal_in_explorer,
+            set_snap_bounds,
+            start_daemon,
+            pick_folders
+        ])
         .run(tauri::generate_context!())
         .expect("error while running the Seula shell");
 }

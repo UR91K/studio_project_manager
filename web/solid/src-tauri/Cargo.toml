@@ -11,6 +11,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# The native folder dialog, used only inside the `pick_folders` command (ADR-0073); its own
+# permissions are not granted to the page.
+tauri-plugin-dialog = "2"
 
 # The snap-layout overlay (ADR-0057, src/snap.rs).
 [target.'cfg(windows)'.dependencies]
