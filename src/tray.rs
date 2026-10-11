@@ -1,7 +1,8 @@
-use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use tracing::info;
+
+use crate::http::shutdown::ShutdownTrigger;
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuId, MenuItem},
     Icon, TrayIconBuilder, TrayIconEvent,
@@ -27,12 +28,15 @@ fn create_tray_icon() -> Result<Icon, Box<dyn std::error::Error + Send + Sync>> 
 pub struct TrayApp {
     _tray_icon: tray_icon::TrayIcon,
     quit_id: MenuId,
-    shutdown_tx: mpsc::Sender<()>,
-    shutdown_rx: mpsc::Receiver<()>,
+    // Shared with `POST /system/shutdown` (ADR-0076): Quit fires it, and the loop below ends
+    // when either Quit or the route has. Ending the loop drops the icon, removing it.
+    shutdown: ShutdownTrigger,
 }
 
 impl TrayApp {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new(
+        shutdown: ShutdownTrigger,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let menu = Menu::new();
 
         let quit = MenuItem::new("Quit", true, None);
@@ -51,13 +55,10 @@ impl TrayApp {
             .with_icon(icon)
             .build()?;
 
-        let (shutdown_tx, shutdown_rx) = mpsc::channel();
-
         Ok(TrayApp {
             _tray_icon: tray_icon,
             quit_id,
-            shutdown_tx,
-            shutdown_rx,
+            shutdown,
         })
     }
 
@@ -65,8 +66,6 @@ impl TrayApp {
         info!("System tray initialized, server running in background");
 
         let quit_id = self.quit_id.clone();
-        let shutdown_tx = self.shutdown_tx.clone();
-
         // Set up event handlers
         TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| match event {
             TrayIconEvent::Click { button, .. } => {
@@ -78,18 +77,18 @@ impl TrayApp {
             _ => {}
         }));
 
-        let shutdown_tx_clone = shutdown_tx.clone();
+        let shutdown = self.shutdown.clone();
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
             if event.id() == &quit_id {
                 info!("Quit requested from tray menu");
-                let _ = shutdown_tx_clone.send(());
+                shutdown.trigger();
             }
         }));
 
         // Main event loop
         loop {
             // Check for shutdown signal
-            if self.shutdown_rx.try_recv().is_ok() {
+            if self.shutdown.is_triggered() {
                 break;
             }
 

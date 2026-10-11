@@ -10,6 +10,7 @@ use std::convert::Infallible;
 use std::path::PathBuf;
 
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::IntoResponse;
 use axum::Json;
@@ -39,7 +40,18 @@ pub async fn get_system_info(State(state): State<AppState>) -> Result<impl IntoR
         watch_paths,
         watcher_active,
         uptime_seconds,
+        config_path: crate::config::loader::find_config_file()
+            .ok()
+            .map(|p| p.display().to_string()),
+        log_dir: crate::logging::log_dir().map(|p| p.display().to_string()),
     }))
+}
+
+/// 202, then the daemon stops (ADR-0076). Firing the switch here is what the tray's Quit
+/// does too; the server's graceful shutdown lets this response finish first.
+pub async fn shutdown(State(state): State<AppState>) -> StatusCode {
+    state.shutdown.trigger();
+    StatusCode::ACCEPTED
 }
 
 pub async fn get_scan_status(State(state): State<AppState>) -> impl IntoResponse {

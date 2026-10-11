@@ -107,7 +107,12 @@ async fn run_server_mode() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = build_shared_state()?;
     let _config_watch = watch_config_file();
-    start_http_server(state.services, state.system_service).await
+    start_http_server(
+        state.services,
+        state.system_service,
+        seula::http::shutdown::ShutdownTrigger::new(),
+    )
+    .await
 }
 
 async fn run_tray_mode() -> Result<(), Box<dyn std::error::Error>> {
@@ -116,16 +121,22 @@ async fn run_tray_mode() -> Result<(), Box<dyn std::error::Error>> {
     let state = build_shared_state()?;
     let _config_watch = watch_config_file();
 
+    // One switch for both: the tray's Quit and POST /system/shutdown fire it (ADR-0076).
+    let shutdown = seula::http::shutdown::ShutdownTrigger::new();
+    let server_shutdown = shutdown.clone();
+
     // The HTTP server runs in a background task while the tray owns this thread.
     let http_handle = tokio::spawn(async move {
-        if let Err(e) = start_http_server(state.services, state.system_service).await {
+        if let Err(e) =
+            start_http_server(state.services, state.system_service, server_shutdown).await
+        {
             tracing::error!("HTTP server error: {}", e);
         }
     });
 
     // Create and run the tray app in a blocking task
     let tray_result = tokio::task::spawn_blocking(move || {
-        let tray_app = tray::TrayApp::new()?;
+        let tray_app = tray::TrayApp::new(shutdown)?;
         tray_app.run()
     })
     .await;
@@ -142,8 +153,14 @@ async fn run_tray_mode() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // If we get here, the user quit the tray, so stop the server
-    http_handle.abort();
+    // The tray has ended, so stop the server: it drains in-flight responses (the 202 that
+    // asked for this one included), but a long-lived stream must not hold the exit up.
+    if tokio::time::timeout(std::time::Duration::from_secs(3), http_handle)
+        .await
+        .is_err()
+    {
+        tracing::warn!("HTTP server did not drain in time, exiting anyway");
+    }
 
     Ok(())
 }
@@ -166,20 +183,22 @@ fn watch_config_file() -> Option<seula::config::live::ConfigFileWatcher> {
 async fn start_http_server(
     services: Services,
     system_service: SystemService,
+    shutdown: http::shutdown::ShutdownTrigger,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // The port is read once, here: the socket it names is what stays open.
     let config = seula::config::current().inspect_err(|e| {
         eprintln!("Failed to load configuration: {}", e);
     })?;
 
-    let state = http::state::AppState::new(services, system_service);
+    let state =
+        http::state::AppState::new(services, system_service).with_shutdown(shutdown.clone());
     let router = http::server::build_router(state);
 
     let addr = format!("127.0.0.1:{}", config.http_port()).parse::<std::net::SocketAddr>()?;
     info!("HTTP server listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, router).await?;
+    http::shutdown::serve(listener, router, shutdown).await?;
 
     Ok(())
 }
