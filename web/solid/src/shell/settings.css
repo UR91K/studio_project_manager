@@ -1,0 +1,17 @@
+/* The Settings dialog (ADR-0074). Colours and spacing come from the mockup's tokens. */
+.dialog .db { max-height: calc(100vh - var(--u) * 60); overflow-y: auto; }
+.dialog ul.setlist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-lo); background: var(--surface); max-height: calc(var(--row) * 5); overflow-y: auto; }
+.dialog ul.setlist li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--u) calc(var(--u) * 3); padding: var(--u) calc(var(--u) * 3); }
+.dialog ul.setlist li + li { border-top: 1px solid var(--border-lo); }
+.dialog ul.setlist .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.dialog ul.setlist .btn { padding: 0 var(--u); }
+.dialog ul.setlist .warn-line { flex-basis: 100%; }
+.dialog .setadd { margin-top: calc(var(--u) * 3); }
+.dialog .warn-line { color: var(--warning); margin-top: calc(var(--u) * 2); user-select: text; }
+.dialog .note { color: var(--text-2); margin-bottom: calc(var(--u) * 2); }
+.dialog .db .faint { margin-top: calc(var(--u) * 2); }
+.dialog .numfield { flex: none !important; width: calc(var(--u) * 50); }
+.dialog .setselect { background: var(--field); color: var(--text); border: 1px solid var(--border); height: var(--row); padding: 0 calc(var(--u) * 2); }
+.dialog dl.setloc { display: grid; grid-template-columns: max-content 1fr; gap: var(--u) calc(var(--u) * 4); margin: 0; }
+.dialog dl.setloc dt { color: var(--text-2); }
+.dialog dl.setloc dd { margin: 0; overflow-wrap: anywhere; user-select: text; }
