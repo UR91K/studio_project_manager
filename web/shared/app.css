@@ -24,16 +24,23 @@ html, body, #app { height: 100%; }
  * --chrome-bar-min-h tall, both in screen pixels. Above that height the bar grows with the
  * page, and the buttons, which fill it, grow with it. */
 :root {
-  --chrome-controls-w: 230px;
-  --chrome-bar-min-h: 34px;
+  --chrome-controls-w: 138px;
+  --chrome-bar-min-h: 35px;
   --chrome-icon: 10px;
 }
-.topbar { min-height: calc(var(--chrome-bar-min-h) / var(--zoom, 1)); }
+.topbar { --z: var(--zoom, 1); min-height: var(--chrome-bar-min-h); }
+/* ADR-0078, VS Code's rule. At zoom 1 and above the bar is 35 page pixels, so it grows on the
+ * screen and only the controls hold their size (they divide by --z = --zoom). Below zoom 1 the
+ * whole bar is counter-zoomed (Frame.tsx toggles the class from the zoom signal): its own pixels
+ * are then screen pixels, so 35 and 46 are exact and --z is 1. */
+.topbar.counter-zoom { --z: 1; }
+/* The open menu is counter-zoomed with it (menus.tsx), to be a normal size and sit under its title. */
+.topbar.counter-zoom, .appmenu.counter-zoom { zoom: calc(1 / var(--zoom, 1)); }
 /* The mockup gives .winctl a negative vertical margin to reach the bar's edges; stretched in a
  * bar with a minimum height, that still fills it. */
 .winctl { flex: none; align-self: stretch; }
 /* The window buttons are real buttons (ADR-0057); the mockup draws them as spans. */
-.winctl button { display: flex; flex: none; align-items: center; justify-content: center; width: calc(var(--chrome-controls-w) / 3 / var(--zoom, 1)); min-width: 0; align-self: stretch; background: none; border: 0; border-radius: 0; color: var(--text-2); cursor: default; }
+.winctl button { display: flex; flex: none; align-items: center; justify-content: center; width: calc(var(--chrome-controls-w) / 3 / var(--z)); min-width: 0; align-self: stretch; background: none; border: 0; border-radius: 0; color: var(--text-2); cursor: default; }
 /* `.hot` is :hover for the maximise button, which the native snap overlay covers (ADR-0057). */
 .winctl button:hover, .winctl button.hot { background: var(--hover); color: var(--text); }
 .winctl button.close:hover { background: var(--close); color: var(--close-text); }
@@ -43,7 +50,7 @@ html, body, #app { height: 100%; }
  * own hover background: a grey bar across the red. Undo that. */
 .winctl button .glyph, .winctl button .glyph:hover {
   display: block; width: auto; background: none; color: inherit;
-  font: calc(var(--chrome-icon) / var(--zoom, 1))/1 "Segoe Fluent Icons", "Segoe MDL2 Assets";
+  font: calc(var(--chrome-icon) / var(--z))/1 "Segoe Fluent Icons", "Segoe MDL2 Assets";
 }
 
 /* The main pane is one column no wider than its grid cell, and clips. Its grid had no
