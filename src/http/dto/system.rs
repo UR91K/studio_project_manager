@@ -17,6 +17,10 @@ pub struct SystemInfoResponse {
     pub watch_paths: Vec<String>,
     pub watcher_active: bool,
     pub uptime_seconds: i64,
+    /// The config.toml in use (ADR-0076).
+    pub config_path: Option<String>,
+    /// The folder the log files go to; null when there is none.
+    pub log_dir: Option<String>,
 }
 
 #[derive(Serialize)]

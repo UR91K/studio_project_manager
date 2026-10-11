@@ -339,6 +339,7 @@ pub fn build_router(state: AppState) -> Router {
             delete(media_handlers::remove_project_audio_file_from_list),
         )
         .route("/api/v1/system/info", get(system_handlers::get_system_info))
+        .route("/api/v1/system/shutdown", post(system_handlers::shutdown))
         .route(
             "/api/v1/system/statistics",
             get(system_handlers::get_statistics),

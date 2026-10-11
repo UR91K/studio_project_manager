@@ -1,6 +1,7 @@
 //! HTTP adapter tests. See `tests/http_tests.rs`.
 
 pub mod adapters;
+pub mod daemon;
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
