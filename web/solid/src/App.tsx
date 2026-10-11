@@ -54,7 +54,7 @@ export function App() {
       <Welcome />
       <ErrorScreen />
       <DropZone />
-      <SettingsDialog />
+      <Show when={shell.settingsOpen}><SettingsDialog /></Show>
     </div>
   );
 }

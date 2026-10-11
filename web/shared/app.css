@@ -82,6 +82,7 @@ input, textarea, .inspector { user-select: text; }
 
 /* Sits over the columns, not the title bar or status bar, so the window controls keep working.
    The window is a grid and row 2 is where the columns are. */
+.win > .cols { grid-area: 2 / 1; }
 .flow-screen { grid-area: 2 / 1; z-index: 20; background: var(--surface); min-height: 0; overflow: auto; }
 .flow-screen.drop-zone { background: var(--scrim); pointer-events: none; display: flex; }
 .flow-screen.drop-zone .empty { flex: 1; margin: calc(var(--u) * 8); border: 2px dashed var(--accent); border-radius: var(--radius); height: auto; background: var(--surface); }
