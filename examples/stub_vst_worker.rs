@@ -9,6 +9,8 @@
 //! - `CRASH` -- announce the path, then die without reporting a result
 //! - `HANG`  -- announce the path, then block forever
 //! - `SILENT`-- exit immediately, before announcing anything
+//! - `LINGER`-- scan normally, then never exit after `done`, the way a plugin DLL that
+//!   hangs in its exit handlers leaves the real worker (`plugin-scan-hangs-after-last-plugin`)
 //! - anything else -- report a plausible success
 //!
 //! Driven by `tests/plugin_scanner.rs` via `Spawner::with_worker`.
@@ -34,6 +36,7 @@ fn main() {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     let mut scanned = 0usize;
+    let linger = paths.iter().any(|p| p.contains("LINGER"));
 
     for path in &paths {
         if path.contains("SILENT") {
@@ -70,6 +73,13 @@ fn main() {
 
     writeln!(out, r#"{{"event":"done","scanned":{}}}"#, scanned).unwrap();
     out.flush().unwrap();
+
+    if linger {
+        // Every result is out; now refuse to go. Only killing ends this.
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+        }
+    }
 }
 
 /// A minimal `PluginMeta`, matching the real record's required fields.

@@ -98,3 +98,8 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   Fails with and without the plugin-scan tracing changes, so it predates them. Not seen on
   the maintainer's machine. Unverified guess: this checkout has `core.autocrlf` converting
   to CRLF, and both tests embed their XML in raw strings.
+- [ ] 2026-10-12 `tray-exit-leaves-process-running` The tray app logs "Tray app exited normally" and its process stays alive while a scan's blocking thread has not finished. src/main.rs
+  Seen on the tester's machine: both `seula.exe` processes from the `plugin-scan-hangs-after-last-plugin`
+  runs were still alive hours after logging that line. Inferred, not traced: the tokio runtime
+  waits for `spawn_blocking` tasks when it shuts down. Harmless since ADR-0082 bounds the scan's
+  wait, but any other blocking task that never ends would do the same.

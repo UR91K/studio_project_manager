@@ -11,11 +11,11 @@
 //! The point is to make a stall *locatable*. Work that runs plugin code is wrapped in a
 //! [`phase`], and a watchdog thread reports any phase that has gone on for longer than
 //! [`WATCHDOG_INTERVAL`] -- naming the whole stack, so "stuck in `FreeLibrary` of X"
-//! reads differently from "stuck in X's init". The watchdog keeps reporting after
-//! `main` returns, which is what tells a hang in our own shutdown from one in the
-//! operating system's teardown of the plugin DLLs: process exit terminates every
-//! other thread before it detaches the DLLs, so the watchdog falling silent while the
-//! parent still sees the process alive puts the hang in DLL detach.
+//! reads differently from "stuck in X's init".
+//!
+//! This is how `plugin-scan-hangs-after-last-plugin` was found: a plugin DLL hanging in
+//! its exit handlers. The worker now ends without running them (ADR-0081), but a plugin
+//! can still call `exit()` itself, which is what [`register_exit_hook`] is for.
 
 use std::fmt;
 use std::io::Write;
@@ -126,11 +126,11 @@ pub fn start_watchdog() {
 
 /// Register a C runtime exit handler that logs when it runs.
 ///
-/// Returning from `main` hands control to the C runtime's `exit`, which runs the
-/// `atexit` handlers (last registered first) and then terminates the process, which on
-/// Windows is when every loaded DLL is detached. This handler is registered first, so
-/// it runs last of the executable's own: seeing its line means everything up to the
-/// operating system's part of exit has finished.
+/// The worker itself never exits this way (ADR-0081), but a plugin can call `exit()`,
+/// which runs the C runtime's `atexit` handlers (last registered first) and then
+/// terminates the process, detaching every loaded DLL. This handler is registered
+/// first, so it runs last of the executable's own: seeing its line means a plugin
+/// ended the process, and everything up to the operating system's part has finished.
 pub fn register_exit_hook() {
     unsafe extern "C" {
         fn atexit(callback: extern "C" fn()) -> std::ffi::c_int;

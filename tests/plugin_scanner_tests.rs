@@ -82,6 +82,26 @@ fn a_crash_is_blamed_on_the_plugin_that_caused_it() {
     assert_eq!(report.restarts, 1);
 }
 
+/// Regression test for `plugin-scan-hangs-after-last-plugin`: a worker that reports
+/// everything and then never exits. Before ADR-0082 the supervisor waited on it forever,
+/// so this runs the scan on a thread and fails rather than hanging the test run.
+#[test]
+fn a_worker_that_never_exits_after_done_is_killed_and_the_scan_completes() {
+    let candidates = paths(&["a.vst3", "LINGER.vst3", "c.vst3"]);
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(spawner(30).scan(&candidates));
+    });
+
+    let report = rx
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the scan must not wait forever on a worker that will not exit");
+
+    assert_eq!(report.succeeded(), 3, "every result arrived before the worker stuck");
+    assert_eq!(report.failed(), 0);
+    assert_eq!(report.restarts, 0, "a stuck exit is not a plugin failure");
+}
+
 #[test]
 fn a_hang_is_broken_by_the_timeout_and_the_scan_continues() {
     let candidates = paths(&["before.vst3", "HANG.vst3", "after.vst3"]);

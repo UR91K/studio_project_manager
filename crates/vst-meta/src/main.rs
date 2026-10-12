@@ -94,13 +94,43 @@ fn main() {
         }
     }
 
-    // Everything from here is process exit. The watchdog keeps reporting until the
-    // operating system terminates it, so it falling silent while the parent still sees
-    // this process alive puts a hang in DLL detach, not in our code.
-    // Leaked, not dropped: the phase has to stay open through the exit for the
-    // watchdog to report it.
-    std::mem::forget(diag::phase("exiting (main has returned)"));
-    vst_meta::diag!("returning from main");
+    exit_without_cleanup(0);
+}
+
+/// End the process at once, without running anyone's exit code (ADR-0081).
+///
+/// A normal exit runs the C runtime's exit handlers and then every loaded DLL's detach
+/// handler, and the plugins this process has loaded are still loaded: many pin
+/// themselves past `FreeLibrary`. Native Instruments' `ni-platform.dll`, which Kontakt,
+/// Massive and Reaktor pull in, blocks forever in `WSAPoll` from its exit handlers, and
+/// the worker never exits (`plugin-scan-hangs-after-last-plugin`). Nothing this process
+/// owns needs tidying -- its output is written and flushed, and the operating system
+/// reclaims the rest -- so the cleanup is all risk and no benefit.
+#[allow(unreachable_code)] // the fallback after TerminateProcess / _exit
+fn exit_without_cleanup(code: u32) -> ! {
+    // Everything we wrote is already flushed after each line; this is belt and braces,
+    // since what is still in a buffer when the process ends is lost.
+    let _ = std::io::stdout().flush();
+    let _ = std::io::stderr().flush();
+    vst_meta::diag!("exiting with code {} without running exit handlers", code);
+
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess, TerminateProcess};
+        TerminateProcess(GetCurrentProcess(), code);
+    }
+    #[cfg(unix)]
+    unsafe {
+        // `_exit`, not `exit`: it skips the atexit handlers, as TerminateProcess does.
+        unsafe extern "C" {
+            fn _exit(status: std::ffi::c_int) -> !;
+        }
+        _exit(code as std::ffi::c_int);
+    }
+
+    // TerminateProcess on the current process does not return. If it somehow did,
+    // fall back to an ordinary exit rather than carry on.
+    std::process::exit(code as i32)
 }
 
 fn read_paths_from_stdin() -> Vec<PathBuf> {

@@ -685,46 +685,67 @@ impl CurrentPlugin {
     }
 }
 
-/// Wait for the worker to exit, reporting while it does not.
+/// Wait for the worker to exit, killing it if it does not (ADR-0082).
 ///
-/// The wait has no limit, the same as a plain `wait()`: this is instrumentation, not
-/// a fix. It polls so that a worker which said `done` but never exits shows up in the
-/// log as exactly that, in its `worker` span, instead of as a scan that silently stops.
+/// By the time this runs, every result the worker will give is already collected, so
+/// nothing is waited *for* -- this only reaps the process. A worker that has said
+/// `done` and still not exited after [`EXIT_GRACE`] is stuck in someone's exit code
+/// (`plugin-scan-hangs-after-last-plugin`) and is killed. If even the kill does not
+/// take within another grace period the handle is let go: the scan's results are
+/// complete, and blocking the whole scan on one process that will not die is the bug
+/// this exists to prevent.
 fn wait_for_exit(child: &mut Child) {
-    const POLL: Duration = Duration::from_millis(50);
-    const REPORT_EVERY: Duration = Duration::from_secs(5);
-
     let started = Instant::now();
-    let mut reported = Instant::now();
+    if let Some(code) = poll_exit(child, EXIT_GRACE) {
+        tracing::debug!(
+            "Exited with code {} after {} ms of waiting",
+            code,
+            started.elapsed().as_millis()
+        );
+        return;
+    }
+
+    tracing::warn!(
+        "Worker has not exited {:.0}s after its output ended; killing it",
+        EXIT_GRACE.as_secs_f64()
+    );
+    if let Err(e) = child.kill() {
+        tracing::warn!("Killing the worker failed: {}", e);
+    }
+    match poll_exit(child, EXIT_GRACE) {
+        Some(code) => tracing::debug!("Killed; exited with code {}", code),
+        None => tracing::error!(
+            "Worker did not exit {:.0}s after being killed; leaving it and carrying on",
+            EXIT_GRACE.as_secs_f64()
+        ),
+    }
+}
+
+/// How long a worker that has finished gets to exit before it is killed. It needs
+/// milliseconds: since ADR-0081 it ends itself without running any exit code.
+const EXIT_GRACE: Duration = Duration::from_secs(5);
+
+/// Poll for exit for up to `limit`, returning the exit code as text if it exited.
+fn poll_exit(child: &mut Child, limit: Duration) -> Option<String> {
+    const POLL: Duration = Duration::from_millis(10);
+    let started = Instant::now();
     loop {
         match child.try_wait() {
+            // On Windows a crash is an NTSTATUS, readable only in hex
+            // (0xC0000005 is an access violation).
             Ok(Some(status)) => {
-                // On Windows a crash is an NTSTATUS, readable only in hex
-                // (0xC0000005 is an access violation).
-                let code = status
-                    .code()
-                    .map(|c| format!("{} (0x{:08X})", c, c as u32))
-                    .unwrap_or_else(|| "none".to_string());
-                tracing::debug!(
-                    "Exited with code {} after {} ms of waiting",
-                    code,
-                    started.elapsed().as_millis()
+                return Some(
+                    status
+                        .code()
+                        .map(|c| format!("{} (0x{:08X})", c, c as u32))
+                        .unwrap_or_else(|| "none".to_string()),
                 );
-                return;
             }
-            Ok(None) => {
-                if reported.elapsed() >= REPORT_EVERY {
-                    tracing::warn!(
-                        "Worker has not exited {:.0}s after its output ended; still waiting",
-                        started.elapsed().as_secs_f64()
-                    );
-                    reported = Instant::now();
-                }
-                thread::sleep(POLL);
-            }
+            Ok(None) if started.elapsed() < limit => thread::sleep(POLL),
+            Ok(None) => return None,
             Err(e) => {
                 tracing::warn!("Waiting for the worker to exit failed: {}", e);
-                return;
+                return None;
             }
         }
     }
