@@ -14,6 +14,8 @@ pub mod meta;
 pub mod protocol;
 
 #[cfg(feature = "host")]
+pub mod diag;
+#[cfg(feature = "host")]
 pub mod scan;
 #[cfg(feature = "host")]
 pub mod shell;

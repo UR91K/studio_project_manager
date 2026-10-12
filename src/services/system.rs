@@ -278,7 +278,25 @@ impl SystemService {
             };
             let outcome =
                 crate::services::plugins::scan_configured_plugins(mode, &db, &mut on_plugin)
-                    .and_then(|scan| db.blocking_lock().record_plugin_refresh(&scan));
+                    .and_then(|scan| {
+                        tracing::debug!(
+                            "Plugin scan returned {} result(s); waiting for the database",
+                            scan.report.results.len()
+                        );
+                        let lock_started = std::time::Instant::now();
+                        let mut guard = db.blocking_lock();
+                        tracing::debug!(
+                            "Database locked after {} ms; recording the plugin scan",
+                            lock_started.elapsed().as_millis()
+                        );
+                        let record_started = std::time::Instant::now();
+                        let recorded = guard.record_plugin_refresh(&scan);
+                        tracing::debug!(
+                            "Plugin scan recorded in {} ms",
+                            record_started.elapsed().as_millis()
+                        );
+                        recorded
+                    });
 
             match outcome {
                 Ok(result) => {

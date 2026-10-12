@@ -80,3 +80,12 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   Fixed ba0a9c1. The panic is caught and answered as 0, and the buffer is zeroed first.
   Regression test: `a_panicking_host_callback_does_not_cross_the_ffi_boundary`, which aborted
   the test process before the fix.
+- [ ] 2026-10-12 `plugin-stdout-desyncs-scan` A plugin that prints to stdout without a trailing newline swallows the worker's next protocol line, and the supervisor, which attributes results by position, then records every following result against the plugin before it. src/scan/plugins/spawner.rs
+  Seen on a tester's Windows 10 machine: Hadron (`hadron64.dll`) prints `ftable 1:` to
+  `ftable 172:` and ends on a bare `ft`, which glued onto its own `result` line. The ~150
+  plugins after it were stored with their neighbour's metadata, in both runs.
+- [ ] 2026-10-12 `plugin-scan-hangs-after-last-plugin` The first-run plugin scan stops after the last plugin's `begin` and never completes, and the timeout does not fire. src/scan/plugins/spawner.rs
+  Same tester, both runs. Cause not yet confirmed: the leading suspect is `child.wait()`
+  blocking on a worker that sent `done` but never exits (a plugin hanging process exit),
+  since the 30s timeout only covers reading events. Tracing added across the supervisor
+  and the worker (`seula::scan::plugins::worker`) to confirm it before fixing.

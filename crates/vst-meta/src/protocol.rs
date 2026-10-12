@@ -24,6 +24,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::meta::PluginMeta;
 
+/// Prefix on the worker's own diagnostic lines on stderr.
+///
+/// Plugins write to stderr too, often a great deal. The marker lets the parent tell the
+/// worker's account of what it is doing from whatever the plugin in flight is printing.
+pub const DIAG_MARKER: &str = "@vst-meta ";
+
 /// One line of the worker's stdout stream.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]

@@ -10,7 +10,8 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use vst_meta::protocol::Event;
+use vst_meta::diag;
+use vst_meta::protocol::{Event, Outcome};
 use vst_meta::scan;
 
 #[derive(Parser)]
@@ -53,6 +54,16 @@ fn main() {
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     }
 
+    diag::start_watchdog();
+    diag::register_exit_hook();
+    vst_meta::diag!(
+        "started: {} {} on {} {}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -62,7 +73,10 @@ fn main() {
             human,
         } => {
             let paths = if stdin {
-                read_paths_from_stdin()
+                let _phase = diag::phase("reading the path list from stdin");
+                let paths = read_paths_from_stdin();
+                vst_meta::diag!("read {} path(s) from stdin", paths.len());
+                paths
             } else {
                 paths
             };
@@ -79,6 +93,14 @@ fn main() {
             }
         }
     }
+
+    // Everything from here is process exit. The watchdog keeps reporting until the
+    // operating system terminates it, so it falling silent while the parent still sees
+    // this process alive puts a hang in DLL detach, not in our code.
+    // Leaked, not dropped: the phase has to stay open through the exit for the
+    // watchdog to report it.
+    std::mem::forget(diag::phase("exiting (main has returned)"));
+    vst_meta::diag!("returning from main");
 }
 
 fn read_paths_from_stdin() -> Vec<PathBuf> {
@@ -102,11 +124,13 @@ fn run_ndjson(paths: &[PathBuf]) {
     let mut out = stdout.lock();
 
     let mut scanned = 0usize;
+    let total = paths.len();
 
-    for path in paths {
+    for (index, path) in paths.iter().enumerate() {
         let display = path.display().to_string();
 
         // Announce before touching the binary, so a crash names its cause.
+        vst_meta::diag!("begin [{}/{}] {}", index + 1, total, display);
         emit(
             &mut out,
             &Event::Begin {
@@ -114,7 +138,27 @@ fn run_ndjson(paths: &[PathBuf]) {
             },
         );
 
-        let outcome = scan::scan_path(path);
+        let outcome = {
+            let _phase = diag::phase(format!("scan {}", display));
+            scan::scan_path(path)
+        };
+        match &outcome {
+            Outcome::Success { plugins } => vst_meta::diag!(
+                "result [{}/{}] success, {} record(s): {}",
+                index + 1,
+                total,
+                plugins.len(),
+                display
+            ),
+            Outcome::Error { error_type, error } => vst_meta::diag!(
+                "result [{}/{}] {}: {} ({})",
+                index + 1,
+                total,
+                error_type,
+                display,
+                error
+            ),
+        }
 
         emit(
             &mut out,
@@ -126,16 +170,22 @@ fn run_ndjson(paths: &[PathBuf]) {
         scanned += 1;
     }
 
+    diag::log_process_state("after the last plugin");
     emit(&mut out, &Event::Done { scanned });
+    vst_meta::diag!("done: {} of {} scanned, done line written", scanned, total);
 }
 
 fn emit(out: &mut impl Write, event: &Event) {
     match serde_json::to_string(event) {
         Ok(line) => {
-            // Ignore write errors: a closed pipe means the parent gave up on us, and
-            // there is nowhere left to report that to.
-            let _ = writeln!(out, "{}", line);
-            let _ = out.flush();
+            // A closed pipe means the parent gave up on us, so there is nothing to do
+            // about a write error -- but say so on stderr, which may still be read.
+            if let Err(e) = writeln!(out, "{}", line) {
+                vst_meta::diag!("writing a {}-byte event to stdout failed: {}", line.len(), e);
+            }
+            if let Err(e) = out.flush() {
+                vst_meta::diag!("flushing stdout failed: {}", e);
+            }
         }
         Err(e) => eprintln!("Failed to serialize event: {}", e),
     }
