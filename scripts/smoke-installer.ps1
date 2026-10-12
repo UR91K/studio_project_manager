@@ -56,7 +56,7 @@ try {
         $bin = $BinDir
     } else {
         $installer = Get-ChildItem $InstallerDir -Filter '*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        Check 'installer found' ($null -ne $installer) $InstallerDir
+        Check 'installer found' ($null -ne $installer) $installer.Name
         $p = Start-Process $installer.FullName -ArgumentList '/S', "/D=$InstallDir" -Wait -PassThru
         Check 'silent install exits 0' ($p.ExitCode -eq 0) "exit $($p.ExitCode)"
         $bin = $InstallDir
