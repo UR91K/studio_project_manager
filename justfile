@@ -174,6 +174,12 @@ sandbox:
     Write-Host 'There is no text editor in the sandbox. To edit config.toml, run in PowerShell there, for example:'
     Write-Host '  Add-Content "$env:APPDATA\Seula\config.toml" "http_port = 50099"   (a restart-only key)'
 
+# `just version` shows the version and whether every file agrees; `just version 0.2.0-alpha.3`
+# sets it in all seven places (scripts/version.py). Only goes forward, never onto an existing
+# tag, checks the lock files, and does not commit or tag.
+version *args:
+    {{python}} scripts/version.py {{args}}
+
 # Typecheck and lint the frontend
 check: _npm
     cd web/solid; npm run build

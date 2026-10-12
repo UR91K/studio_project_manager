@@ -82,6 +82,8 @@ run ("More info", then "Run anyway").
   live config, the shutdown route and the reported paths. `just sandbox` opens the installer in
   an interactive sandbox with sample Live sets and pictures. Both need `just release` first.
 - `just release` builds the scanner worker (`vst-meta`) along with the daemon.
+- `just version` shows the version and whether all seven files that carry it agree;
+  `just version 0.2.0-alpha.3` sets it in all of them.
 - Debug builds keep line tables only, which roughly halves the size of `target`.
 - New decision records: ADR-0072 to ADR-0079.
 
