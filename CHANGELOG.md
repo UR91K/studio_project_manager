@@ -78,7 +78,7 @@ run ("More info", then "Run anyway").
 
 ### For developers
 
-- `just smoke` runs the installer in a clean Windows Sandbox and checks 41 things, including
+- `just smoke` runs the installer in a clean Windows Sandbox and checks 40 things, including
   live config, the shutdown route and the reported paths. `just sandbox` opens the installer in
   an interactive sandbox with sample Live sets and pictures. Both need `just release` first.
 - `just release` builds the scanner worker (`vst-meta`) along with the daemon.
