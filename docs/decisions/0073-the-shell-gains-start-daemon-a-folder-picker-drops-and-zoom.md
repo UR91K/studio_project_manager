@@ -1,6 +1,6 @@
 # 0073. The shell gains start-daemon, a folder picker, drop paths and zoom
 
-- **Status:** Accepted, not yet implemented
+- **Status:** Accepted
 - **Recognized:** 2026-10-11, from a think-aloud session with a tester
 - **Decided:** 2026-10-11
 - **Recorded:** 2026-10-11

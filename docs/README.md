@@ -14,6 +14,7 @@ month.
 | How the pieces fit together | `architecture/` | Yes |
 | How one module works | the `//!` header in that file | Yes |
 | How to install and use Seula | `/README.md` | Yes |
+| What changed in each release | `/CHANGELOG.md` | Yes — a section per release, written at release time from the commits and ADRs since the last tag |
 
 If you want to write down a fact, find its home above and put it there. Do not
 summarise it somewhere else "for convenience" — that is how the previous generation of

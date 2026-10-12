@@ -1,6 +1,6 @@
 # 0078. The title bar follows VS Code's zoom rule
 
-- **Status:** Accepted, not yet implemented
+- **Status:** Accepted, implemented; not yet checked by hand in the installed app
 - **Recognized:** 2026-10-11, comparing against VS Code at several zoom levels
 - **Decided:** 2026-10-11
 - **Recorded:** 2026-10-11

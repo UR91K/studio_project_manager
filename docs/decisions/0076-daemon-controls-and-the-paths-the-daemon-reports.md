@@ -1,6 +1,6 @@
 # 0076. Daemon controls in the window, and the paths the daemon reports
 
-- **Status:** Accepted, not yet implemented
+- **Status:** Accepted
 - **Recognized:** 2026-10-11, while settling the menus (ADR-0075)
 - **Decided:** 2026-10-11
 - **Recorded:** 2026-10-11

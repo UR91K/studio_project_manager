@@ -1,6 +1,6 @@
 # 0074. Onboarding and Settings edit the config through the daemon
 
-- **Status:** Accepted, not yet implemented
+- **Status:** Accepted
 - **Recognized:** 2026-10-11, from a think-aloud session with a tester
 - **Decided:** 2026-10-11
 - **Recorded:** 2026-10-11

@@ -1,6 +1,6 @@
 # 0072. Config changes reach the running daemon
 
-- **Status:** Accepted, not yet implemented
+- **Status:** Accepted
 - **Recognized:** 2026-10-11, reading the config code after a tester asked for the daemon
   to refresh its config by itself
 - **Decided:** 2026-10-11 for the split between live and restart-required settings, which
