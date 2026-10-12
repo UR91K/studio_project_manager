@@ -2,7 +2,7 @@
   "name": "seula-web-solid",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "version": "0.2.0-alpha.2",
+  "version": "0.2.0-alpha.3",
   "type": "module",
   "scripts": {
     "dev": "vite",

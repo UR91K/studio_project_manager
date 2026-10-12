@@ -2787,7 +2787,7 @@ dependencies = [
 
 [[package]]
 name = "seula-shell-solid"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "tauri",
  "tauri-build",
