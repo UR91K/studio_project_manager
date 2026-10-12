@@ -8,7 +8,7 @@ Seula is in alpha. Versions run `0.2.0-alpha.N` until a beta, and the first stab
 is `1.0.0`. The Windows installer is not code-signed yet, so SmartScreen warns on first
 run ("More info", then "Run anyway").
 
-## 0.2.0-alpha.2 (not yet released)
+## 0.2.0-alpha.2 (2026-10-12)
 
 ### New
 
@@ -36,8 +36,8 @@ run ("More info", then "Run anyway").
   (ADR-0076)
 - **Zoom.** `Ctrl` plus, minus and zero, and `Ctrl` with the mouse wheel. The title bar behaves
   like VS Code's: the window controls stay 138 pixels wide at every zoom, the bar is at least 35
-  pixels tall, and zoomed out the whole bar keeps its size. Help > About shows the zoom the app
-  sees. (ADR-0073, ADR-0077, ADR-0078)
+  pixels tall, and zoomed out the whole bar keeps its size. The zoom level is remembered between
+  launches. Help > About shows the zoom the app sees. (ADR-0073, ADR-0077, ADR-0078, ADR-0080)
 - **Where things are.** `GET /api/v1/system/info` now reports the config file and the log
   folder, which Open config file and Open logs folder use. (ADR-0076)
 
@@ -89,14 +89,11 @@ run ("More info", then "Run anyway").
 
 ### Known issues
 
-- Zoom is not remembered between launches. (`zoom-not-remembered`)
 - Dragging an image onto a collection's cover art may not work in the desktop app; the button
   next to it does. It has not been tried in the installed app.
 - On the welcome screen, a folder Seula rejected is reported only briefly in the status bar, and
   the content sits at the top of the window instead of the middle. (`failed-folder-notice-hidden`,
   `welcome-not-centred`)
-- The title bar's sizing at extreme zoom has been checked by emulation and against VS Code's
-  rules, and not yet by hand in the installed app. (`titlebar-breaks-at-extreme-zoom`)
 - If `config.toml` cannot be read at startup, the window only says the daemon cannot be
   reached; the reason is on the console.
 - The folder watcher is not started automatically; start it from Tools.

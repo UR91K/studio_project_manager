@@ -54,8 +54,12 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   with the create-and-delete probe because `readonly()` is unreliable on Windows, and never
   asked whether project folders needed checking at all. No ADR or doc says they must be writable.
   Fixed def83dd. Regression test: `validating_project_paths_writes_nothing_into_them`.
-- [ ] 2026-10-11 `titlebar-breaks-at-extreme-zoom` At extreme zoom levels (found in the Windows Sandbox, 2026-10-11) the title bar breaks: it can shrink below a usable height and the window controls change width and icon size. Wanted: a minimum height on the title bar, a constant width for the window controls, and their icons always the same size. Frame.tsx, parts.tsx
-- [ ] 2026-10-11 `zoom-not-remembered` The window's zoom (Ctrl plus, minus, zero) resets on every launch; checked in the Windows Sandbox 2026-10-11. ADR-0073 left this open: the webview does not keep it, so it waits for the preferences endpoint (ADR-0031, ADR-0062) or the page storing the factor itself.
+- [x] 2026-10-11 `titlebar-breaks-at-extreme-zoom` At extreme zoom levels (found in the Windows Sandbox, 2026-10-11) the title bar breaks: it can shrink below a usable height and the window controls change width and icon size. Wanted: a minimum height on the title bar, a constant width for the window controls, and their icons always the same size. Frame.tsx, parts.tsx
+  Fixed 4c9fdb6, 4960450, 47c913d and 47221c3 (ADR-0077, ADR-0078); the first attempt (72148a8)
+  did nothing under real zoom. Checked by hand in the Windows Sandbox, 2026-10-12.
+- [x] 2026-10-11 `zoom-not-remembered` The window's zoom (Ctrl plus, minus, zero) resets on every launch; checked in the Windows Sandbox 2026-10-11. ADR-0073 left this open: the webview does not keep it, so it waits for the preferences endpoint (ADR-0031, ADR-0062) or the page storing the factor itself.
+  Fixed 2ddf68e (ADR-0080): the page stores the factor in `localStorage` and restores it at
+  startup. Checked by hand in the Windows Sandbox, 2026-10-12.
 - [x] 2026-10-11 `vst2-name-blank` SoundTheory Gullfoss, Gullfoss Live and Gullfoss Master (VST2) were stored with an empty name; a think-aloud test showed the same on other plugins. crates/vst/src/host.rs
   Cause: the `vst` crate reads the name from `effGetProductString` (48) alone. These plugins
   answer 48 with an empty string and success; only `effGetEffectName` (45) has the name
