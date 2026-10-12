@@ -95,9 +95,11 @@ smoke:
     $root = (Get-Location).Path
     $installer = "$root\web\target\release\bundle\nsis"
     if (-not (Get-ChildItem $installer -Filter '*-setup.exe' -ErrorAction SilentlyContinue)) { Write-Host 'No installer found; run `just release` first.'; exit 1 }
-    $out = "$root\target\sandbox\out"
-    if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+    # A fresh folder each run: the previous sandbox can hold its mapped folder for a while after it closes.
+    $out = "$root\target\sandbox\out-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     New-Item -ItemType Directory -Force $out | Out-Null
+    Get-ChildItem "$root\target\sandbox" -Directory -Filter 'out*' | Sort-Object Name -Descending | Select-Object -Skip 3 |
+        ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
     $wsb = "$root\target\sandbox\smoke.wsb"
     @"
     <Configuration>
