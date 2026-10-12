@@ -16,3 +16,4 @@ test_data/
 /mockup/data/mock-api.json
 # full-size cover originals; the mockups and generator use images/thumbs/ only
 /mockup/images/cover-*
+__pycache__/

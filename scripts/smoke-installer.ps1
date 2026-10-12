@@ -55,7 +55,7 @@ try {
     if ($BinDir) {
         $bin = $BinDir
     } else {
-        $installer = Get-ChildItem $InstallerDir -Filter '*-setup.exe' | Select-Object -First 1
+        $installer = Get-ChildItem $InstallerDir -Filter '*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         Check 'installer found' ($null -ne $installer) $InstallerDir
         $p = Start-Process $installer.FullName -ArgumentList '/S', "/D=$InstallDir" -Wait -PassThru
         Check 'silent install exits 0' ($p.ExitCode -eq 0) "exit $($p.ExitCode)"
@@ -208,7 +208,7 @@ if (-not $BinDir) {
         }
         $false
     }
-    $installer = Get-ChildItem $InstallerDir -Filter '*-setup.exe' | Select-Object -First 1
+    $installer = Get-ChildItem $InstallerDir -Filter '*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     $null = Start-Process $installer.FullName -ArgumentList '/S', "/D=$InstallDir" -Wait -PassThru
     $d = Start-Daemon
     Check 'upgrade test: daemon running' (Wait-Health)
