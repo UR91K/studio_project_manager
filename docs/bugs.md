@@ -84,7 +84,7 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   Seen on a tester's Windows 10 machine: Hadron (`hadron64.dll`) prints `ftable 1:` to
   `ftable 172:` and ends on a bare `ft`, which glued onto its own `result` line. The ~150
   plugins after it were stored with their neighbour's metadata, in both runs.
-- [ ] 2026-10-12 `plugin-scan-hangs-after-last-plugin` The first-run plugin scan stops after the last plugin's `begin` and never completes, and the timeout does not fire. src/scan/plugins/spawner.rs
+- [x] 2026-10-12 `plugin-scan-hangs-after-last-plugin` The first-run plugin scan stops after the last plugin's `begin` and never completes, and the timeout does not fire. src/scan/plugins/spawner.rs
   Same tester, both runs. Tracing added across the supervisor and the worker
   (`seula::scan::plugins::worker`) to confirm the cause before fixing.
   2026-10-12, confirmed on the tester's machine: both workers were still alive hours later
@@ -94,6 +94,8 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   `FreeLibrary`, so the detach only runs at exit. The worker had sent `done`, so the
   supervisor sat in `child.wait()`, which has no timeout. The tray app logged "exited
   normally" and its process stayed alive too, holding the scan thread.
+  Fixed ce2e262 (ADR-0081, ADR-0082). Checked on the tester's machine against the real
+  library: the worker exits 84 ms after `done`, and the first-run scan completes.
 - [ ] 2026-10-12 `version-tests-fail-on-tester-machine` `test_version_parsing` and `test_beta_version` fail on a tester's Windows 10 machine: `patch` comes back 0 for `MinorVersion="12.0_12049"`, expected 12049. tests/scan/parser/basic.rs
   Fails with and without the plugin-scan tracing changes, so it predates them. Not seen on
   the maintainer's machine. Unverified guess: this checkout has `core.autocrlf` converting
