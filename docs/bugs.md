@@ -89,3 +89,7 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   blocking on a worker that sent `done` but never exits (a plugin hanging process exit),
   since the 30s timeout only covers reading events. Tracing added across the supervisor
   and the worker (`seula::scan::plugins::worker`) to confirm it before fixing.
+- [ ] 2026-10-12 `version-tests-fail-on-tester-machine` `test_version_parsing` and `test_beta_version` fail on a tester's Windows 10 machine: `patch` comes back 0 for `MinorVersion="12.0_12049"`, expected 12049. tests/scan/parser/basic.rs
+  Fails with and without the plugin-scan tracing changes, so it predates them. Not seen on
+  the maintainer's machine. Unverified guess: this checkout has `core.autocrlf` converting
+  to CRLF, and both tests embed their XML in raw strings.

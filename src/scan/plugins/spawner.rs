@@ -16,6 +16,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -158,6 +159,9 @@ impl Spawner {
         let budget = paths.len().saturating_mul(RESTART_BUDGET_FACTOR);
         let mut budget_exhausted = false;
         let started = Instant::now();
+        // Info, not debug: a warning is worth little without the plugin it is about,
+        // and a span below the configured level is not shown at all.
+        let _scan = tracing::info_span!("plugin_scan", candidates = paths.len()).entered();
         tracing::debug!(
             "Plugin scan of {} candidate(s): worker {}, timeout {:?}, restart budget {}",
             paths.len(),
@@ -255,6 +259,12 @@ impl Spawner {
     }
 
     /// Run one worker over `batch`, returning what it managed before stopping.
+    ///
+    /// Everything logged about this worker is inside a `worker{pid, base}` span, and
+    /// everything about one plugin inside a `plugin{n, path}` span under it, so a log
+    /// can be cut down to one worker or one plugin by its span. The pipe-reader threads
+    /// enter those spans themselves, since a span does not follow work onto another
+    /// thread: see [`CurrentPlugin`].
     fn run_batch(
         &self,
         batch: &[PathBuf],
@@ -263,47 +273,47 @@ impl Spawner {
         on_progress: &mut dyn FnMut(usize, usize, &Path),
     ) -> Result<BatchRun, PluginScanError> {
         let mut child = self.spawn(batch)?;
-        let pid = child.id();
+        let worker = tracing::info_span!("worker", pid = child.id(), base);
+        let _worker = worker.enter();
         tracing::debug!(
-            "Worker pid {} started for {} candidate(s) at offset {} of {}",
-            pid,
+            "Started for {} candidate(s) at offset {} of {}",
             batch.len(),
             base,
             total
         );
+        let current = CurrentPlugin::new(worker.clone());
 
         // Feed the path list on stdin rather than argv: a large library would blow
         // past the command-line length limit. A dedicated thread keeps the write from
         // ever interleaving badly with our reads.
         let stdin = child.stdin.take().expect("stdin was piped");
         let list: Vec<String> = batch.iter().map(|p| p.display().to_string()).collect();
+        let span = worker.clone();
         thread::spawn(move || {
+            let _worker = span.enter();
             let mut stdin = stdin;
             for (i, path) in list.iter().enumerate() {
                 if let Err(e) = writeln!(stdin, "{}", path) {
                     // Worker died early; nothing to do about it here.
-                    tracing::debug!(
-                        "Worker pid {}: stdin closed after {} of {} paths: {}",
-                        pid,
-                        i,
-                        list.len(),
-                        e
-                    );
+                    tracing::debug!("stdin closed after {} of {} paths: {}", i, list.len(), e);
                     return;
                 }
             }
             // Dropping stdin closes the pipe, which is how the worker knows the list
             // has ended.
-            tracing::trace!("Worker pid {}: wrote all {} paths, closing stdin", pid, list.len());
+            tracing::trace!("Wrote all {} paths, closing stdin", list.len());
         });
 
         // Surface the worker's diagnostics without letting them pollute stdout. Its
         // own lines carry DIAG_MARKER and get their own target, so they can be read
         // or filtered apart from what the plugins print.
         if let Some(stderr) = child.stderr.take() {
+            let current = current.clone();
             thread::spawn(move || {
                 let mut count = 0usize;
                 for line in BufReader::new(stderr).lines() {
+                    let span = current.span();
+                    let _span = span.enter();
                     match line {
                         Ok(line) => {
                             count += 1;
@@ -315,25 +325,22 @@ impl Spawner {
                             }
                         }
                         Err(e) => {
-                            tracing::debug!(
-                                "Worker pid {}: reading stderr failed after {} lines: {}",
-                                pid,
-                                count,
-                                e
-                            );
+                            tracing::debug!("Reading stderr failed after {} lines: {}", count, e);
                             return;
                         }
                     }
                 }
-                tracing::trace!("Worker pid {}: stderr closed after {} lines", pid, count);
+                let span = current.span();
+                let _span = span.enter();
+                tracing::trace!("stderr closed after {} lines", count);
             });
         }
 
-        let events = self.read_events(&mut child);
-        let run = self.collect(events, batch, &mut child, base, total, on_progress);
+        let events = self.read_events(&mut child, current.clone());
+        let run = self.collect(events, batch, &mut child, base, total, &current, on_progress);
 
         // Reap the child regardless of how we got here.
-        wait_for_exit(&mut child, pid);
+        wait_for_exit(&mut child);
 
         Ok(run)
     }
@@ -369,23 +376,23 @@ impl Spawner {
     /// There is no portable way to read a pipe with a deadline, but a channel has
     /// `recv_timeout`. When we kill a hung worker the pipe closes, the reader thread
     /// unblocks, and the channel hangs up on its own.
-    fn read_events(&self, child: &mut Child) -> Receiver<StdoutLine> {
+    fn read_events(&self, child: &mut Child, current: CurrentPlugin) -> Receiver<StdoutLine> {
         let stdout = child.stdout.take().expect("stdout was piped");
-        let pid = child.id();
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
             let mut count = 0usize;
             for line in BufReader::new(stdout).lines() {
+                let span = current.span();
+                let _span = span.enter();
                 let line = match line {
                     Ok(line) => line,
                     Err(e) => {
                         // Ends the stream exactly as EOF would, so the supervisor will
                         // read it as the worker dying. Say why, since it is not that.
                         tracing::warn!(
-                            "Worker pid {}: reading stdout failed after {} lines, treating \
-                             the stream as closed: {}",
-                            pid,
+                            "Reading stdout failed after {} lines, treating the stream as \
+                             closed: {}",
                             count,
                             e
                         );
@@ -393,7 +400,7 @@ impl Spawner {
                     }
                 };
                 count += 1;
-                tracing::trace!("Worker pid {} stdout ({} bytes): {}", pid, line.len(), line);
+                tracing::trace!("stdout ({} bytes): {}", line.len(), line);
                 if line.trim().is_empty() {
                     continue;
                 }
@@ -402,17 +409,20 @@ impl Spawner {
                     Err(e) => StdoutLine::Unparseable(line, e.to_string()),
                 };
                 if tx.send(parsed).is_err() {
-                    tracing::trace!("Worker pid {}: supervisor stopped listening", pid);
+                    tracing::trace!("Supervisor stopped listening");
                     return;
                 }
             }
-            tracing::debug!("Worker pid {}: stdout closed after {} lines", pid, count);
+            let span = current.span();
+            let _span = span.enter();
+            tracing::debug!("stdout closed after {} lines", count);
         });
 
         rx
     }
 
     /// Consume the event stream, tracking which path is in flight.
+    #[allow(clippy::too_many_arguments)]
     fn collect(
         &self,
         events: Receiver<StdoutLine>,
@@ -420,6 +430,7 @@ impl Spawner {
         child: &mut Child,
         base: usize,
         total: usize,
+        current: &CurrentPlugin,
         on_progress: &mut dyn FnMut(usize, usize, &Path),
     ) -> BatchRun {
         let mut completed = Vec::new();
@@ -427,8 +438,10 @@ impl Spawner {
         // stream identifies the path. The echoed path is used only to sanity-check.
         let mut next = 0usize;
         let mut in_flight: Option<usize> = None;
+        // The span of the plugin in flight, entered on this thread for as long as it
+        // is in flight.
+        let mut plugin: Option<tracing::span::EnteredSpan> = None;
 
-        let pid = child.id();
         let started = Instant::now();
         // When the last line arrived, and when the in-flight plugin was announced:
         // the gaps are what a stall looks like from here.
@@ -446,27 +459,30 @@ impl Spawner {
 
             match received {
                 Ok(StdoutLine::Event(Event::Begin { path })) => {
-                    tracing::debug!(
-                        "Worker pid {}: begin [{}/{}] {} ({} ms after the previous line; \
-                         assigned to offset {})",
-                        pid,
-                        base + next + 1,
-                        total,
-                        path,
-                        gap.as_millis(),
-                        next
-                    );
                     if let Some(stale) = in_flight {
                         // The previous plugin's result never arrived, so it is about to
                         // be overwritten. Everything from here is misattributed.
                         tracing::warn!(
-                            "Worker pid {}: begin arrived while offset {} ({}) was still in \
-                             flight -- its result line was lost",
-                            pid,
+                            "Begin for {} arrived while offset {} ({}) was still in flight \
+                             -- its result line was lost",
+                            path,
                             stale,
                             name(Some(stale))
                         );
                     }
+                    // Closed before the next opens, or it would become the next's parent.
+                    drop(plugin.take());
+                    let span = tracing::info_span!("plugin", n = base + next + 1, path = %path);
+                    current.set(Some(span.clone()));
+                    plugin = Some(span.entered());
+
+                    tracing::debug!(
+                        "Begin [{}/{}] ({} ms after the previous line; assigned to offset {})",
+                        base + next + 1,
+                        total,
+                        gap.as_millis(),
+                        next
+                    );
                     if next < batch.len() && batch[next].display().to_string() != path {
                         tracing::warn!(
                             "Plugin scanner reported an unexpected path: got {}, expected {}",
@@ -484,38 +500,29 @@ impl Spawner {
                         // Runs inline, so while it runs nothing is read and the
                         // timeout cannot fire. It should be instant.
                         if took >= Duration::from_secs(1) {
-                            tracing::warn!(
-                                "Worker pid {}: the progress callback took {} ms",
-                                pid,
-                                took.as_millis()
-                            );
+                            tracing::warn!("The progress callback took {} ms", took.as_millis());
                         } else {
-                            tracing::trace!(
-                                "Worker pid {}: progress callback took {} us",
-                                pid,
-                                took.as_micros()
-                            );
+                            tracing::trace!("Progress callback took {} us", took.as_micros());
                         }
                     }
                 }
 
                 Ok(StdoutLine::Event(Event::Result { path, outcome })) => {
                     let kind = match &outcome {
-                        Outcome::Success { plugins } => format!("success, {} record(s)", plugins.len()),
+                        Outcome::Success { plugins } => {
+                            format!("success, {} record(s)", plugins.len())
+                        }
                         Outcome::Error { error_type, .. } => error_type.to_string(),
                     };
                     tracing::debug!(
-                        "Worker pid {}: result for {} after {} ms: {}",
-                        pid,
-                        path,
+                        "Result after {} ms: {}",
                         began_at.elapsed().as_millis(),
                         kind
                     );
                     if let Some(offset) = in_flight.take() {
                         if batch[offset].display().to_string() != path {
                             tracing::warn!(
-                                "Worker pid {}: result for {} is being recorded against {}",
-                                pid,
+                                "Result for {} is being recorded against {}",
                                 path,
                                 batch[offset].display()
                             );
@@ -523,15 +530,18 @@ impl Spawner {
                         completed.push((offset, outcome));
                         next = offset + 1;
                     } else {
-                        tracing::warn!("Plugin scanner sent a result with nothing in flight");
+                        tracing::warn!(
+                            "Plugin scanner sent a result for {} with nothing in flight",
+                            path
+                        );
                     }
+                    current.set(None);
+                    plugin = None;
                 }
 
                 Ok(StdoutLine::Event(Event::Done { scanned })) => {
                     tracing::debug!(
-                        "Worker pid {}: done, worker says {} scanned; supervisor recorded {} \
-                         of {} in {:.1}s",
-                        pid,
+                        "Done: worker says {} scanned; supervisor recorded {} of {} in {:.1}s",
                         scanned,
                         completed.len(),
                         batch.len(),
@@ -539,14 +549,14 @@ impl Spawner {
                     );
                     if scanned != completed.len() || in_flight.is_some() {
                         tracing::warn!(
-                            "Worker pid {}: done disagrees with the supervisor: worker scanned \
-                             {}, supervisor recorded {}, still in flight: {}",
-                            pid,
+                            "Done disagrees with the supervisor: worker scanned {}, \
+                             supervisor recorded {}, still in flight: {}",
                             scanned,
                             completed.len(),
                             name(in_flight)
                         );
                     }
+                    drop(plugin);
                     return BatchRun {
                         completed,
                         interrupted: None,
@@ -554,23 +564,15 @@ impl Spawner {
                 }
 
                 Ok(StdoutLine::Unparseable(line, error)) => {
-                    // A plugin writing to stdout, which is our protocol channel. Named
-                    // after whatever is in flight, which is almost always the culprit.
+                    // A plugin writing to stdout, which is our protocol channel. Logged
+                    // in the in-flight plugin's span, which is almost always the culprit.
                     if line.contains("{\"event\":") {
                         tracing::warn!(
-                            "Worker pid {}: a protocol line was glued to plugin output and is \
-                             lost (in flight: {}): {}",
-                            pid,
-                            name(in_flight),
+                            "A protocol line was glued to plugin output and is lost: {}",
                             line
                         );
                     } else {
-                        tracing::warn!(
-                            "Unparseable line from plugin scanner (in flight: {}): {} ({})",
-                            name(in_flight),
-                            line,
-                            error
-                        );
+                        tracing::warn!("Unparseable line from plugin scanner: {} ({})", line, error);
                     }
                 }
 
@@ -579,14 +581,14 @@ impl Spawner {
                     // Killing the process is the only way out -- a blocked thread
                     // cannot be safely terminated from inside.
                     tracing::debug!(
-                        "Worker pid {}: no output for {:.1}s with {} in flight; killing it",
-                        pid,
+                        "No output for {:.1}s with {} in flight; killing the worker",
                         gap.as_secs_f64(),
                         name(in_flight)
                     );
                     if let Err(e) = child.kill() {
-                        tracing::warn!("Worker pid {}: kill failed: {}", pid, e);
+                        tracing::warn!("Killing the worker failed: {}", e);
                     }
+                    drop(plugin);
                     return BatchRun {
                         interrupted: blame(in_flight, next, batch.len())
                             .map(|offset| (offset, ErrorType::Timeout)),
@@ -598,12 +600,12 @@ impl Spawner {
                     // stdout closed without a `Done`, so the worker died rather than
                     // finishing its list.
                     tracing::debug!(
-                        "Worker pid {}: stdout closed without done, {} ms after the last \
-                         line, with {} in flight",
-                        pid,
+                        "stdout closed without done, {} ms after the last line, with {} in \
+                         flight",
                         gap.as_millis(),
                         name(in_flight)
                     );
+                    drop(plugin);
                     return BatchRun {
                         interrupted: blame(in_flight, next, batch.len())
                             .map(|offset| (offset, ErrorType::Crashed)),
@@ -645,12 +647,50 @@ enum StdoutLine {
     Unparseable(String, String),
 }
 
+/// The span of the plugin in flight, shared with the pipe-reader threads.
+///
+/// A span does not follow work onto another thread, and the threads reading the
+/// worker's stdout and stderr cannot know which plugin is in flight -- only `collect`
+/// does. It keeps this up to date, and the readers log each line inside whatever it
+/// holds, so what a plugin prints lands in that plugin's span.
+///
+/// Approximate at the edges: a reader can be a line or two ahead of `collect`, so the
+/// raw `stdout:` trace of a `begin` usually lands in the plugin *before* it. The lines
+/// `collect` itself logs are exact.
+#[derive(Clone)]
+struct CurrentPlugin {
+    worker: tracing::Span,
+    plugin: Arc<Mutex<Option<tracing::Span>>>,
+}
+
+impl CurrentPlugin {
+    fn new(worker: tracing::Span) -> Self {
+        Self {
+            worker,
+            plugin: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn set(&self, plugin: Option<tracing::Span>) {
+        *self.plugin.lock().unwrap_or_else(|e| e.into_inner()) = plugin;
+    }
+
+    /// The plugin's span, or the worker's when nothing is in flight.
+    fn span(&self) -> tracing::Span {
+        self.plugin
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .unwrap_or_else(|| self.worker.clone())
+    }
+}
+
 /// Wait for the worker to exit, reporting while it does not.
 ///
 /// The wait has no limit, the same as a plain `wait()`: this is instrumentation, not
 /// a fix. It polls so that a worker which said `done` but never exits shows up in the
-/// log as exactly that, with its pid, instead of as a scan that silently stops.
-fn wait_for_exit(child: &mut Child, pid: u32) {
+/// log as exactly that, in its `worker` span, instead of as a scan that silently stops.
+fn wait_for_exit(child: &mut Child) {
     const POLL: Duration = Duration::from_millis(50);
     const REPORT_EVERY: Duration = Duration::from_secs(5);
 
@@ -666,8 +706,7 @@ fn wait_for_exit(child: &mut Child, pid: u32) {
                     .map(|c| format!("{} (0x{:08X})", c, c as u32))
                     .unwrap_or_else(|| "none".to_string());
                 tracing::debug!(
-                    "Worker pid {} exited with code {} after {} ms of waiting",
-                    pid,
+                    "Exited with code {} after {} ms of waiting",
                     code,
                     started.elapsed().as_millis()
                 );
@@ -676,9 +715,7 @@ fn wait_for_exit(child: &mut Child, pid: u32) {
             Ok(None) => {
                 if reported.elapsed() >= REPORT_EVERY {
                     tracing::warn!(
-                        "Worker pid {} has not exited {:.0}s after its output ended; still \
-                         waiting",
-                        pid,
+                        "Worker has not exited {:.0}s after its output ended; still waiting",
                         started.elapsed().as_secs_f64()
                     );
                     reported = Instant::now();
@@ -686,7 +723,7 @@ fn wait_for_exit(child: &mut Child, pid: u32) {
                 thread::sleep(POLL);
             }
             Err(e) => {
-                tracing::warn!("Worker pid {}: waiting for exit failed: {}", pid, e);
+                tracing::warn!("Waiting for the worker to exit failed: {}", e);
                 return;
             }
         }
