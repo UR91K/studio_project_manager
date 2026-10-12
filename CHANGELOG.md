@@ -8,6 +8,38 @@ Seula is in alpha. Versions run `0.2.0-alpha.N` until a beta, and the first stab
 is `1.0.0`. The Windows installer is not code-signed yet, so SmartScreen warns on first
 run ("More info", then "Run anyway").
 
+## 0.2.0-alpha.3 (2026-10-12)
+
+### Fixed
+
+- **The first plugin scan never finished on some machines.** It got through every plugin
+  and then stopped, with no error and no time-out, and the plugins it had found were never
+  saved. Closing Seula left it running in the background. The cause was Native Instruments'
+  shared runtime, loaded by Kontakt, Massive, Reaktor and FM8: when the scanner exited, it
+  waited forever for a reply that never came. The scanner now ends without running any
+  plugin's exit code, and Seula stops waiting for it after five seconds in any case.
+  (ADR-0081, ADR-0082, `plugin-scan-hangs-after-last-plugin`)
+- **Plugins shown with another plugin's details.** A plugin that writes text to its output
+  (Hadron does) could cost the scanner one line, and every plugin scanned after it was then
+  stored with the details of the plugin before it: on one machine about 150 of them. Plugins
+  can no longer write into the scanner's output, and results are matched to plugins by path.
+  A result that is lost anyway is shown as "Its scan result was lost; scan again" and retried
+  on the next scan. If your plugins look wrong after alpha.2, run Tools, Scan plugins (all).
+  (ADR-0083, `plugin-stdout-desyncs-scan`)
+
+### For developers
+
+- The plugin scanner logs each step it takes, under `plugin_scan`, `worker` and `plugin`
+  spans, and the worker's own lines arrive under `seula::scan::plugins::worker`. A step that
+  runs for more than five seconds is reported while it runs.
+- New decision records: ADR-0081 to ADR-0083.
+
+### Known issues
+
+- At `log_level = "trace"` a project scan is very slow and writes a very large log, because
+  the parser logs every tag it reads. Use `debug` or lower. (`trace-logging-floods-project-scan`)
+- The known issues of alpha.2 below still apply.
+
 ## 0.2.0-alpha.2 (2026-10-12)
 
 ### New

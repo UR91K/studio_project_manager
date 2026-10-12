@@ -24,6 +24,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::meta::PluginMeta;
 
+/// Prefix on the worker's own diagnostic lines on stderr.
+///
+/// Plugins write to stderr too, often a great deal. The marker lets the parent tell the
+/// worker's account of what it is doing from whatever the plugin in flight is printing.
+pub const DIAG_MARKER: &str = "@vst-meta ";
+
 /// One line of the worker's stdout stream.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
@@ -61,7 +67,7 @@ pub enum Outcome {
 
 /// Why a scan failed.
 ///
-/// `Crashed` and `Timeout` are never emitted by the worker -- by definition it is in no
+/// `Crashed`, `Timeout` and `ResultLost` are never emitted by the worker -- by definition it is in no
 /// position to report either. The parent synthesizes them for the in-flight path when
 /// the worker exits abnormally or goes silent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,6 +83,10 @@ pub enum ErrorType {
     Timeout,
     /// The worker died while this path was in flight.
     Crashed,
+    /// The worker announced this path but its result never arrived intact: something,
+    /// almost always the plugin, corrupted the line on stdout. The plugin may well have
+    /// loaded; the scan just does not know what it said (ADR-0083).
+    ResultLost,
 }
 
 impl ErrorType {
@@ -87,6 +97,7 @@ impl ErrorType {
             ErrorType::LoadFailed => "load failed",
             ErrorType::Timeout => "timeout",
             ErrorType::Crashed => "crashed",
+            ErrorType::ResultLost => "result lost",
         }
     }
 }

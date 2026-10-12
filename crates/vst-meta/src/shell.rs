@@ -20,6 +20,7 @@
 //! there is no way to send opcode `ShellGetNextPlugin` through it. This module
 //! therefore opens its own short-lived handle to the binary and dispatches directly.
 
+use crate::diag::phase;
 use libloading::Library;
 use std::ffi::c_void;
 use std::path::Path;
@@ -79,12 +80,14 @@ pub fn enumerate(path: &Path) -> Result<Vec<ShellEntry>, String> {
     // This deliberately does not reuse the caller's `PluginLoader`. We need a raw
     // `AEffect` to dispatch against, and we close this handle as soon as the list
     // is read so the real per-sub-plugin loads start from a clean state.
+    let lib_phase = phase("shell LoadLibrary");
     let lib = unsafe { Library::new(path) }.map_err(|e| {
         format!(
             "Failed to open the VST2 binary for shell enumeration: {}",
             e
         )
     })?;
+    drop(lib_phase);
 
     let mut entries = Vec::new();
 
@@ -93,14 +96,22 @@ pub fn enumerate(path: &Path) -> Result<Vec<ShellEntry>, String> {
             .get(b"VSTPluginMain")
             .map_err(|_| "The binary has no VSTPluginMain entry point".to_string())?;
 
-        let effect = main(enumeration_callback);
+        let effect = {
+            let _phase = phase("shell VSTPluginMain");
+            main(enumeration_callback)
+        };
         if effect.is_null() {
             return Err("The plugin entry point returned no instance".to_string());
         }
 
         // Real hosts open the effect before enumerating; some shells populate their
         // internal list during init and return nothing if asked before it.
-        dispatch(effect, OpCode::Initialize, ptr::null_mut());
+        {
+            let _phase = phase("shell effOpen");
+            dispatch(effect, OpCode::Initialize, ptr::null_mut());
+        }
+
+        let loop_phase = phase("shell effShellGetNextPlugin loop");
 
         // Each call fills `buf` with the next name and returns its unique id.
         // A zero return means the list is exhausted.
@@ -133,8 +144,17 @@ pub fn enumerate(path: &Path) -> Result<Vec<ShellEntry>, String> {
             }
         }
 
+        drop(loop_phase);
+        crate::diag!("shell lists {} plugin(s)", entries.len());
+
         // Close the effect before the library handle drops.
+        let _phase = phase("shell effClose");
         dispatch(effect, OpCode::Shutdown, ptr::null_mut());
+    }
+
+    {
+        let _phase = phase("shell FreeLibrary");
+        drop(lib);
     }
 
     Ok(entries)

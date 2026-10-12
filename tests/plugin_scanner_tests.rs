@@ -82,6 +82,68 @@ fn a_crash_is_blamed_on_the_plugin_that_caused_it() {
     assert_eq!(report.restarts, 1);
 }
 
+/// The name of the one plugin a successful result carries. The stub names each plugin
+/// after its file, so a result recorded against the wrong path shows up as a mismatch.
+fn plugin_name(result: &seula::scan::plugins::PluginScanResult) -> Option<&str> {
+    match &result.outcome {
+        Outcome::Success { plugins } => plugins.first().map(|p| p.name.as_str()),
+        Outcome::Error { .. } => None,
+    }
+}
+
+/// Regression test for `plugin-stdout-desyncs-scan`: a plugin's stray output swallows its
+/// own result line. Before ADR-0083 every later result was recorded against the plugin
+/// before it.
+#[test]
+fn a_lost_result_is_recorded_as_lost_and_the_rest_keep_their_own_paths() {
+    let candidates = paths(&["a.vst3", "GLUE.vst3", "c.vst3", "d.vst3"]);
+    let report = spawner(30).scan(&candidates);
+
+    assert_eq!(report.results.len(), 4);
+    assert_eq!(report.results[1].path, PathBuf::from("GLUE.vst3"));
+    assert_eq!(report.results[1].error_type(), Some(ErrorType::ResultLost));
+    for i in [0, 2, 3] {
+        let file = report.results[i].path.display().to_string();
+        assert_eq!(
+            plugin_name(&report.results[i]),
+            Some(file.as_str()),
+            "the result for {file} must be its own"
+        );
+    }
+    assert_eq!(report.restarts, 0, "a lost line is not a crash");
+}
+
+/// The same when it is the last plugin: `done` arrives with it still in flight.
+#[test]
+fn a_lost_result_on_the_last_plugin_is_recorded_as_lost() {
+    let candidates = paths(&["a.vst3", "GLUE.vst3"]);
+    let report = spawner(30).scan(&candidates);
+
+    assert_eq!(report.results.len(), 2);
+    assert_eq!(plugin_name(&report.results[0]), Some("a.vst3"));
+    assert_eq!(report.results[1].error_type(), Some(ErrorType::ResultLost));
+}
+
+/// Regression test for `plugin-scan-hangs-after-last-plugin`: a worker that reports
+/// everything and then never exits. Before ADR-0082 the supervisor waited on it forever,
+/// so this runs the scan on a thread and fails rather than hanging the test run.
+#[test]
+fn a_worker_that_never_exits_after_done_is_killed_and_the_scan_completes() {
+    let candidates = paths(&["a.vst3", "LINGER.vst3", "c.vst3"]);
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(spawner(30).scan(&candidates));
+    });
+
+    let report = rx
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the scan must not wait forever on a worker that will not exit");
+
+    assert_eq!(report.succeeded(), 3, "every result arrived before the worker stuck");
+    assert_eq!(report.failed(), 0);
+    assert_eq!(report.restarts, 0, "a stuck exit is not a plugin failure");
+}
+
 #[test]
 fn a_hang_is_broken_by_the_timeout_and_the_scan_continues() {
     let candidates = paths(&["before.vst3", "HANG.vst3", "after.vst3"]);

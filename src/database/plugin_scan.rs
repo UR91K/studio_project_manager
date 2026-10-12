@@ -467,6 +467,7 @@ fn error_code(error_type: ErrorType) -> &'static str {
         ErrorType::LoadFailed => "load_failed",
         ErrorType::Timeout => "timeout",
         ErrorType::Crashed => "crashed",
+        ErrorType::ResultLost => "result_lost",
     }
 }
 
@@ -474,7 +475,7 @@ fn error_code(error_type: ErrorType) -> &'static str {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FailedPluginFile {
     pub path: String,
-    /// `crashed`, `timeout` or `load_failed`. Files that are not plugins at all
+    /// `crashed`, `timeout`, `load_failed` or `result_lost`. Files that are not plugins at all
     /// (`invalid_format`) are not listed.
     pub error_type: String,
     pub error_message: Option<String>,
@@ -484,14 +485,18 @@ pub struct FailedPluginFile {
 
 impl ProjectDatabase {
     /// Of `files`, the ones whose size and mtime match their last scan (ADR-0067). A
-    /// file with no mtime never matches.
+    /// file with no mtime never matches, and neither does one whose result was lost
+    /// (ADR-0083): it may have loaded fine, so it is worth asking again.
     pub fn unchanged_plugin_files(
         &self,
         files: &[PluginFile],
     ) -> Result<HashSet<PathBuf>, DatabaseError> {
         let recorded: HashMap<String, (i64, Option<i64>)> = self
             .conn
-            .prepare("SELECT path, size_bytes, modified_at FROM plugin_files")?
+            .prepare(
+                "SELECT path, size_bytes, modified_at FROM plugin_files
+                 WHERE error_type IS NULL OR error_type != 'result_lost'",
+            )?
             .query_map([], |row| Ok((row.get(0)?, (row.get(1)?, row.get(2)?))))?
             .collect::<Result<_, _>>()?;
         Ok(files

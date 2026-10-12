@@ -80,3 +80,38 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   Fixed ba0a9c1. The panic is caught and answered as 0, and the buffer is zeroed first.
   Regression test: `a_panicking_host_callback_does_not_cross_the_ffi_boundary`, which aborted
   the test process before the fix.
+- [x] 2026-10-12 `plugin-stdout-desyncs-scan` A plugin that prints to stdout without a trailing newline swallows the worker's next protocol line, and the supervisor, which attributes results by position, then records every following result against the plugin before it. src/scan/plugins/spawner.rs
+  Seen on a tester's Windows 10 machine: Hadron (`hadron64.dll`) prints `ftable 1:` to
+  `ftable 172:` and ends on a bare `ft`, which glued onto its own `result` line. The ~150
+  plugins after it were stored with their neighbour's metadata, in both runs.
+  Fixed ba53ede (ADR-0083). Checked on the tester's machine: `seula plugin refresh --all`
+  gives 453 results for 453 candidates and repaired the shifted records.
+- [x] 2026-10-12 `plugin-scan-hangs-after-last-plugin` The first-run plugin scan stops after the last plugin's `begin` and never completes, and the timeout does not fire. src/scan/plugins/spawner.rs
+  Same tester, both runs. Tracing added across the supervisor and the worker
+  (`seula::scan::plugins::worker`) to confirm the cause before fixing.
+  2026-10-12, confirmed on the tester's machine: both workers were still alive hours later
+  with one thread left, inside `ExitProcess`. cdb shows it in `LdrShutdownProcess` running
+  `ni-platform.dll`'s (Native Instruments NTK, pulled in by Kontakt, Massive, Reaktor, FM8)
+  CRT exit table, which blocks forever in `WSAPoll`. NI plugins stay loaded after
+  `FreeLibrary`, so the detach only runs at exit. The worker had sent `done`, so the
+  supervisor sat in `child.wait()`, which has no timeout. The tray app logged "exited
+  normally" and its process stayed alive too, holding the scan thread.
+  Fixed ce2e262 (ADR-0081, ADR-0082). Checked on the tester's machine against the real
+  library: the worker exits 84 ms after `done`, and the first-run scan completes.
+- [ ] 2026-10-12 `version-tests-fail-on-tester-machine` `test_version_parsing` and `test_beta_version` fail on a tester's Windows 10 machine: `patch` comes back 0 for `MinorVersion="12.0_12049"`, expected 12049. tests/scan/parser/basic.rs
+  Fails with and without the plugin-scan tracing changes, so it predates them. Not seen on
+  the maintainer's machine. Unverified guess: this checkout has `core.autocrlf` converting
+  to CRLF, and both tests embed their XML in raw strings.
+- [ ] 2026-10-12 `tray-exit-leaves-process-running` The tray app logs "Tray app exited normally" and its process stays alive while a scan's blocking thread has not finished. src/main.rs
+  Seen on the tester's machine: both `seula.exe` processes from the `plugin-scan-hangs-after-last-plugin`
+  runs were still alive hours after logging that line. Inferred, not traced: the tokio runtime
+  waits for `spawn_blocking` tasks when it shuts down. Harmless since ADR-0082 bounds the scan's
+  wait, but any other blocking task that never ends would do the same.
+- [ ] 2026-10-12 `esp-jit-log-in-working-dir` Some plugin writes an empty esp_jit.log into the working directory of every plugin scan; it landed in the repo root on both scans run from there. src/scan/plugins/spawner.rs
+  Which plugin is not known; the worker inherits Seula's working directory, so in the
+  installed app it lands wherever that is. Starting the worker in a scratch directory would
+  contain it.
+- [ ] 2026-10-12 `trace-logging-floods-project-scan` At log_level trace the parser logs every XML tag it reads: 45 projects took about 6 minutes and 1.2 GB of log in a debug build. src/scan/parser.rs
+  Seen on the tester's machine, whose config has `log_level = "trace"`. The same scan at
+  `debug` has not been timed. Lowering it to `debug` keeps the plugin scan's tracing except
+  the raw stdout echo and the progress-callback timings, which are at `trace`.

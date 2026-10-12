@@ -12,6 +12,7 @@ use vst::host::{Host, PluginLoader};
 use vst::plugin::Plugin;
 use vst3_host::discovery::get_detailed_plugin_info;
 
+use crate::diag::phase;
 use crate::meta::PluginMeta;
 use crate::protocol::{ErrorType, Outcome};
 use crate::shell;
@@ -119,7 +120,10 @@ fn read_vst2_unnamed_ok(plugin_path: &Path) -> Result<Vec<PluginMeta>, ScanFailu
     }
 
     // Ask the container what it holds. Each entry is a (unique id, name) pair.
-    let entries = shell::enumerate(plugin_path).map_err(|e| (ErrorType::LoadFailed, e))?;
+    let entries = {
+        let _phase = phase("vst2 shell enumeration");
+        shell::enumerate(plugin_path).map_err(|e| (ErrorType::LoadFailed, e))?
+    };
     eprintln!(
         "Shell plugin: enumerating {} contained plugins...",
         entries.len()
@@ -167,37 +171,62 @@ fn load_vst2_instance(plugin_path: &Path, plugin_id: i32) -> Result<PluginMeta, 
 
     // Load the library binary dynamically. Failure here means the file is not a VST2
     // at all -- no entry point, wrong architecture, not a library.
-    let mut loader = PluginLoader::load(plugin_path, host.clone()).map_err(|e| {
-        (
-            ErrorType::InvalidFormat,
-            format!("Failed to read or load the VST2 binary: {:?}", e),
-        )
-    })?;
+    //
+    // Each step below runs plugin code, so each is its own phase: the watchdog then
+    // names the step a hang is in, not just the plugin.
+    let mut loader = {
+        let _phase = phase(format!("vst2 LoadLibrary (DllMain attach; id {})", plugin_id));
+        PluginLoader::load(plugin_path, host.clone()).map_err(|e| {
+            (
+                ErrorType::InvalidFormat,
+                format!("Failed to read or load the VST2 binary: {:?}", e),
+            )
+        })?
+    };
 
     // Instantiate the plugin to populate its structural fields. Failure here means it
     // *is* a VST2 but would not initialize -- a licensing refusal, a missing
     // dependency, an unhappy plugin.
-    let instance = loader.instance().map_err(|e| {
-        (
-            ErrorType::LoadFailed,
-            format!("Failed to initialize the plugin instance: {:?}", e),
-        )
-    })?;
+    let instance = {
+        let _phase = phase("vst2 instance (VSTPluginMain, effGetVstVersion)");
+        loader.instance().map_err(|e| {
+            (
+                ErrorType::LoadFailed,
+                format!("Failed to initialize the plugin instance: {:?}", e),
+            )
+        })?
+    };
 
     // Pull the native VST 2.4 'Info' metadata object from the instance. Unlike VST3,
     // there is no manifest to read -- the plugin has to be instantiated to answer.
-    let info = instance.get_info();
+    let info = {
+        let _phase = phase("vst2 get_info");
+        instance.get_info()
+    };
+    let meta = PluginMeta::from_vst2(&plugin_path.display().to_string(), &info);
 
-    Ok(PluginMeta::from_vst2(
-        &plugin_path.display().to_string(),
-        &info,
-    ))
+    // Dropped explicitly, in the order they would drop anyway, so that closing the
+    // instance and unloading the library are timed apart: either runs plugin code
+    // (effClose, then the DLL's detach handler), and either can hang.
+    {
+        let _phase = phase("vst2 drop instance (effClose)");
+        drop(instance);
+    }
+    {
+        let _phase = phase("vst2 drop loader (FreeLibrary)");
+        drop(loader);
+    }
+
+    Ok(meta)
 }
 
 /// Query a VST3 bundle's manifest factory and normalize the result. Windows bundles
 /// live under "C:\Program Files\Common Files\VST3", macOS under
 /// "/Library/Audio/Plug-Ins/VST3", Linux under "~/.vst3".
 fn read_vst3(plugin_path: &Path) -> Result<PluginMeta, ScanFailure> {
+    // One opaque call: loading, querying the factory and unloading all happen inside
+    // vst3-host, so a hang here cannot be narrowed further from this side.
+    let _phase = phase("vst3 get_detailed_plugin_info (load, query, unload)");
     let detailed = get_detailed_plugin_info(plugin_path).map_err(|e| {
         (
             ErrorType::LoadFailed,

@@ -414,9 +414,23 @@ where
                 // A truncated scan has not really looked everywhere, so it neither
                 // sweeps nor counts as having run.
                 let full_scan = !report.budget_exhausted;
-                let persisted = db
-                    .lock()
-                    .persist_plugin_scan_of(report, &scan.files, full_scan);
+                debug!(
+                    "First-run plugin scan returned {} result(s); waiting for the database",
+                    report.results.len()
+                );
+                let lock_started = std::time::Instant::now();
+                let mut guard = db.lock();
+                debug!(
+                    "Database locked after {} ms; persisting the plugin scan",
+                    lock_started.elapsed().as_millis()
+                );
+                let persist_started = std::time::Instant::now();
+                let persisted = guard.persist_plugin_scan_of(report, &scan.files, full_scan);
+                drop(guard);
+                debug!(
+                    "Plugin scan persisted in {} ms",
+                    persist_started.elapsed().as_millis()
+                );
                 match persisted {
                     Ok(persisted) => info!(
                         "First-run plugin scan: {} installed, {} missing, {} failed to load",
