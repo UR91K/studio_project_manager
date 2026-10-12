@@ -107,3 +107,11 @@ Bugs fixed before this list existed are written up there under Resolved. See ADR
   runs were still alive hours after logging that line. Inferred, not traced: the tokio runtime
   waits for `spawn_blocking` tasks when it shuts down. Harmless since ADR-0082 bounds the scan's
   wait, but any other blocking task that never ends would do the same.
+- [ ] 2026-10-12 `esp-jit-log-in-working-dir` Some plugin writes an empty esp_jit.log into the working directory of every plugin scan; it landed in the repo root on both scans run from there. src/scan/plugins/spawner.rs
+  Which plugin is not known; the worker inherits Seula's working directory, so in the
+  installed app it lands wherever that is. Starting the worker in a scratch directory would
+  contain it.
+- [ ] 2026-10-12 `trace-logging-floods-project-scan` At log_level trace the parser logs every XML tag it reads: 45 projects took about 6 minutes and 1.2 GB of log in a debug build. src/scan/parser.rs
+  Seen on the tester's machine, whose config has `log_level = "trace"`. The same scan at
+  `debug` has not been timed. Lowering it to `debug` keeps the plugin scan's tracing except
+  the raw stdout echo and the progress-callback timings, which are at `trace`.
