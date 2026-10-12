@@ -26,6 +26,7 @@ export const stateLabel = (p: Pick<PluginRow, "installed" | "scan_error">) =>
 export function failureLabel(code: string): string {
   const labels: Record<string, string> = {
     crashed: "Crashed the scanner", timeout: "Timed out", load_failed: "Would not load",
+    result_lost: "Its scan result was lost; scan again",
     invalid_format: "Not a plugin the scanner recognises",
   };
   return labels[code] ?? code;

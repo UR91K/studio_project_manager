@@ -149,9 +149,20 @@ fn read_paths_from_stdin() -> Vec<PathBuf> {
 /// Flushing is not optional. A buffered `begin` line that never reaches the parent
 /// before the plugin crashes leaves the failure unattributable, which defeats the
 /// entire point of running out of process.
+///
+/// The protocol is written through a private copy of stdout, and everything else that
+/// writes to stdout -- the plugins -- is sent to stderr first, so nothing a plugin
+/// prints can corrupt a line (ADR-0083).
 fn run_ndjson(paths: &[PathBuf]) {
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
+    let mut out: Box<dyn Write> = match vst_meta::stdio::claim_stdout() {
+        Ok(file) => Box::new(std::io::BufWriter::new(file)),
+        Err(e) => {
+            // Without the redirect a plugin that prints can still corrupt the stream,
+            // which the parent survives (ADR-0083), so carry on rather than scan nothing.
+            vst_meta::diag!("could not claim stdout for the protocol, plugins may corrupt it: {}", e);
+            Box::new(std::io::stdout())
+        }
+    };
 
     let mut scanned = 0usize;
     let total = paths.len();

@@ -42,7 +42,7 @@ pub struct PluginDto {
     pub version: Option<String>,
     pub project_count: i32,
     /// How its file failed the last scan, when every file of this plugin did (ADR-0067):
-    /// `crashed`, `timeout`, `load_failed` or `invalid_format`. It loaded once, so it is
+    /// `crashed`, `timeout`, `load_failed`, `result_lost` or `invalid_format`. It loaded once, so it is
     /// known; the plugins view shows it as Failed. The handler fills it in.
     pub scan_error: Option<String>,
 }
@@ -201,7 +201,7 @@ pub struct ScanModeQuery {
 #[derive(Serialize)]
 pub struct FailedPluginFileDto {
     pub path: String,
-    /// `crashed`, `timeout` or `load_failed`.
+    /// `crashed`, `timeout`, `load_failed` or `result_lost`.
     pub error_type: String,
     pub error_message: Option<String>,
     /// Epoch seconds.

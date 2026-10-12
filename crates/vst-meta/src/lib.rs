@@ -19,6 +19,8 @@ pub mod diag;
 pub mod scan;
 #[cfg(feature = "host")]
 pub mod shell;
+#[cfg(feature = "host")]
+pub mod stdio;
 
 pub use meta::{FormatExtra, PluginFormat, PluginMeta, Vst3Bus, Vst3Class};
 pub use protocol::{ErrorType, Event, Outcome};

@@ -9,6 +9,10 @@
 //! - `CRASH` -- announce the path, then die without reporting a result
 //! - `HANG`  -- announce the path, then block forever
 //! - `SILENT`-- exit immediately, before announcing anything
+//! - `GLUE`  -- print a fragment with no newline to stdout before the result, the way
+//!   Hadron does, so the result line is glued to it and lost (`plugin-stdout-desyncs-scan`).
+//!   The stub does not redirect stdout as the real worker does (ADR-0083): this is the
+//!   supervisor's backstop under test
 //! - `LINGER`-- scan normally, then never exit after `done`, the way a plugin DLL that
 //!   hangs in its exit handlers leaves the real worker (`plugin-scan-hangs-after-last-plugin`)
 //! - anything else -- report a plausible success
@@ -58,6 +62,11 @@ fn main() {
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(3600));
             }
+        }
+
+        if path.contains("GLUE") {
+            // What Hadron's last `ftable` line ends on.
+            write!(out, "ft").unwrap();
         }
 
         writeln!(

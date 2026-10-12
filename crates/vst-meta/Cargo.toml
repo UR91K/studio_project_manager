@@ -29,6 +29,7 @@ clap = { version = "4", features = ["derive"], optional = true }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
+    "Win32_System_Console",               # the stdout redirect in stdio.rs
     "Win32_System_Diagnostics_Debug",
     "Win32_System_Diagnostics_ToolHelp",  # the module and thread listing in diag.rs
     "Win32_System_Threading",

@@ -34,6 +34,11 @@ const WORKER_BIN: &str = if cfg!(windows) {
 /// `target/debug/` rather than next to an installed executable.
 const WORKER_PATH_ENV: &str = "SEULA_VST_META_PATH";
 
+/// The error recorded for a plugin whose result line was lost (ADR-0083).
+const RESULT_LOST: &str = "The scanner's result for this plugin was lost: something, almost \
+     certainly the plugin itself, wrote to the scanner's output and corrupted it. Scanning \
+     again should fix it.";
+
 /// Tracing target for the worker's own diagnostic lines (see `vst_meta::diag`), so
 /// they can be filtered apart from the plugin noise on the same stderr.
 const WORKER_TARGET: &str = "seula::scan::plugins::worker";
@@ -434,8 +439,10 @@ impl Spawner {
         on_progress: &mut dyn FnMut(usize, usize, &Path),
     ) -> BatchRun {
         let mut completed = Vec::new();
-        // The worker processes paths in the order we gave them, so position in the
-        // stream identifies the path. The echoed path is used only to sanity-check.
+        // Results are matched by path, not by position (ADR-0083). The worker echoes the
+        // path on every line, and a result is recorded against the batch entry with that
+        // path. `next` is only where to start looking: the worker goes in order, so the
+        // entry is almost always `batch[next]`.
         let mut next = 0usize;
         let mut in_flight: Option<usize> = None;
         // The span of the plugin in flight, entered on this thread for as long as it
@@ -451,6 +458,22 @@ impl Spawner {
             Some(path) => path.display().to_string(),
             None => "nothing".to_string(),
         };
+        // The first entry at or after `from` with this path.
+        let find = |path: &str, from: usize| {
+            batch
+                .get(from..)
+                .and_then(|rest| rest.iter().position(|p| p.display().to_string() == path))
+                .map(|i| from + i)
+        };
+        let lost = |offset: usize| {
+            (
+                offset,
+                Outcome::Error {
+                    error_type: ErrorType::ResultLost,
+                    error: RESULT_LOST.to_string(),
+                },
+            )
+        };
 
         loop {
             let received = events.recv_timeout(self.timeout);
@@ -459,43 +482,57 @@ impl Spawner {
 
             match received {
                 Ok(StdoutLine::Event(Event::Begin { path })) => {
-                    if let Some(stale) = in_flight {
-                        // The previous plugin's result never arrived, so it is about to
-                        // be overwritten. Everything from here is misattributed.
+                    if let Some(stale) = in_flight.take() {
+                        // The worker has moved on, so it did write a result for the
+                        // previous plugin, and that line did not survive.
                         tracing::warn!(
-                            "Begin for {} arrived while offset {} ({}) was still in flight \
-                             -- its result line was lost",
+                            "Begin for {} arrived while {} was still in flight -- its result \
+                             line was lost; recording it as result lost",
                             path,
-                            stale,
                             name(Some(stale))
                         );
+                        completed.push(lost(stale));
+                        next = stale + 1;
                     }
                     // Closed before the next opens, or it would become the next's parent.
                     drop(plugin.take());
-                    let span = tracing::info_span!("plugin", n = base + next + 1, path = %path);
+
+                    let offset = find(&path, next);
+                    let span = tracing::info_span!(
+                        "plugin",
+                        n = base + offset.unwrap_or(next) + 1,
+                        path = %path
+                    );
                     current.set(Some(span.clone()));
                     plugin = Some(span.entered());
 
                     tracing::debug!(
-                        "Begin [{}/{}] ({} ms after the previous line; assigned to offset {})",
-                        base + next + 1,
+                        "Begin [{}/{}] ({} ms after the previous line; offset {:?})",
+                        base + offset.unwrap_or(next) + 1,
                         total,
                         gap.as_millis(),
-                        next
+                        offset
                     );
-                    if next < batch.len() && batch[next].display().to_string() != path {
-                        tracing::warn!(
-                            "Plugin scanner reported an unexpected path: got {}, expected {}",
+                    match offset {
+                        None => tracing::warn!(
+                            "Plugin scanner announced {}, which is not among the {} \
+                             candidates still to come",
                             path,
-                            batch[next].display()
-                        );
+                            batch.len().saturating_sub(next)
+                        ),
+                        Some(offset) if offset != next => tracing::warn!(
+                            "Plugin scanner skipped from {} to {}",
+                            name(Some(next)),
+                            path
+                        ),
+                        Some(_) => {}
                     }
-                    in_flight = Some(next);
+                    in_flight = offset;
                     began_at = Instant::now();
 
-                    if let Some(path) = batch.get(next) {
+                    if let Some(offset) = offset {
                         let progress_started = Instant::now();
-                        on_progress(base + next, total, path);
+                        on_progress(base + offset, total, &batch[offset]);
                         let took = progress_started.elapsed();
                         // Runs inline, so while it runs nothing is read and the
                         // timeout cannot fire. It should be instant.
@@ -515,31 +552,55 @@ impl Spawner {
                         Outcome::Error { error_type, .. } => error_type.to_string(),
                     };
                     tracing::debug!(
-                        "Result after {} ms: {}",
+                        "Result for {} after {} ms: {}",
+                        path,
                         began_at.elapsed().as_millis(),
                         kind
                     );
-                    if let Some(offset) = in_flight.take() {
-                        if batch[offset].display().to_string() != path {
+
+                    let offset = match in_flight {
+                        Some(o) if batch[o].display().to_string() == path => Some(o),
+                        _ => find(&path, next),
+                    };
+                    match (in_flight, offset) {
+                        (Some(stale), Some(offset)) if stale != offset => {
+                            // This result's begin was lost, and the plugin that was in
+                            // flight never reported: the worker went on past it.
                             tracing::warn!(
-                                "Result for {} is being recorded against {}",
+                                "Result for {} arrived while {} was in flight -- recording \
+                                 that one as result lost",
                                 path,
-                                batch[offset].display()
+                                name(Some(stale))
                             );
+                            completed.push(lost(stale));
                         }
-                        completed.push((offset, outcome));
-                        next = offset + 1;
-                    } else {
-                        tracing::warn!(
-                            "Plugin scanner sent a result for {} with nothing in flight",
+                        _ => {}
+                    }
+                    in_flight = None;
+                    match offset {
+                        Some(offset) => {
+                            completed.push((offset, outcome));
+                            next = offset + 1;
+                        }
+                        None => tracing::warn!(
+                            "Plugin scanner sent a result for {}, which is not among the \
+                             candidates still to come; dropping it",
                             path
-                        );
+                        ),
                     }
                     current.set(None);
                     plugin = None;
                 }
 
                 Ok(StdoutLine::Event(Event::Done { scanned })) => {
+                    if let Some(stale) = in_flight.take() {
+                        tracing::warn!(
+                            "Done arrived while {} was still in flight -- its result line \
+                             was lost; recording it as result lost",
+                            name(Some(stale))
+                        );
+                        completed.push(lost(stale));
+                    }
                     tracing::debug!(
                         "Done: worker says {} scanned; supervisor recorded {} of {} in {:.1}s",
                         scanned,
@@ -547,13 +608,12 @@ impl Spawner {
                         batch.len(),
                         started.elapsed().as_secs_f64()
                     );
-                    if scanned != completed.len() || in_flight.is_some() {
+                    if scanned != completed.len() {
                         tracing::warn!(
                             "Done disagrees with the supervisor: worker scanned {}, \
-                             supervisor recorded {}, still in flight: {}",
+                             supervisor recorded {}",
                             scanned,
-                            completed.len(),
-                            name(in_flight)
+                            completed.len()
                         );
                     }
                     drop(plugin);

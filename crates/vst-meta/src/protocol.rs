@@ -67,7 +67,7 @@ pub enum Outcome {
 
 /// Why a scan failed.
 ///
-/// `Crashed` and `Timeout` are never emitted by the worker -- by definition it is in no
+/// `Crashed`, `Timeout` and `ResultLost` are never emitted by the worker -- by definition it is in no
 /// position to report either. The parent synthesizes them for the in-flight path when
 /// the worker exits abnormally or goes silent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,6 +83,10 @@ pub enum ErrorType {
     Timeout,
     /// The worker died while this path was in flight.
     Crashed,
+    /// The worker announced this path but its result never arrived intact: something,
+    /// almost always the plugin, corrupted the line on stdout. The plugin may well have
+    /// loaded; the scan just does not know what it said (ADR-0083).
+    ResultLost,
 }
 
 impl ErrorType {
@@ -93,6 +97,7 @@ impl ErrorType {
             ErrorType::LoadFailed => "load failed",
             ErrorType::Timeout => "timeout",
             ErrorType::Crashed => "crashed",
+            ErrorType::ResultLost => "result lost",
         }
     }
 }
