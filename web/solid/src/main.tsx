@@ -8,5 +8,7 @@ import "../../../mockup/samples.css";
 import "../../../mockup/stats.css";
 import "../../shared/app.css";
 import { App } from "./App";
+import { restoreZoom } from "./shell/zoom";
 
+void restoreZoom(); // ADR-0080: ask for the saved zoom before the first render
 render(() => <App />, document.getElementById("app")!);

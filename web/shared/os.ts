@@ -59,6 +59,19 @@ export async function onWindowScaleChanged(handler: () => void): Promise<() => v
   }
 }
 
+/** Asks the webview to apply a zoom factor (ADR-0080), through Tauri's webview API on the
+ * global. Does nothing outside the shell, and quietly if the call fails. */
+export async function setWebviewZoom(factor: number): Promise<void> {
+  try {
+    const t = (window as unknown as {
+      __TAURI__?: { webview?: { getCurrentWebview(): { setZoom(f: number): Promise<void> } } };
+    }).__TAURI__;
+    await t?.webview?.getCurrentWebview().setZoom(factor);
+  } catch {
+    // The zoom stays where it is.
+  }
+}
+
 // Snap layouts (ADR-0057): a native overlay sits over the maximise button, so the page tells
 // the shell where the button is and hears about hover from the shell.
 
